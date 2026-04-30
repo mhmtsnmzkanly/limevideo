@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="tr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>LimeVideo - Arama ve Filtreleme</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+            rel="stylesheet"
+        />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            :root {
+                --limevideo-green: #00ff41;
+                --limevideo-black: #0a0a0a;
+                --limevideo-dark-grey: #121212;
+                --limevideo-light-grey: #1e1e1e;
+                --limevideo-border: rgba(255, 255, 255, 0.08);
+            }
+
+            body {
+                background-color: var(--limevideo-black);
+                color: white;
+                font-family: "Inter", sans-serif;
+                margin: 0;
+                overflow-x: hidden;
+            }
+
+            .nav-fixed {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 1000;
+                background: rgba(10, 10, 10, 0.8);
+                backdrop-filter: blur(15px);
+                border-bottom: 1px solid var(--limevideo-border);
+            }
+
+            /* Form Bileşenleri */
+            .search-area-card {
+                background: var(--limevideo-dark-grey);
+                border: 1px solid var(--limevideo-border);
+                border-radius: 24px;
+                padding: 32px;
+                margin-bottom: 40px;
+            }
+
+            .custom-input {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid var(--limevideo-border);
+                border-radius: 14px;
+                padding: 12px 20px;
+                color: white;
+                transition: all 0.2s;
+                width: 100%;
+            }
+
+            .custom-input:focus {
+                outline: none;
+                border-color: var(--limevideo-green);
+                background: rgba(255, 255, 255, 0.05);
+            }
+
+            .custom-select {
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid var(--limevideo-border);
+                border-radius: 14px;
+                padding: 12px 16px;
+                color: white;
+                font-size: 13px;
+                font-weight: 600;
+                cursor: pointer;
+                appearance: none;
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+                background-repeat: no-repeat;
+                background-position: right 12px center;
+                background-size: 16px;
+                padding-right: 40px;
+            }
+
+            .tag-checkbox {
+                display: none;
+            }
+
+            .tag-label {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid var(--limevideo-border);
+                padding: 8px 18px;
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 700;
+                cursor: pointer;
+                transition: all 0.2s;
+                user-select: none;
+            }
+
+            .tag-checkbox:checked + .tag-label {
+                background: var(--limevideo-green);
+                color: black;
+                border-color: var(--limevideo-green);
+                box-shadow: 0 4px 15px rgba(0, 255, 65, 0.2);
+            }
+
+            .tag-label:hover:not(.tag-checkbox:checked + .tag-label) {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            /* Video Kartları */
+            .search-result-card {
+                display: flex;
+                gap: 24px;
+                padding: 20px;
+                border-radius: 24px;
+                transition: all 0.3s;
+                border: 1px solid transparent;
+            }
+
+            .search-result-card:hover {
+                background: var(--limevideo-dark-grey);
+                border-color: var(--limevideo-border);
+            }
+
+            .video-thumb {
+                width: 320px;
+                aspect-ratio: 16/9;
+                background: #1a1a1a;
+                border-radius: 16px;
+                flex-shrink: 0;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .load-more-container {
+                margin-top: 40px;
+                padding: 40px;
+                text-align: center;
+                border-top: 1px solid var(--limevideo-border);
+            }
+
+            .btn-primary {
+                background: white;
+                color: black;
+                padding: 12px 32px;
+                border-radius: 14px;
+                font-size: 13px;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                transition: all 0.2s;
+            }
+
+            .btn-primary:hover {
+                transform: scale(1.05);
+                background: var(--limevideo-green);
+            }
+
+            .no-scrollbar::-webkit-scrollbar {
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <nav class="nav-fixed h-16 flex items-center justify-between px-8">
+            <div class="flex items-center gap-2 cursor-pointer">
+                <div
+                    class="w-8 h-8 bg-[#00ff41] rounded-lg flex items-center justify-center"
+                >
+                    <i class="fa-solid fa-bolt text-black text-sm"></i>
+                </div>
+                <span
+                    class="text-xl font-black tracking-tighter uppercase italic"
+                    >LIMEVIDEO</span
+                >
+            </div>
+            <div
+                class="w-9 h-9 rounded-full bg-white/5 border border-white/10"
+            ></div>
+        </nav>
+
+        <main class="pt-24 pb-20 px-4 md:px-12 max-w-[1400px] mx-auto">
+            <!-- Arama ve Filtreleme Formu -->
+            <section class="search-area-card">
+                <form id="searchForm" class="flex flex-col gap-6">
+                    <!-- Arama Çubuğu ve Sıralama -->
+                    <div class="flex flex-col md:flex-row gap-4">
+                        <div class="relative flex-1">
+                            <i
+                                class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm"
+                            ></i>
+                            <input
+                                type="text"
+                                name="query"
+                                placeholder="Eğitim, sanatçı veya video ara..."
+                                value="Modern UI Design"
+                                class="custom-input pl-11"
+                            />
+                        </div>
+                        <div class="md:w-56">
+                            <select name="sort" class="custom-select w-full">
+                                <option value="relevance">En İlgili</option>
+                                <option value="newest">En Yeni</option>
+                                <option value="popular">En Çok İzlenen</option>
+                                <option value="likes">Beğeni Sayısı</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Etiketler (Wrap Edilecek Şekilde) -->
+                    <div class="flex flex-col gap-3">
+                        <h4
+                            class="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1"
+                        >
+                            Kategoriler
+                        </h4>
+                        <div class="flex flex-wrap gap-2">
+                            <input
+                                type="checkbox"
+                                id="tag1"
+                                class="tag-checkbox"
+                                checked
+                            /><label for="tag1" class="tag-label">Tümü</label>
+                            <input
+                                type="checkbox"
+                                id="tag2"
+                                class="tag-checkbox"
+                            /><label for="tag2" class="tag-label">UI/UX</label>
+                            <input
+                                type="checkbox"
+                                id="tag3"
+                                class="tag-checkbox"
+                            /><label for="tag3" class="tag-label"
+                                >Yazılım</label
+                            >
+                            <input
+                                type="checkbox"
+                                id="tag4"
+                                class="tag-checkbox"
+                            /><label for="tag4" class="tag-label"
+                                >Hareketli Grafik</label
+                            >
+                            <input
+                                type="checkbox"
+                                id="tag5"
+                                class="tag-checkbox"
+                            /><label for="tag5" class="tag-label"
+                                >Teknoloji</label
+                            >
+                            <input
+                                type="checkbox"
+                                id="tag6"
+                                class="tag-checkbox"
+                            /><label for="tag6" class="tag-label">Müzik</label>
+                            <input
+                                type="checkbox"
+                                id="tag7"
+                                class="tag-checkbox"
+                            /><label for="tag7" class="tag-label"
+                                >Oyun Geliştirme</label
+                            >
+                            <input
+                                type="checkbox"
+                                id="tag8"
+                                class="tag-checkbox"
+                            /><label for="tag8" class="tag-label"
+                                >Podcast</label
+                            >
+                            <input
+                                type="checkbox"
+                                id="tag9"
+                                class="tag-checkbox"
+                            /><label for="tag9" class="tag-label"
+                                >Yapay Zeka</label
+                            >
+                            <input
+                                type="checkbox"
+                                id="tag10"
+                                class="tag-checkbox"
+                            /><label for="tag10" class="tag-label"
+                                >3D Modelleme</label
+                            >
+                        </div>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Arama Sonuçları -->
+            <div class="flex flex-col gap-2">
+                <div class="flex justify-between items-center px-4 mb-4">
+                    <p class="text-sm text-gray-500 font-medium">
+                        Yaklaşık 1,240 sonuç bulundu
+                    </p>
+                </div>
+
+                <!-- Sonuç 1 -->
+                <div class="search-result-card group cursor-pointer">
+                    <div class="video-thumb">
+                        <div
+                            class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                        >
+                            <i class="fa-solid fa-play text-white text-3xl"></i>
+                        </div>
+                        <div
+                            class="absolute bottom-3 right-3 bg-black/90 px-2 py-1 rounded text-[10px] font-black"
+                        >
+                            15:24
+                        </div>
+                    </div>
+                    <div class="flex-1 py-1">
+                        <h2
+                            class="text-xl font-extrabold mb-2 group-hover:text-[#00ff41] transition-colors leading-tight"
+                        >
+                            2024 Modern UI Design Trendleri
+                        </h2>
+                        <p
+                            class="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-4"
+                        >
+                            LimeVideo Academy • 1.2M İzlenme • 2 gün önce
+                        </p>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div
+                                class="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center"
+                            >
+                                <i
+                                    class="fa-solid fa-shield-halved text-[#00ff41] text-xs"
+                                ></i>
+                            </div>
+                            <span class="text-xs font-black text-gray-400"
+                                >LimeVideo Academy</span
+                            >
+                        </div>
+                        <p
+                            class="text-sm text-gray-500 line-clamp-2 leading-relaxed"
+                        >
+                            Modern arayüz tasarımında karanlık modun ve neon
+                            estetiğinin kullanımını derinlemesine inceliyoruz.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Sonuç 2 -->
+                <div class="search-result-card group cursor-pointer">
+                    <div class="video-thumb">
+                        <div
+                            class="absolute bottom-3 right-3 bg-black/90 px-2 py-1 rounded text-[10px] font-black"
+                        >
+                            08:45
+                        </div>
+                    </div>
+                    <div class="flex-1 py-1">
+                        <h2
+                            class="text-xl font-extrabold mb-2 group-hover:text-[#00ff41] transition-colors leading-tight"
+                        >
+                            Tailwind CSS v4: Grid Masterclass
+                        </h2>
+                        <p
+                            class="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-4"
+                        >
+                            Code Masters • 450K İzlenme • 1 hafta önce
+                        </p>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div
+                                class="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center"
+                            >
+                                <i
+                                    class="fa-solid fa-code text-[#00ff41] text-xs"
+                                ></i>
+                            </div>
+                            <span class="text-xs font-black text-gray-400"
+                                >Code Masters</span
+                            >
+                        </div>
+                        <p
+                            class="text-sm text-gray-500 line-clamp-2 leading-relaxed"
+                        >
+                            Karmaşık layoutları Tailwind'in yeni özellikleri ile
+                            saniyeler içinde kurun.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cursor Pagination Simülasyonu -->
+            <div class="load-more-container">
+                <button class="btn-primary">Daha Fazla Göster</button>
+                <div class="mt-6 flex items-center justify-center gap-2">
+                    <span class="w-1 h-1 rounded-full bg-gray-700"></span>
+                    <span class="w-1 h-1 rounded-full bg-gray-700"></span>
+                    <span class="w-1 h-1 rounded-full bg-gray-700"></span>
+                </div>
+                <p
+                    class="mt-4 text-[10px] text-gray-600 font-black uppercase tracking-[0.3em]"
+                >
+                    Sayfa 1 / 48
+                </p>
+            </div>
+        </main>
+
+        <script>
+            // Form submit kontrolü (Sayfa yenilenmesini engeller)
+            document
+                .getElementById("searchForm")
+                .addEventListener("submit", function (e) {
+                    e.preventDefault();
+                    console.log("Arama yapılıyor...");
+                });
+
+            // Select değişikliğinde formu gönder (opsiyonel)
+            document
+                .querySelector(".custom-select")
+                .addEventListener("change", function () {
+                    console.log("Sıralama değişti:", this.value);
+                });
+        </script>
+    </body>
+</html>

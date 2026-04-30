@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LimeVideo - Report Content</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --lime: #00ff41;
+            --bg: #0a0a0a;
+            --card: #121212;
+            --card-hover: #1a1a1a;
+            --border: rgba(255,255,255,0.08);
+            --error: #ff3e3e;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        /* --- Global Loader --- */
+        #globalLoader {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease-out, visibility 0.5s;
+        }
+        .loader-hidden { opacity: 0; visibility: hidden; }
+
+        /* --- Modal & Overlay --- */
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(16px);
+            display: none;
+            z-index: 9999;
+            padding: 20px;
+        }
+
+        .report-panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            width: 500px;
+            max-width: 100%;
+            border-radius: 28px;
+            overflow: hidden;
+            box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.8);
+            animation: modalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.9) translateY(20px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* --- Form Elements --- */
+        .field-label {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: #666;
+            letter-spacing: 1.5px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .custom-select, .custom-textarea {
+            background: #0d0d0d;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 14px 18px;
+            color: white;
+            font-size: 14px;
+            width: 100%;
+            transition: all 0.2s;
+        }
+
+        .custom-select:focus, .custom-textarea:focus {
+            outline: none;
+            border-color: var(--lime);
+            background: #111;
+        }
+
+        /* Context Preview Box */
+        .context-preview {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 16px;
+            border-left: 3px solid var(--lime);
+            margin-bottom: 24px;
+        }
+
+        /* Helper Note */
+        .responsibility-note {
+            background: rgba(255, 62, 62, 0.05);
+            border: 1px solid rgba(255, 62, 62, 0.1);
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 11px;
+            padding: 12px;
+            border-radius: 12px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* --- Buttons --- */
+        .btn-submit {
+            background: var(--lime);
+            color: black;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s;
+            box-shadow: 0 10px 30px rgba(0, 255, 65, 0.15);
+        }
+
+        .btn-submit:disabled {
+            background: #222;
+            color: #555;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .btn-cancel {
+            color: #555;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+        .btn-cancel:hover { color: white; }
+
+        /* Toast Notifications */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--lime);
+            color: black;
+            padding: 14px 28px;
+            border-radius: 16px;
+            font-weight: 800;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            display: none;
+            z-index: 10001;
+            animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp { from { bottom: 10px; opacity: 0; } to { bottom: 30px; opacity: 1; } }
+
+    </style>
+</head>
+<body>
+
+    <!-- Main Navigation (For testing) -->
+    <nav class="p-8 flex justify-center gap-4">
+        <button onclick="app.openReportModal('video', 'vid_99', '2024 UI Trends Reel')" class="bg-white/5 p-4 rounded-xl hover:bg-white/10 transition-colors">
+            <i class="fa-solid fa-flag text-lime-500 mr-2"></i> Report Video
+        </button>
+        <button onclick="app.openReportModal('comment', 'com_42', 'This comment contains spam links.')" class="bg-white/5 p-4 rounded-xl hover:bg-white/10 transition-colors">
+            <i class="fa-solid fa-comment-dots text-lime-500 mr-2"></i> Report Comment
+        </button>
+        <button onclick="app.openReportModal('user', 'usr_88', 'Yigit_Dev_Scammer')" class="bg-white/5 p-4 rounded-xl hover:bg-white/10 transition-colors">
+            <i class="fa-solid fa-user-shield text-lime-500 mr-2"></i> Report User
+        </button>
+    </nav>
+
+    <!-- Report Modal Overlay -->
+    <div id="reportModalOverlay" class="modal-overlay fixed inset-0 flex items-center justify-center">
+        <div class="report-panel">
+
+            <!-- Modal Header -->
+            <div class="p-8 pb-4 flex justify-between items-start">
+                <div class="flex gap-4">
+                    <div id="reportIconBox" class="w-12 h-12 bg-lime-500/10 rounded-2xl flex items-center justify-center text-lime-500 text-xl">
+                        <i class="fa-solid fa-circle-exclamation"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-xl font-black uppercase italic tracking-tighter">Report Content</h2>
+                            <span id="targetBadge" class="px-2 py-0.5 bg-white/5 border border-white/10 text-[9px] font-black rounded-full uppercase tracking-widest text-gray-400">Target</span>
+                        </div>
+                        <p class="text-[11px] text-gray-500 font-bold uppercase mt-1">Reports are reviewed by moderation team.</p>
+                    </div>
+                </div>
+                <button onclick="app.closeReportModal()" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/5 transition-colors">
+                    <i class="fa-solid fa-xmark text-gray-500"></i>
+                </button>
+            </div>
+
+            <!-- Modal Content -->
+            <div class="p-8 pt-4">
+
+                <!-- Target Preview Area -->
+                <div class="context-preview">
+                    <p class="text-[9px] font-black uppercase text-white/20 tracking-widest mb-1">Target Object</p>
+                    <p id="targetLabel" class="text-xs font-bold text-gray-300 truncate">Loading content info...</p>
+                    <p class="text-[9px] text-gray-500 mt-2 italic font-semibold">This helps moderators review faster.</p>
+                </div>
+
+                <form id="reportForm" class="space-y-6">
+                    <!-- Reason Select -->
+                    <div>
+                        <label class="field-label">Reason</label>
+                        <select id="reportReason" class="custom-select" required onchange="app.validateForm()">
+                            <option value="" disabled selected>Select a reason</option>
+                            <option value="spam">Spam or misleading</option>
+                            <option value="harassment">Harassment or hate</option>
+                            <option value="explicit">Sexual or explicit content</option>
+                            <option value="violence">Violence or dangerous content</option>
+                            <option value="copyright">Copyright issue</option>
+                            <option value="self_harm">Self-harm or harmful behavior</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
+                    <!-- Details Textarea -->
+                    <div>
+                        <label class="field-label">Details</label>
+                        <textarea id="reportDetails"
+                                  class="custom-textarea h-32 resize-none"
+                                  placeholder="Add more context. Minimum 10 characters."
+                                  maxlength="500"
+                                  oninput="app.updateReportDetails()"></textarea>
+
+                        <div class="flex justify-between items-center mt-2 px-1">
+                            <p id="charLimitWarning" class="text-[9px] font-black uppercase text-red-500 opacity-0 transition-opacity">Enter at least 10 characters.</p>
+                            <p id="reportCharCount" class="text-[10px] font-black text-gray-600 uppercase tracking-widest">0 / 500</p>
+                        </div>
+                    </div>
+
+                    <!-- Safety Note -->
+                    <div class="responsibility-note">
+                        <i class="fa-solid fa-circle-info text-lime-500"></i>
+                        <p>False reports may affect your account standing. Please be honest.</p>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-8 pt-0 flex items-center justify-between">
+                <button type="button" onclick="app.closeReportModal()" class="btn-cancel text-xs font-black">Cancel</button>
+                <button type="button" id="submitReportBtn"
+                        class="btn-submit px-8 py-3.5 rounded-2xl text-xs"
+                        disabled
+                        onclick="app.submitReport()">
+                    Submit Report
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Success Toast -->
+    <div id="reportToast" class="toast">Report submitted.</div>
+
+    <script>
+        // --- Report Application State ---
+        const app = {
+            state: {
+                targetType: null,
+                targetId: null,
+                isSubmitting: false
+            },
+
+            // Modal Icons by Target
+            icons: {
+                video: 'fa-solid fa-play-circle',
+                comment: 'fa-solid fa-comment-slash',
+                user: 'fa-solid fa-user-shield'
+            },
+
+            openReportModal(type, id, label) {
+                // Update State
+                this.state.targetType = type;
+                this.state.targetId = id;
+
+                // Reset Form
+                document.getElementById('reportForm').reset();
+                document.getElementById('reportCharCount').innerText = "0 / 500";
+                document.getElementById('submitReportBtn').disabled = true;
+
+                // Update UI Elements
+                const iconBox = document.getElementById('reportIconBox');
+                iconBox.innerHTML = `<i class="${this.icons[type] || 'fa-solid fa-flag'}"></i>`;
+
+                document.getElementById('targetBadge').innerText = type;
+                document.getElementById('targetLabel').innerText = label;
+
+                // Show Modal
+                const modal = document.getElementById('reportModalOverlay');
+                modal.style.display = 'flex';
+                document.body.style.overflow = 'hidden';
+            },
+
+            closeReportModal() {
+                if(this.state.isSubmitting) return;
+                const modal = document.getElementById('reportModalOverlay');
+                modal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            },
+
+            updateReportDetails() {
+                const textarea = document.getElementById('reportDetails');
+                const charCount = document.getElementById('reportCharCount');
+                const warning = document.getElementById('charLimitWarning');
+
+                const len = textarea.value.trim().length;
+                charCount.innerText = `${len} / 500`;
+
+                // Handle warning visibility
+                if (len > 0 && len < 10) {
+                    warning.style.opacity = '1';
+                } else {
+                    warning.style.opacity = '0';
+                }
+
+                this.validateForm();
+            },
+
+            validateForm() {
+                const reason = document.getElementById('reportReason').value;
+                const details = document.getElementById('reportDetails').value.trim();
+                const submitBtn = document.getElementById('submitReportBtn');
+
+                const isValid = reason !== "" && details.length >= 10;
+                submitBtn.disabled = !isValid;
+            },
+
+            async submitReport() {
+                if(this.state.isSubmitting) return;
+
+                const submitBtn = document.getElementById('submitReportBtn');
+                const reason = document.getElementById('reportReason').value;
+                const details = document.getElementById('reportDetails').value.trim();
+
+                // Mocking Submission
+                this.state.isSubmitting = true;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin mr-2"></i> Submitting...`;
+
+                // API Simulation
+                setTimeout(() => {
+                    console.log("Report Data:", {
+                        targetType: this.state.targetType,
+                        targetId: this.state.targetId,
+                        reason: reason,
+                        details: details
+                    });
+
+                    // Success Feedback
+                    this.state.isSubmitting = false;
+                    this.closeReportModal();
+                    this.showToast("Report submitted.");
+
+                    // Reset Button
+                    submitBtn.innerHTML = "Submit Report";
+                }, 1500);
+            },
+
+            showToast(msg) {
+                const toast = document.getElementById('reportToast');
+                toast.innerText = msg;
+                toast.style.display = 'block';
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                }, 3000);
+            }
+        };
+
+        // Close on Overlay Click
+        document.getElementById('reportModalOverlay').onclick = function(e) {
+            if(e.target === this) app.closeReportModal();
+        };
+
+        // Close on Escape Key
+        window.onkeydown = function(e) {
+            if(e.key === "Escape") app.closeReportModal();
+        };
+    </script>
+</body>
+</html>

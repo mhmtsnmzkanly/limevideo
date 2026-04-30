@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LimeVideo Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* LimeVideo.css Temelleri & Özel Yeşil-Siyah Tema */
+        :root {
+            --limevideo-green: #00ff41;
+            --limevideo-red: #ff3e3e;
+            --limevideo-black: #0a0a0a;
+            --limevideo-dark-grey: #1a1a1a;
+            --limevideo-light-grey: #2a2a2a;
+        }
+
+        body {
+            background-color: var(--limevideo-black);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .limevideo-gradient-text {
+            background: linear-gradient(90deg, #00ff41, #008f11);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .limevideo-btn-primary {
+            background-color: var(--limevideo-green);
+            color: black;
+            font-weight: bold;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .limevideo-btn-primary:hover {
+            box-shadow: 0 0 15px var(--limevideo-green);
+            transform: translateY(-2px);
+        }
+
+        .limevideo-card {
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-light-grey);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .limevideo-input {
+            background: var(--limevideo-light-grey);
+            border: 1px solid #333;
+            color: white;
+            padding: 0.8rem;
+            border-radius: 8px;
+            width: 100%;
+        }
+
+        .limevideo-input:focus {
+            outline: none;
+            border-color: var(--limevideo-green);
+        }
+
+        .fixed-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--limevideo-light-grey);
+        }
+
+        .page-content {
+            padding-top: 70px;
+            min-height: 100vh;
+        }
+
+        .nav-link {
+            color: #888;
+            transition: color 0.3s;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: var(--limevideo-green);
+        }
+
+        /* Nav Dropdown Menus */
+        .nav-dropdown {
+            position: absolute;
+            top: 50px;
+            right: 0;
+            width: 240px;
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-light-grey);
+            border-radius: 12px;
+            padding: 8px;
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            z-index: 1100;
+        }
+
+        .nav-dropdown.active {
+            display: flex;
+            animation: slideIn 0.2s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .dropdown-item {
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #ccc;
+            transition: all 0.2s;
+        }
+
+        .dropdown-item:hover {
+            background: var(--limevideo-light-grey);
+            color: var(--limevideo-green);
+        }
+
+        /* Status Toast */
+        .status-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            z-index: 3000;
+            padding: 12px 24px;
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+            font-size: 14px;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+
+        .status-toast.active { transform: translateX(-50%) translateY(0); }
+        .status-toast.success { background: var(--limevideo-green); color: black; }
+        .status-toast.error { background: var(--limevideo-red); color: white; }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .notification-dot {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            width: 8px;
+            height: 8px;
+            background: var(--limevideo-red);
+            border-radius: 50%;
+            border: 2px solid var(--limevideo-black);
+        }
+
+        .cover-photo {
+            height: 120px;
+            background: linear-gradient(45deg, #050505, #1a1a1a);
+            position: relative;
+            border-bottom: 2px solid #222;
+        }
+
+        .stats-card-row-item {
+            background: linear-gradient(145deg, #1a1a1a, #111111);
+            border: 1px solid #222;
+            padding: 8px 12px;
+            gap: 8px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Durum Bildirimi -->
+    <div id="status-toast" class="status-toast">
+        <i id="status-icon" class="fa-solid"></i>
+        <span id="status-message"></span>
+    </div>
+
+    <!-- Sabit Header -->
+    <header class="fixed-header h-16 flex items-center justify-between px-4">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="app.navigate('gallery')">
+            <div class="w-8 h-8 bg-[#00ff41] rounded flex items-center justify-center">
+                <i class="fa-solid fa-bolt text-black"></i>
+            </div>
+            <span class="text-xl font-black tracking-tighter limevideo-gradient-text uppercase">LIMEVIDEO</span>
+        </div>
+
+        <nav id="navbar-dynamic" class="flex items-center gap-5">
+            <!-- Navigasyon JS ile render edilecek -->
+        </nav>
+    </header>
+
+    <main id="app-root" class="page-content">
+        <!-- Sayfalar buraya render edilir -->
+    </main>
+
+    <!-- Modallar -->
+    <div id="edit-modal" class="modal-overlay" onclick="app.closeEditModal()">
+        <div class="modal-container" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-black uppercase italic tracking-tighter">Profili Düzenle</h3>
+                <i class="fa-solid fa-xmark cursor-pointer text-gray-500 hover:text-white" onclick="app.closeEditModal()"></i>
+            </div>
+            <div class="space-y-5">
+                <div>
+                    <label class="text-[10px] uppercase font-bold text-gray-500 mb-1 block tracking-widest">Görünen Ad</label>
+                    <input type="text" id="edit-name" class="limevideo-input" placeholder="Adınızı girin...">
+                </div>
+                <div class="pt-4 flex gap-3">
+                    <button onclick="app.saveProfile()" class="flex-1 limevideo-btn-primary uppercase text-xs">Kaydet</button>
+                    <button onclick="app.closeEditModal()" class="flex-1 bg-transparent border border-gray-700 uppercase text-xs rounded-lg">İptal</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const app = {
+            state: {
+                currentPage: 'auth',
+                isLoggedIn: false, // Kullanıcı/Misafir durumu
+                user: {
+                    name: "LimeVideo Developer",
+                    avatar: "https://via.placeholder.com/150",
+                    stats: { videoCount: 12, totalViews: "45.2K", followers: "1.8K" }
+                },
+                notifications: [
+                    { id: 1, text: "Videonuz 1.000 izlenmeye ulaştı!", icon: "fa-chart-line" },
+                    { id: 2, text: "@design_guru sizi takip etmeye başladı.", icon: "fa-user-plus" }
+                ],
+                activeDropdown: null
+            },
+
+            init() {
+                this.renderNavbar();
+                this.navigate('auth');
+
+                // Dropdown kapatma için dışarıya tıklama
+                window.addEventListener('click', (e) => {
+                    if (!e.target.closest('.nav-link') && !e.target.closest('.nav-dropdown')) {
+                        this.closeAllDropdowns();
+                    }
+                });
+            },
+
+            renderNavbar() {
+                const nav = document.getElementById('navbar-dynamic');
+                if (!this.state.isLoggedIn) {
+                    // Misafir Menüsü
+                    nav.innerHTML = `
+                        <i class="fa-solid fa-house nav-link ${this.state.currentPage === 'gallery' ? 'active' : ''}" onclick="app.navigate('gallery')"></i>
+                        <button onclick="app.navigate('auth')" class="text-xs font-bold uppercase tracking-widest border border-[#333] px-4 py-1.5 rounded-full hover:border-[#00ff41] transition-all">Giriş Yap</button>
+                        <button onclick="app.navigate('auth')" class="text-xs font-bold uppercase tracking-widest bg-white text-black px-4 py-1.5 rounded-full">Kayıt Ol</button>
+                    `;
+                } else {
+                    // Kullanıcı Menüsü
+                    nav.innerHTML = `
+                        <i class="fa-solid fa-house nav-link ${this.state.currentPage === 'gallery' ? 'active' : ''}" onclick="app.navigate('gallery')"></i>
+
+                        <div class="relative">
+                            <i class="fa-solid fa-bell nav-link" onclick="app.toggleDropdown(event, 'notif')">
+                                ${this.state.notifications.length > 0 ? '<div class="notification-dot"></div>' : ''}
+                            </i>
+                            <div id="drop-notif" class="nav-dropdown">
+                                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest p-2 border-b border-[#222]">Bildirimler</p>
+                                ${this.state.notifications.map(n => `
+                                    <div class="dropdown-item">
+                                        <i class="fa-solid ${n.icon} text-[#00ff41]"></i>
+                                        <span class="text-[11px]">${n.text}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="relative">
+                            <div class="w-8 h-8 rounded-full bg-[#1a1a1a] border border-[#333] flex items-center justify-center cursor-pointer hover:border-[#00ff41] transition-all overflow-hidden" onclick="app.toggleDropdown(event, 'user')">
+                                <i class="fa-solid fa-user-secret text-[#00ff41]"></i>
+                            </div>
+                            <div id="drop-user" class="nav-dropdown">
+                                <div class="p-3 border-b border-[#222] mb-1">
+                                    <p class="font-black text-sm italic">${this.state.user.name}</p>
+                                    <p class="text-[9px] text-gray-500 uppercase tracking-widest">Kullanıcı Profili</p>
+                                </div>
+                                <div class="dropdown-item cursor-pointer" onclick="app.navigate('user')">
+                                    <i class="fa-solid fa-user"></i> Profilim
+                                </div>
+                                <div class="dropdown-item cursor-pointer" onclick="app.openEditModal()">
+                                    <i class="fa-solid fa-gear"></i> Ayarlar
+                                </div>
+                                <div class="dropdown-item cursor-pointer text-red-400" onclick="app.logout()">
+                                    <i class="fa-solid fa-right-from-bracket"></i> Çıkış Yap
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            },
+
+            toggleDropdown(e, type) {
+                e.stopPropagation();
+                const drop = document.getElementById(`drop-${type}`);
+                const isActive = drop.classList.contains('active');
+                this.closeAllDropdowns();
+                if (!isActive) drop.classList.add('active');
+            },
+
+            closeAllDropdowns() {
+                document.querySelectorAll('.nav-dropdown').forEach(d => d.classList.remove('active'));
+            },
+
+            showStatus(message, type = 'success') {
+                const toast = document.getElementById('status-toast');
+                const icon = document.getElementById('status-icon');
+                const msgSpan = document.getElementById('status-message');
+                toast.className = `status-toast active ${type}`;
+                msgSpan.innerText = message;
+                icon.className = type === 'success' ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation';
+                setTimeout(() => toast.classList.remove('active'), 3000);
+            },
+
+            navigate(page) {
+                this.state.currentPage = page;
+                this.closeAllDropdowns();
+                this.render();
+                this.renderNavbar();
+                window.scrollTo(0, 0);
+            },
+
+            handleLogin() {
+                this.state.isLoggedIn = true;
+                this.showStatus('Hoş geldin, LimeVideo Developer!');
+                this.navigate('gallery');
+            },
+
+            logout() {
+                this.state.isLoggedIn = false;
+                this.showStatus('Oturum kapatıldı.', 'error');
+                this.navigate('auth');
+            },
+
+            openEditModal() {
+                this.closeAllDropdowns();
+                document.getElementById('edit-name').value = this.state.user.name;
+                document.getElementById('edit-modal').classList.add('active');
+            },
+
+            closeEditModal() {
+                document.getElementById('edit-modal').classList.remove('active');
+            },
+
+            saveProfile() {
+                const newName = document.getElementById('edit-name').value;
+                if(newName.trim().length < 3) {
+                    this.showStatus('İsim çok kısa!', 'error');
+                    return;
+                }
+                this.state.user.name = newName;
+                this.showStatus('Profil güncellendi.');
+                this.closeEditModal();
+                this.render();
+                this.renderNavbar();
+            },
+
+            render() {
+                const root = document.getElementById('app-root');
+                switch(this.state.currentPage) {
+                    case 'auth': root.innerHTML = this.pages.auth(); break;
+                    case 'gallery': root.innerHTML = this.pages.gallery(); break;
+                    case 'user': root.innerHTML = this.pages.user(); break;
+                }
+            },
+
+            pages: {
+                auth: () => `
+                    <div class="flex flex-col items-center justify-center px-6 py-12">
+                        <div class="w-full max-w-md p-8 limevideo-card">
+                            <h2 class="text-3xl font-bold mb-6 text-center italic tracking-tighter uppercase">Giriş Yap</h2>
+                            <div class="space-y-4">
+                                <input type="email" id="login-email" class="limevideo-input" placeholder="E-posta" value="dev@limevideo.com">
+                                <input type="password" class="limevideo-input" placeholder="Şifre" value="password">
+                                <button onclick="app.handleLogin()" class="w-full limevideo-btn-primary mt-4 uppercase tracking-widest">Sisteme Gir</button>
+                            </div>
+                        </div>
+                    </div>
+                `,
+                gallery: () => `
+                    <div class="p-4">
+                        <h1 class="text-2xl font-black italic mb-6 tracking-tighter uppercase">Anasayfa</h1>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            ${[1,2,3,4,5,6].map(i => `
+                                <div class="limevideo-card cursor-pointer group">
+                                    <div class="video-placeholder"></div>
+                                    <div class="p-4">
+                                        <h3 class="font-bold text-lg mb-1">LimeVideo #${i}</h3>
+                                        <p class="text-[10px] text-gray-500 uppercase font-bold">@creator • 12K İzlenme</p>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `,
+                user: () => {
+                    const u = app.state.user;
+                    return `
+                        <div class="relative">
+                            <div class="cover-photo"></div>
+                            <div class="px-4 -mt-10 flex flex-col items-center">
+                                <div class="w-24 h-24 rounded-full border-4 border-black bg-[#111] mb-4 flex items-center justify-center overflow-hidden">
+                                    <i class="fa-solid fa-user-astronaut text-4xl text-[#00ff41]"></i>
+                                </div>
+                                <h2 class="text-2xl font-black italic uppercase tracking-tighter limevideo-gradient-text">${u.name}</h2>
+                                <button onclick="app.openEditModal()" class="mt-4 bg-[#222] border border-[#444] px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest">Düzenle</button>
+                                <div class="flex gap-4 mt-8 w-full">
+                                    <div class="stats-card-row-item flex-1">
+                                        <span class="text-lg font-black">${u.stats.videoCount}</span>
+                                        <span class="text-[8px] text-gray-500 uppercase font-bold leading-none">Video</span>
+                                    </div>
+                                    <div class="stats-card-row-item flex-1">
+                                        <span class="text-lg font-black">${u.stats.followers}</span>
+                                        <span class="text-[8px] text-gray-500 uppercase font-bold leading-none">Takipçi</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        };
+
+        window.onload = () => app.init();
+    </script>
+</body>
+</html>

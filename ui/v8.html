@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LimeVideo Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --limevideo-green: #00ff41;
+            --limevideo-red: #ff3e3e;
+            --limevideo-black: #0a0a0a;
+            --limevideo-dark-grey: #1a1a1a;
+            --limevideo-light-grey: #2a2a2a;
+        }
+
+        body {
+            background-color: var(--limevideo-black);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .limevideo-gradient-text {
+            background: linear-gradient(90deg, #00ff41, #008f11);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .limevideo-btn-primary {
+            background-color: var(--limevideo-green);
+            color: black;
+            font-weight: bold;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .limevideo-card {
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-light-grey);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+
+        .limevideo-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--limevideo-green);
+        }
+
+        .fixed-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--limevideo-light-grey);
+        }
+
+        .page-content {
+            padding-top: 70px;
+            min-height: 100vh;
+            padding-bottom: 100px;
+        }
+
+        /* Reklam Formatları */
+        .ad-label {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            background: rgba(0,0,0,0.7);
+            color: #888;
+            font-size: 8px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            z-index: 10;
+        }
+
+        .ad-banner-leaderboard {
+            width: 100%;
+            max-width: 728px;
+            height: 90px;
+            margin: 20px auto;
+            background: #111;
+            border: 1px solid #222;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .native-ad-card {
+            background: linear-gradient(145deg, #1a1a1a, #0d0d0d);
+            border: 1px solid #00ff4133;
+        }
+
+        .preroll-overlay {
+            position: fixed;
+            inset: 0;
+            background: black;
+            z-index: 5000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .preroll-overlay.active { display: flex; }
+
+        .skip-ad-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid white;
+            padding: 10px 20px;
+            cursor: pointer;
+            display: none;
+        }
+
+        .popunder-modal {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            background: #1a1a1a;
+            border: 1px solid var(--limevideo-green);
+            z-index: 4000;
+            transform: translateX(400px);
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        }
+
+        .popunder-modal.active { transform: translateX(0); }
+
+        .video-placeholder {
+            background: #151515;
+            aspect-ratio: 16/9;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+
+        /* Search & Filter UI */
+        .search-container {
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-light-grey);
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            width: 100%;
+            max-width: 500px;
+            transition: border-color 0.3s;
+        }
+
+        .search-container:focus-within {
+            border-color: var(--limevideo-green);
+        }
+
+        .search-input {
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 12px;
+            width: 100%;
+            outline: none;
+            font-size: 14px;
+        }
+
+        .category-pill {
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-light-grey);
+            color: #888;
+            padding: 8px 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .category-pill:hover, .category-pill.active {
+            border-color: var(--limevideo-green);
+            color: var(--limevideo-green);
+            background: rgba(0, 255, 65, 0.05);
+        }
+
+        .status-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            z-index: 3000;
+            padding: 12px 24px;
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+            transition: transform 0.4s;
+        }
+        .status-toast.active { transform: translateX(-50%) translateY(0); }
+        .status-toast.success { background: var(--limevideo-green); color: black; }
+    </style>
+</head>
+<body onclick="app.triggerPopunder()">
+
+    <div id="status-toast" class="status-toast success">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="status-message"></span>
+    </div>
+
+    <!-- Video Pre-roll Alanı -->
+    <div id="preroll" class="preroll-overlay">
+        <span class="ad-label">REKLAM</span>
+        <div class="text-center">
+            <i class="fa-solid fa-play-circle text-6xl text-[#00ff41] mb-4 animate-pulse"></i>
+            <h2 class="text-2xl font-bold italic mb-2">SPONSORLU VİDEO</h2>
+            <p class="text-gray-500 text-sm" id="ad-timer">Video 5 saniye içinde başlayacak...</p>
+        </div>
+        <button id="skip-btn" onclick="app.skipAd()" class="skip-ad-btn uppercase text-xs font-black tracking-widest">Reklamı Geç</button>
+    </div>
+
+    <!-- Popunder Simülasyonu -->
+    <div id="popunder" class="popunder-modal">
+        <div class="flex justify-between items-start mb-3">
+            <span class="text-[10px] font-bold text-[#00ff41] uppercase tracking-widest">Özel Fırsat</span>
+            <i class="fa-solid fa-xmark cursor-pointer text-gray-600 hover:text-white" onclick="app.closePopunder(event)"></i>
+        </div>
+        <p class="text-xs text-gray-300 mb-4">LimeVideo API ile kendi platformunu 10 dakikada kur!</p>
+        <button class="w-full py-2 bg-[#00ff41] text-black text-[10px] font-bold uppercase rounded">Hemen İncele</button>
+    </div>
+
+    <header class="fixed-header h-16 flex items-center justify-between px-4">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="app.navigate('gallery')">
+            <div class="w-8 h-8 bg-[#00ff41] rounded flex items-center justify-center">
+                <i class="fa-solid fa-bolt text-black"></i>
+            </div>
+            <span class="text-xl font-black tracking-tighter limevideo-gradient-text uppercase">LIMEVIDEO</span>
+        </div>
+        <nav id="navbar-dynamic" class="flex items-center gap-5"></nav>
+    </header>
+
+    <main id="app-root" class="page-content">
+        <!-- Sayfalar buraya render edilir -->
+    </main>
+
+    <script>
+        const app = {
+            state: {
+                currentPage: 'gallery',
+                isLoggedIn: false,
+                popunderTriggered: false,
+                adTimer: 5,
+                searchQuery: '',
+                activeCategory: 'Tümü',
+                categories: ['Tümü', 'Müzik', 'Oyun', 'Teknoloji', 'Eğitim', 'Vlog', 'Sinema', 'Spor']
+            },
+
+            init() {
+                this.renderNavbar();
+                this.navigate('gallery');
+            },
+
+            renderNavbar() {
+                const nav = document.getElementById('navbar-dynamic');
+                if (!this.state.isLoggedIn) {
+                    nav.innerHTML = `
+                        <i class="fa-solid fa-magnifying-glass nav-link" onclick="app.navigate('gallery')"></i>
+                        <button onclick="app.handleLogin()" class="text-xs font-bold uppercase border border-[#333] px-4 py-1.5 rounded-full">Giriş Yap</button>
+                    `;
+                } else {
+                    nav.innerHTML = `
+                        <i class="fa-solid fa-magnifying-glass nav-link" onclick="app.navigate('gallery')"></i>
+                        <i class="fa-solid fa-bell nav-link"></i>
+                        <div class="w-8 h-8 rounded-full bg-[#1a1a1a] border border-[#333] flex items-center justify-center cursor-pointer" onclick="app.logout()">
+                            <i class="fa-solid fa-user-secret text-[#00ff41]"></i>
+                        </div>
+                    `;
+                }
+            },
+
+            playVideo(id) {
+                const overlay = document.getElementById('preroll');
+                const timerText = document.getElementById('ad-timer');
+                const skipBtn = document.getElementById('skip-btn');
+
+                overlay.classList.add('active');
+                this.state.adTimer = 5;
+                skipBtn.style.display = 'none';
+
+                const interval = setInterval(() => {
+                    this.state.adTimer--;
+                    timerText.innerText = `Reklamı ${this.state.adTimer} saniye sonra geçebilirsiniz...`;
+
+                    if (this.state.adTimer <= 0) {
+                        clearInterval(interval);
+                        timerText.innerText = "Reklam geçilmeye hazır.";
+                        skipBtn.style.display = 'block';
+                    }
+                }, 1000);
+            },
+
+            skipAd() {
+                document.getElementById('preroll').classList.remove('active');
+                this.showStatus("Video oynatılıyor...");
+            },
+
+            triggerPopunder() {
+                if (!this.state.popunderTriggered) {
+                    setTimeout(() => {
+                        document.getElementById('popunder').classList.add('active');
+                    }, 500);
+                    this.state.popunderTriggered = true;
+                }
+            },
+
+            closePopunder(e) {
+                e.stopPropagation();
+                document.getElementById('popunder').classList.remove('active');
+            },
+
+            showStatus(msg) {
+                const toast = document.getElementById('status-toast');
+                document.getElementById('status-message').innerText = msg;
+                toast.classList.add('active');
+                setTimeout(() => toast.classList.remove('active'), 2000);
+            },
+
+            handleLogin() {
+                this.state.isLoggedIn = true;
+                this.showStatus("Giriş yapıldı.");
+                this.renderNavbar();
+            },
+
+            logout() {
+                this.state.isLoggedIn = false;
+                this.showStatus("Çıkış yapıldı.");
+                this.renderNavbar();
+            },
+
+            setCategory(cat) {
+                this.state.activeCategory = cat;
+                this.render();
+            },
+
+            handleSearch(e) {
+                this.state.searchQuery = e.target.value;
+                // Gerçek aramada burada debounce ile bir filtreleme fonksiyonu çağrılabilir.
+                console.log("Aranıyor:", this.state.searchQuery);
+            },
+
+            navigate(page) {
+                this.state.currentPage = page;
+                this.render();
+            },
+
+            render() {
+                const root = document.getElementById('app-root');
+                if (this.state.currentPage === 'gallery') {
+                    root.innerHTML = `
+                        <div class="max-w-7xl mx-auto px-4">
+                            <!-- Arama ve Filtreleme Bölümü -->
+                            <div class="flex flex-col gap-6 mb-10 mt-4">
+                                <div class="flex justify-center">
+                                    <div class="search-container">
+                                        <i class="fa-solid fa-magnifying-glass text-gray-500 ml-2"></i>
+                                        <input type="text"
+                                               class="search-input"
+                                               placeholder="Video, kanal veya içerik ara..."
+                                               value="${this.state.searchQuery}"
+                                               oninput="app.handleSearch(event)">
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-3 overflow-x-auto pb-2 no-scrollbar">
+                                    ${this.state.categories.map(cat => `
+                                        <div class="category-pill ${this.state.activeCategory === cat ? 'active' : ''}"
+                                             onclick="app.setCategory('${cat}')">
+                                            ${cat}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+
+                            <!-- Leaderboard Banner -->
+                            <div class="ad-banner-leaderboard">
+                                <span class="ad-label">BANNER 728x90</span>
+                                <p class="text-[10px] text-gray-700 uppercase font-black">External Display Ad Space</p>
+                            </div>
+
+                            <div class="flex justify-between items-end mb-6">
+                                <h1 class="text-2xl font-black italic tracking-tighter uppercase">
+                                    ${this.state.activeCategory === 'Tümü' ? 'Trend Videolar' : this.state.activeCategory}
+                                </h1>
+                                <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Sıralama: En Yeni</p>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <!-- Video Kartı 1 -->
+                                <div class="limevideo-card cursor-pointer" onclick="app.playVideo(1)">
+                                    <div class="video-placeholder"><i class="fa-solid fa-play text-2xl"></i></div>
+                                    <div class="p-4">
+                                        <h3 class="font-bold">Siber Gelecek: LimeVideo 2.0</h3>
+                                        <p class="text-[10px] text-gray-500 uppercase">@cyber_dev • 45K İzlenme</p>
+                                    </div>
+                                </div>
+
+                                <!-- Native Ad -->
+                                <div class="limevideo-card native-ad-card relative">
+                                    <span class="ad-label">SPONSORLU</span>
+                                    <div class="video-placeholder bg-gradient-to-br from-green-900/20 to-black">
+                                        <i class="fa-solid fa-shield-halved text-3xl text-[#00ff41]"></i>
+                                    </div>
+                                    <div class="p-4">
+                                        <h3 class="font-bold text-[#00ff41]">LimeVideo VPN Pro</h3>
+                                        <p class="text-[10px] text-gray-400 mb-3">Güvenliğinizi en üst düzeye çıkarın.</p>
+                                        <button class="text-[9px] font-black uppercase border border-[#00ff41] px-3 py-1 rounded text-[#00ff41]">Daha Fazla Bilgi</button>
+                                    </div>
+                                </div>
+
+                                <!-- Video Kartı 2 -->
+                                <div class="limevideo-card cursor-pointer" onclick="app.playVideo(2)">
+                                    <div class="video-placeholder"><i class="fa-solid fa-play text-2xl"></i></div>
+                                    <div class="p-4">
+                                        <h3 class="font-bold">Yeni Nesil UI Tasarımı</h3>
+                                        <p class="text-[10px] text-gray-500 uppercase">@design_limevideo • 12K İzlenme</p>
+                                    </div>
+                                </div>
+
+                                <!-- Daha Fazla Video Slotu -->
+                                <div class="limevideo-card cursor-pointer" onclick="app.playVideo(3)">
+                                    <div class="video-placeholder"><i class="fa-solid fa-play text-2xl"></i></div>
+                                    <div class="p-4">
+                                        <h3 class="font-bold">Karanlık Tema Psikolojisi</h3>
+                                        <p class="text-[10px] text-gray-500 uppercase">@ux_researcher • 8.2K İzlenme</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Native Ad Slot 2 -->
+                            <div class="mt-8 p-6 bg-[#111] border border-[#222] rounded-xl flex items-center justify-between">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center text-black font-black">AD</div>
+                                    <div>
+                                        <h4 class="font-bold text-sm">LimeVideo Business Suite</h4>
+                                        <p class="text-xs text-gray-500">Şirketiniz için en iyi video altyapısı.</p>
+                                    </div>
+                                </div>
+                                <span class="text-[10px] text-gray-600 font-bold uppercase tracking-widest">Native Placement</span>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        };
+
+        window.onload = () => app.init();
+    </script>
+</body>
+</html>

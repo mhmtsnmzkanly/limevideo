@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="tr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>LimeVideo - Premium Upload</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+            rel="stylesheet"
+        />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            :root {
+                --lime: #00ff41;
+                --bg: #0a0a0a;
+                --card: #121212;
+                --card-hover: #1a1a1a;
+                --border: rgba(255, 255, 255, 0.08);
+                --error: #ff3e3e;
+            }
+
+            body {
+                background-color: var(--bg);
+                color: white;
+                font-family: "Inter", sans-serif;
+                margin: 0;
+            }
+
+            /* Navbar & Global Styles */
+            .navbar {
+                background: rgba(10, 10, 10, 0.8);
+                backdrop-filter: blur(10px);
+                border-bottom: 1px solid var(--border);
+            }
+
+            .upload-btn {
+                background: var(--lime);
+                color: black;
+                font-weight: 800;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .upload-btn:hover {
+                box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
+                transform: translateY(-2px);
+                background: #00e63b;
+            }
+
+            /* Modal Styles */
+            .modal-overlay {
+                background: rgba(0, 0, 0, 0.7);
+                backdrop-filter: blur(12px);
+                display: none;
+                z-index: 9999;
+            }
+
+            .modal-content {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-top: 3px solid var(--lime);
+                box-shadow:
+                    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+                    0 0 20px rgba(0, 255, 65, 0.05);
+            }
+
+            /* Form Controls */
+            label {
+                font-size: 10px;
+                font-weight: 800;
+                text-transform: uppercase;
+                color: #888;
+                letter-spacing: 1px;
+                margin-bottom: 6px;
+                display: block;
+            }
+
+            .input-base {
+                background: #181818;
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 12px 16px;
+                color: white;
+                font-size: 14px;
+                transition: all 0.2s;
+                width: 100%;
+            }
+
+            .input-base:focus {
+                outline: none;
+                border-color: var(--lime);
+                background: #1c1c1c;
+            }
+
+            /* Segmented Control */
+            .segmented-control {
+                background: #0d0d0d;
+                padding: 4px;
+                border-radius: 14px;
+                display: flex;
+                border: 1px solid var(--border);
+            }
+
+            .segment-btn {
+                flex: 1;
+                padding: 10px;
+                border-radius: 10px;
+                font-size: 12px;
+                font-weight: 700;
+                text-transform: uppercase;
+                color: #666;
+                transition: all 0.2s;
+            }
+
+            .segment-btn.active {
+                background: #1a1a1a;
+                color: white;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            }
+
+            /* Dropzone */
+            .dropzone {
+                border: 2px dashed var(--border);
+                border-radius: 16px;
+                padding: 40px;
+                text-align: center;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .dropzone:hover {
+                border-color: var(--lime);
+                background: rgba(0, 255, 65, 0.02);
+            }
+
+            /* Tag System */
+            .tag-pill {
+                padding: 6px 14px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+                background: #1a1a1a;
+                color: #888;
+                border: 1px solid transparent;
+            }
+
+            .tag-pill:hover {
+                border-color: #333;
+                color: white;
+            }
+
+            .tag-pill.selected {
+                background: var(--lime);
+                color: black;
+                font-weight: 800;
+            }
+
+            /* Toggle Switch */
+            .toggle-switch {
+                position: relative;
+                display: inline-block;
+                width: 44px;
+                height: 22px;
+            }
+
+            .toggle-switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+            .slider {
+                position: absolute;
+                cursor: pointer;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: #222;
+                transition: 0.4s;
+                border-radius: 34px;
+            }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 16px;
+                width: 16px;
+                left: 3px;
+                bottom: 3px;
+                background-color: white;
+                transition: 0.4s;
+                border-radius: 50%;
+            }
+
+            input:checked + .slider {
+                background-color: var(--lime);
+            }
+            input:checked + .slider:before {
+                transform: translateX(22px);
+                background-color: black;
+            }
+
+            /* Custom Scrollbar */
+            .custom-scroll::-webkit-scrollbar {
+                width: 6px;
+            }
+            .custom-scroll::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            .custom-scroll::-webkit-scrollbar-thumb {
+                background: #333;
+                border-radius: 10px;
+            }
+
+            /* Animations */
+            @keyframes modalPop {
+                from {
+                    opacity: 0;
+                    transform: scale(0.95);
+                }
+                to {
+                    opacity: 1;
+                    transform: scale(1);
+                }
+            }
+            .modal-active .modal-content {
+                animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+
+            .toast {
+                position: fixed;
+                bottom: 30px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: var(--lime);
+                color: black;
+                padding: 12px 24px;
+                border-radius: 12px;
+                font-weight: 800;
+                font-size: 14px;
+                box-shadow: 0 10px 30px rgba(0, 255, 65, 0.3);
+                display: none;
+                z-index: 10000;
+            }
+        </style>
+    </head>
+    <body>
+        <!-- Navigasyon Çubuğu -->
+        <nav
+            class="navbar fixed top-0 left-0 right-0 h-16 px-8 flex items-center justify-between z-40"
+        >
+            <div class="flex items-center gap-2">
+                <div
+                    class="w-8 h-8 bg-[#00ff41] rounded-lg flex items-center justify-center"
+                >
+                    <i class="fa-solid fa-play text-black text-xs"></i>
+                </div>
+                <span
+                    class="text-xl font-black italic tracking-tighter uppercase"
+                    >LIMEVIDEO</span
+                >
+            </div>
+
+            <div class="flex items-center gap-6">
+                <button
+                    id="uploadTrigger"
+                    class="upload-btn px-5 py-2 rounded-xl text-xs flex items-center gap-2"
+                >
+                    <i class="fa-solid fa-plus text-sm"></i>
+                    <span>Upload</span>
+                </button>
+                <div class="flex items-center gap-3">
+                    <div class="text-right hidden sm:block">
+                        <p class="text-xs font-black">Yigit Dev</p>
+                        <p
+                            class="text-[10px] text-gray-500 font-bold uppercase"
+                        >
+                            Pro Member
+                        </p>
+                    </div>
+                    <div
+                        class="w-10 h-10 rounded-full border border-white/10 overflow-hidden bg-gradient-to-br from-lime-500 to-green-800"
+                    ></div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Modal Overlay -->
+        <div
+            id="uploadModal"
+            class="modal-overlay fixed inset-0 flex items-center justify-center p-4"
+        >
+            <div
+                class="modal-content w-full max-w-[720px] max-h-[90vh] rounded-3xl p-0 flex flex-col relative overflow-hidden"
+            >
+                <!-- Modal Header -->
+                <div class="p-8 pb-4 flex justify-between items-start">
+                    <div>
+                        <h2
+                            class="text-2xl font-black uppercase italic tracking-tighter"
+                        >
+                            Upload Video
+                        </h2>
+                        <p class="text-xs text-gray-500 font-semibold mt-1">
+                            Publish a new video to LimeVideo.
+                        </p>
+                    </div>
+                    <button
+                        id="closeModal"
+                        class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/5 transition-colors"
+                    >
+                        <i class="fa-solid fa-xmark text-gray-400"></i>
+                    </button>
+                </div>
+
+                <!-- Scrollable Content Area -->
+                <div class="px-8 pb-8 overflow-y-auto custom-scroll flex-1">
+                    <form id="mainUploadForm" class="space-y-8 mt-4">
+                        <!-- Section 1: Core Video Info -->
+                        <div class="space-y-5">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span
+                                    class="w-1.5 h-1.5 rounded-full bg-lime-500"
+                                ></span>
+                                <span
+                                    class="text-[10px] font-black uppercase tracking-widest text-white/40"
+                                    >Core Information</span
+                                >
+                            </div>
+
+                            <div>
+                                <label>Title</label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="Enter a clear video title"
+                                    class="input-base"
+                                />
+                            </div>
+
+                            <div>
+                                <label>Description</label>
+                                <textarea
+                                    placeholder="Tell viewers what this video is about…"
+                                    class="input-base h-24 resize-none"
+                                ></textarea>
+                            </div>
+
+                            <div>
+                                <label>Visibility</label>
+                                <div
+                                    class="flex flex-col gap-4 bg-[#0d0d0d] p-4 rounded-2xl border border-white/5"
+                                >
+                                    <div class="flex gap-4">
+                                        <label
+                                            class="flex items-center gap-2 cursor-pointer m-0 normal-case text-white"
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="visibility"
+                                                value="public"
+                                                checked
+                                                class="accent-lime-500 w-4 h-4"
+                                            />
+                                            Public
+                                        </label>
+                                        <label
+                                            class="flex items-center gap-2 cursor-pointer m-0 normal-case text-white"
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="visibility"
+                                                value="private"
+                                                class="accent-lime-500 w-4 h-4"
+                                            />
+                                            Private
+                                        </label>
+                                    </div>
+                                    <p
+                                        class="text-[11px] text-gray-500 leading-relaxed italic"
+                                    >
+                                        Public videos appear in Discovery Feed.
+                                        Private videos stay visible only to you.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section 2: Video Source -->
+                        <div class="space-y-5">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span
+                                    class="w-1.5 h-1.5 rounded-full bg-lime-500"
+                                ></span>
+                                <span
+                                    class="text-[10px] font-black uppercase tracking-widest text-white/40"
+                                    >Video Source</span
+                                >
+                            </div>
+
+                            <div class="segmented-control" id="sourceSwitcher">
+                                <button
+                                    type="button"
+                                    class="segment-btn active"
+                                    data-target="local"
+                                >
+                                    Upload Video
+                                </button>
+                                <button
+                                    type="button"
+                                    class="segment-btn"
+                                    data-target="external"
+                                >
+                                    External Source
+                                </button>
+                            </div>
+
+                            <!-- Local Upload View -->
+                            <div id="localSourceView" class="source-content">
+                                <div class="dropzone" id="dropzone">
+                                    <div class="mb-4">
+                                        <i
+                                            class="fa-solid fa-cloud-arrow-up text-4xl text-white/20 group-hover:text-lime-500"
+                                        ></i>
+                                    </div>
+                                    <p class="text-sm font-bold">
+                                        Drop your video here or
+                                        <span class="text-lime-500"
+                                            >choose file</span
+                                        >
+                                    </p>
+                                    <p
+                                        class="text-[10px] text-gray-500 mt-2 font-semibold uppercase"
+                                    >
+                                        mp4, webm, mov • Local uploads processed
+                                        internally.
+                                    </p>
+                                    <input
+                                        type="file"
+                                        id="fileInput"
+                                        class="hidden"
+                                        accept=".mp4,.webm,.mov"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- External Source View -->
+                            <div
+                                id="externalSourceView"
+                                class="source-content hidden space-y-4"
+                            >
+                                <div>
+                                    <label>Playback URL</label>
+                                    <input
+                                        type="url"
+                                        placeholder="https://example.com/video.mp4"
+                                        class="input-base"
+                                    />
+                                </div>
+                                <div
+                                    class="grid grid-cols-1 md:grid-cols-2 gap-4"
+                                >
+                                    <div>
+                                        <label>Thumbnail URL (Optional)</label>
+                                        <input
+                                            type="url"
+                                            placeholder="https://example.com/thumb.jpg"
+                                            class="input-base"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label>Duration (Seconds)</label>
+                                        <input
+                                            type="number"
+                                            placeholder="320"
+                                            class="input-base"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section 3: Tags -->
+                        <div class="space-y-5">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span
+                                    class="w-1.5 h-1.5 rounded-full bg-lime-500"
+                                ></span>
+                                <span
+                                    class="text-[10px] font-black uppercase tracking-widest text-white/40"
+                                    >Tags</span
+                                >
+                            </div>
+
+                            <p class="text-[11px] text-gray-500 mb-2">
+                                Choose the categories that best describe your
+                                video.
+                            </p>
+
+                            <div
+                                class="flex flex-wrap gap-2"
+                                id="tagsContainer"
+                            >
+                                <!-- Tags will be populated here via JS -->
+                            </div>
+                        </div>
+
+                        <!-- Section 4: Safety -->
+                        <div
+                            class="pt-4 border-t border-white/5 flex items-center justify-between"
+                        >
+                            <div class="flex items-center gap-4">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" />
+                                    <span class="slider"></span>
+                                </label>
+                                <div>
+                                    <h4 class="text-xs font-black uppercase">
+                                        Sensitive Content
+                                    </h4>
+                                    <p class="text-[10px] text-gray-500">
+                                        Mark if this video contains
+                                        age-restricted material.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Modal Actions -->
+                <div
+                    class="p-8 pt-6 border-t border-white/5 bg-[#141414] flex justify-between items-center"
+                >
+                    <button
+                        type="button"
+                        id="cancelBtn"
+                        class="text-xs font-black text-gray-500 uppercase hover:text-white transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        form="mainUploadForm"
+                        id="publishBtn"
+                        class="upload-btn px-10 py-3.5 rounded-2xl text-xs flex items-center gap-3"
+                    >
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>Publish Video</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Toast -->
+        <div id="toast" class="toast">Video published.</div>
+
+        <script>
+            // API Simulation for Tags
+            const mockTags = [
+                "Design",
+                "Frontend",
+                "Tutorial",
+                "Product",
+                "Gaming",
+                "Music",
+                "AI",
+                "Technology",
+                "Vlog",
+                "Business",
+                "Art",
+            ];
+
+            // Populate Tags
+            const tagsContainer = document.getElementById("tagsContainer");
+            mockTags.forEach((tagName) => {
+                const pill = document.createElement("div");
+                pill.className = "tag-pill";
+                pill.innerText = tagName;
+                pill.onclick = () => pill.classList.toggle("selected");
+                tagsContainer.appendChild(pill);
+            });
+
+            // Modal Controls
+            const modal = document.getElementById("uploadModal");
+            const trigger = document.getElementById("uploadTrigger");
+            const closeBtn = document.getElementById("closeModal");
+            const cancelBtn = document.getElementById("cancelBtn");
+
+            const openModal = () => {
+                modal.style.display = "flex";
+                setTimeout(() => modal.classList.add("modal-active"), 10);
+                document.body.style.overflow = "hidden";
+            };
+
+            const closeModal = () => {
+                modal.classList.remove("modal-active");
+                setTimeout(() => {
+                    modal.style.display = "none";
+                    document.body.style.overflow = "auto";
+                }, 300);
+            };
+
+            trigger.onclick = openModal;
+            closeBtn.onclick = closeModal;
+            cancelBtn.onclick = closeModal;
+
+            // Source Switcher logic
+            const segmentBtns = document.querySelectorAll(".segment-btn");
+            const localView = document.getElementById("localSourceView");
+            const externalView = document.getElementById("externalSourceView");
+
+            segmentBtns.forEach((btn) => {
+                btn.onclick = () => {
+                    segmentBtns.forEach((b) => b.classList.remove("active"));
+                    btn.classList.add("active");
+
+                    if (btn.dataset.target === "local") {
+                        localView.classList.remove("hidden");
+                        externalView.classList.add("hidden");
+                    } else {
+                        localView.classList.add("hidden");
+                        externalView.classList.remove("hidden");
+                    }
+                };
+            });
+
+            // Dropzone simulation
+            const dropzone = document.getElementById("dropzone");
+            const fileInput = document.getElementById("fileInput");
+
+            dropzone.onclick = () => fileInput.click();
+            dropzone.ondragover = (e) => {
+                e.preventDefault();
+                dropzone.style.borderColor = "var(--lime)";
+            };
+            dropzone.ondragleave = () => {
+                dropzone.style.borderColor = "var(--border)";
+            };
+            dropzone.ondrop = (e) => {
+                e.preventDefault();
+                console.log("File dropped:", e.dataTransfer.files[0].name);
+            };
+
+            // Form Submit Simulation
+            const uploadForm = document.getElementById("mainUploadForm");
+            const publishBtn = document.getElementById("publishBtn");
+            const toast = document.getElementById("toast");
+
+            uploadForm.onsubmit = (e) => {
+                e.preventDefault();
+
+                // Check if Local Upload is selected but backend not ready
+                const currentSource = document.querySelector(
+                    ".segment-btn.active",
+                ).dataset.target;
+                if (currentSource === "local") {
+                    alert(
+                        "Local upload pipeline is not ready yet. Please use External Source for now.",
+                    );
+                    return;
+                }
+
+                // Loading state
+                publishBtn.disabled = true;
+                publishBtn.innerHTML =
+                    '<i class="fa-solid fa-spinner animate-spin"></i> <span>Publishing...</span>';
+                publishBtn.style.opacity = "0.7";
+
+                setTimeout(() => {
+                    closeModal();
+                    // Show toast
+                    toast.style.display = "block";
+                    setTimeout(() => {
+                        toast.style.display = "none";
+                    }, 3000);
+
+                    // Reset button
+                    publishBtn.disabled = false;
+                    publishBtn.innerHTML =
+                        '<i class="fa-solid fa-cloud-arrow-up"></i> <span>Publish Video</span>';
+                    publishBtn.style.opacity = "1";
+                    uploadForm.reset();
+                    document
+                        .querySelectorAll(".tag-pill")
+                        .forEach((t) => t.classList.remove("selected"));
+                }, 2000);
+            };
+        </script>
+    </body>
+</html>

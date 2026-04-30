@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LimeVideo Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --limevideo-green: #00ff41;
+            --limevideo-red: #ff3e3e;
+            --limevideo-black: #0a0a0a;
+            --limevideo-dark-grey: #1a1a1a;
+            --limevideo-light-grey: #2a2a2a;
+        }
+
+        body {
+            background-color: var(--limevideo-black);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .limevideo-gradient-text {
+            background: linear-gradient(90deg, #00ff41, #008f11);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .limevideo-card {
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-light-grey);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+
+        .limevideo-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--limevideo-green);
+        }
+
+        .fixed-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--limevideo-light-grey);
+        }
+
+        .page-content {
+            padding-top: 80px;
+            min-height: 100vh;
+            padding-bottom: 100px;
+        }
+
+        /* Reklam Formatları */
+        .ad-label {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            background: rgba(0,0,0,0.7);
+            color: #888;
+            font-size: 8px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            z-index: 10;
+        }
+
+        .preroll-overlay {
+            position: fixed;
+            inset: 0;
+            background: black;
+            z-index: 5000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .preroll-overlay.active { display: flex; }
+
+        .skip-ad-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid white;
+            padding: 10px 20px;
+            cursor: pointer;
+            display: none;
+        }
+
+        .popunder-modal {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            background: #1a1a1a;
+            border: 1px solid var(--limevideo-green);
+            z-index: 4000;
+            transform: translateX(400px);
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        }
+
+        .popunder-modal.active { transform: translateX(0); }
+
+        .video-placeholder {
+            background: #151515;
+            aspect-ratio: 16/9;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+
+        /* Upvote/Downvote UI */
+        .vote-btn {
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px;
+            border-radius: 6px;
+        }
+        .vote-btn:hover { background: rgba(255,255,255,0.05); }
+        .vote-up.active { color: var(--limevideo-green); }
+        .vote-down.active { color: var(--limevideo-red); }
+
+        /* Notification Panel */
+        .notification-panel {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            width: 320px;
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-light-grey);
+            border-radius: 12px;
+            display: none;
+            flex-direction: column;
+            z-index: 2000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .notification-panel.active { display: flex; }
+
+        /* Status Toast */
+        .status-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            z-index: 6000;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-weight: bold;
+            transition: transform 0.4s;
+            background: var(--limevideo-green);
+            color: black;
+        }
+        .status-toast.active { transform: translateX(-50%) translateY(0); }
+
+        .nav-link { cursor: pointer; transition: color 0.2s; }
+        .nav-link:hover { color: var(--limevideo-green); }
+    </style>
+</head>
+<body onclick="app.closeAllPanels()">
+
+    <div id="status-toast" class="status-toast">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="status-message"></span>
+    </div>
+
+    <!-- Pre-roll Ad Overlay -->
+    <div id="preroll" class="preroll-overlay" onclick="event.stopPropagation()">
+        <span class="ad-label">REKLAM</span>
+        <div class="text-center">
+            <i class="fa-solid fa-play-circle text-6xl text-[#00ff41] mb-4 animate-pulse"></i>
+            <h2 class="text-2xl font-bold italic mb-2 uppercase">Sponsorlu LimeVideo</h2>
+            <p class="text-gray-500 text-sm" id="ad-timer">Video 5 saniye içinde başlayacak...</p>
+        </div>
+        <button id="skip-btn" onclick="app.skipAd()" class="skip-ad-btn uppercase text-xs font-black tracking-widest">Reklamı Geç</button>
+    </div>
+
+    <!-- Popunder -->
+    <div id="popunder" class="popunder-modal" onclick="event.stopPropagation()">
+        <div class="flex justify-between items-start mb-3">
+            <span class="text-[10px] font-bold text-[#00ff41] uppercase tracking-widest">Geliştirici Fırsatı</span>
+            <i class="fa-solid fa-xmark cursor-pointer text-gray-600 hover:text-white" onclick="app.closePopunder(event)"></i>
+        </div>
+        <p class="text-xs text-gray-300 mb-4">LimeVideo API anahtarınızı bugün alın, sınırsız bant genişliğinin tadını çıkarın.</p>
+        <button class="w-full py-2 bg-[#00ff41] text-black text-[10px] font-bold uppercase rounded">API Erişimi Al</button>
+    </div>
+
+    <header class="fixed-header h-16 flex items-center justify-between px-4">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="app.navigate('gallery')">
+            <div class="w-8 h-8 bg-[#00ff41] rounded flex items-center justify-center">
+                <i class="fa-solid fa-bolt text-black"></i>
+            </div>
+            <span class="text-xl font-black tracking-tighter limevideo-gradient-text uppercase">LIMEVIDEO</span>
+        </div>
+        <nav id="navbar-dynamic" class="flex items-center gap-5 relative"></nav>
+
+        <!-- Notification Panel Element -->
+        <div id="notification-panel" class="notification-panel" onclick="event.stopPropagation()">
+            <div class="p-4 border-b border-[#2a2a2a] flex justify-between items-center">
+                <span class="text-xs font-black uppercase tracking-widest">Bildirimler</span>
+                <span class="text-[10px] text-[#00ff41] cursor-pointer">Tümünü oku</span>
+            </div>
+            <div id="notification-list" class="max-h-[300px] overflow-y-auto">
+                <!-- Notifications go here -->
+            </div>
+        </div>
+    </header>
+
+    <main id="app-root" class="page-content">
+        <!-- SPA Pages -->
+    </main>
+
+    <script>
+        const app = {
+            state: {
+                currentPage: 'gallery',
+                isLoggedIn: false,
+                popunderTriggered: false,
+                adTimer: 5,
+                videoScore: 1240,
+                userVote: null,
+                notifications: [
+                    { id: 1, text: "cyber_dev videonu beğendi!", time: "2dk önce", icon: "fa-heart", read: false },
+                    { id: 2, text: "Yeni takipçi: limevideo_fan_99", time: "1sa önce", icon: "fa-user-plus", read: false },
+                    { id: 3, text: "Haftalık LimeVideo raporun hazır.", time: "5sa önce", icon: "fa-chart-line", read: true }
+                ],
+                userProfile: {
+                    username: "LimeVideoMaster",
+                    followers: 1240,
+                    following: 85,
+                    savedVideos: [],
+                    myVideos: [
+                        { id: 101, title: "LimeVideo ile 60 FPS Video İşleme", views: "12K", date: "3 gün önce" }
+                    ]
+                },
+                comments: [
+                    { id: 1, user: 'cyber_wanderer', text: 'Bu video harika olmuş! Efektler büyüleyici.', date: '2 saat önce', score: 42, userVote: null },
+                    { id: 2, user: 'tech_lover', text: 'LimeVideo platformunun hızı inanılmaz.', date: '5 saat önce', score: 18, userVote: null }
+                ]
+            },
+
+            init() {
+                this.renderNavbar();
+                this.navigate('gallery');
+            },
+
+            renderNavbar() {
+                const nav = document.getElementById('navbar-dynamic');
+                if (!this.state.isLoggedIn) {
+                    nav.innerHTML = `
+                        <i class="fa-solid fa-magnifying-glass nav-link" onclick="app.navigate('gallery')"></i>
+                        <button onclick="app.handleLogin()" class="text-xs font-bold uppercase border border-[#333] px-4 py-1.5 rounded-full hover:bg-white hover:text-black transition-all">Giriş Yap</button>
+                    `;
+                } else {
+                    const unreadCount = this.state.notifications.filter(n => !n.read).length;
+                    nav.innerHTML = `
+                        <i class="fa-solid fa-magnifying-glass nav-link" onclick="app.navigate('gallery')"></i>
+                        <div class="relative cursor-pointer" onclick="app.toggleNotifications(event)">
+                            <i class="fa-solid fa-bell nav-link"></i>
+                            ${unreadCount > 0 ? `<span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#ff3e3e] border-2 border-[#0a0a0a] rounded-full"></span>` : ''}
+                        </div>
+                        <div class="w-8 h-8 rounded-full bg-[#1a1a1a] border border-[#333] flex items-center justify-center cursor-pointer hover:border-[#00ff41] transition-all" onclick="app.navigate('profile')">
+                            <i class="fa-solid fa-user-secret text-[#00ff41]"></i>
+                        </div>
+                    `;
+                }
+            },
+
+            toggleNotifications(e) {
+                e.stopPropagation();
+                const panel = document.getElementById('notification-panel');
+                panel.classList.toggle('active');
+                this.renderNotifications();
+            },
+
+            renderNotifications() {
+                const list = document.getElementById('notification-list');
+                if (this.state.notifications.length === 0) {
+                    list.innerHTML = `<div class="p-8 text-center text-gray-600 text-xs uppercase">Bildirim yok</div>`;
+                    return;
+                }
+                list.innerHTML = this.state.notifications.map(n => `
+                    <div class="p-4 border-b border-[#2a2a2a] flex gap-3 items-start hover:bg-[#222] cursor-pointer ${!n.read ? 'bg-[#1e1e1e]' : ''}">
+                        <div class="w-8 h-8 rounded bg-[#111] flex items-center justify-center text-[#00ff41]">
+                            <i class="fa-solid ${n.icon}"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-[11px] text-gray-300">${n.text}</p>
+                            <span class="text-[9px] text-gray-600 uppercase font-bold">${n.time}</span>
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            closeAllPanels() {
+                document.getElementById('notification-panel').classList.remove('active');
+                if (!this.state.popunderTriggered) {
+                    setTimeout(() => {
+                        const pop = document.getElementById('popunder');
+                        if(pop) pop.classList.add('active');
+                    }, 1000);
+                    this.state.popunderTriggered = true;
+                }
+            },
+
+            // Oy Verme
+            handleVideoVote(type) {
+                if (!this.state.isLoggedIn) {
+                    this.showStatus("Oy vermek için giriş yapmalısınız!");
+                    return;
+                }
+                if (this.state.userVote === type) {
+                    this.state.userVote = null;
+                    this.state.videoScore += (type === 'up' ? -1 : 1);
+                } else {
+                    if (this.state.userVote !== null) this.state.videoScore += (type === 'up' ? 2 : -2);
+                    else this.state.videoScore += (type === 'up' ? 1 : -1);
+                    this.state.userVote = type;
+                }
+                this.render();
+            },
+
+            handleSaveVideo(videoData) {
+                if (!this.state.isLoggedIn) {
+                    this.showStatus("Kaydetmek için giriş yapmalısınız!");
+                    return;
+                }
+                const index = this.state.userProfile.savedVideos.findIndex(v => v.id === videoData.id);
+                if (index === -1) {
+                    this.state.userProfile.savedVideos.push(videoData);
+                    this.showStatus("Profilinize kaydedildi!");
+                } else {
+                    this.state.userProfile.savedVideos.splice(index, 1);
+                    this.showStatus("Kaydedilenlerden çıkarıldı.");
+                }
+                this.render();
+            },
+
+            watchVideo(id) {
+                this.playPreRoll(() => {
+                    this.navigate('watch');
+                });
+            },
+
+            playPreRoll(callback) {
+                const overlay = document.getElementById('preroll');
+                const timerText = document.getElementById('ad-timer');
+                overlay.classList.add('active');
+                this.state.adTimer = 5;
+                const interval = setInterval(() => {
+                    this.state.adTimer--;
+                    timerText.innerText = `Video ${this.state.adTimer} saniye içinde başlayacak...`;
+                    if (this.state.adTimer <= 0) {
+                        clearInterval(interval);
+                        document.getElementById('skip-btn').style.display = 'block';
+                    }
+                }, 1000);
+                this.state.onAdSkip = callback;
+            },
+
+            skipAd() {
+                document.getElementById('preroll').classList.remove('active');
+                if(this.state.onAdSkip) this.state.onAdSkip();
+            },
+
+            showStatus(msg) {
+                const toast = document.getElementById('status-toast');
+                document.getElementById('status-message').innerText = msg;
+                toast.classList.add('active');
+                setTimeout(() => toast.classList.remove('active'), 2500);
+            },
+
+            handleLogin() {
+                this.state.isLoggedIn = true;
+                this.showStatus("LimeVideo dünyasına hoş geldin!");
+                this.renderNavbar();
+                this.render();
+            },
+
+            logout() {
+                this.state.isLoggedIn = false;
+                this.showStatus("Oturum kapatıldı.");
+                this.renderNavbar();
+                this.navigate('gallery');
+            },
+
+            navigate(page) {
+                this.state.currentPage = page;
+                window.scrollTo(0,0);
+                this.render();
+            },
+
+            render() {
+                const root = document.getElementById('app-root');
+
+                if (this.state.currentPage === 'gallery') {
+                    root.innerHTML = `
+                        <div class="max-w-7xl mx-auto px-4">
+                            <div class="flex justify-center mb-12">
+                                <div class="bg-[#1a1a1a] border border-[#333] rounded-full px-6 py-2 flex items-center w-full max-w-xl">
+                                    <i class="fa-solid fa-magnifying-glass text-gray-500 mr-4"></i>
+                                    <input type="text" placeholder="Yüksek hızlı video araması..." class="bg-transparent border-none outline-none w-full text-sm">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                <!-- Örnek Video Kartı -->
+                                <div class="limevideo-card cursor-pointer group" onclick="app.watchVideo(1)">
+                                    <div class="video-placeholder relative overflow-hidden">
+                                        <div class="absolute inset-0 bg-[#00ff41]/5 opacity-0 group-hover:opacity-100 transition-all"></div>
+                                        <i class="fa-solid fa-play text-2xl"></i>
+                                        <div class="absolute bottom-3 right-3 bg-black/90 px-2 py-1 rounded text-[10px] font-black">14:20</div>
+                                    </div>
+                                    <div class="p-5">
+                                        <h3 class="font-bold text-lg uppercase tracking-tighter group-hover:text-[#00ff41] transition-all">Siber Gelecek: LimeVideo 2.0 Yayında</h3>
+                                        <div class="flex justify-between items-center mt-3">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-5 h-5 bg-[#333] rounded-full"></div>
+                                                <span class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">cyber_dev</span>
+                                            </div>
+                                            <span class="text-[10px] text-[#00ff41] font-black italic">+${this.state.videoScore} PUAN</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Sponsorlu Alan -->
+                                <div class="limevideo-card border-dashed border-gray-700 bg-transparent flex flex-col items-center justify-center p-8 text-center">
+                                    <div class="w-12 h-12 bg-[#00ff41]/10 rounded-full flex items-center justify-center mb-4">
+                                        <i class="fa-solid fa-plus text-[#00ff41]"></i>
+                                    </div>
+                                    <h4 class="text-sm font-bold uppercase tracking-widest text-gray-400">Video Yükle</h4>
+                                    <p class="text-[10px] text-gray-600 mt-2">Kendi teknoloji dünyanı paylaşmaya başla.</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                else if (this.state.currentPage === 'watch') {
+                    const isSaved = this.state.userProfile.savedVideos.some(v => v.id === 1);
+                    root.innerHTML = `
+                        <div class="max-w-5xl mx-auto px-4">
+                            <div class="w-full aspect-video bg-[#050505] rounded-2xl border border-[#222] mb-8 flex items-center justify-center relative overflow-hidden group">
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-all flex items-end p-6">
+                                    <div class="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
+                                        <div class="w-1/3 h-full bg-[#00ff41]"></div>
+                                    </div>
+                                </div>
+                                <i class="fa-solid fa-circle-play text-8xl text-[#00ff41] opacity-20 group-hover:opacity-60 transition-all"></i>
+                            </div>
+
+                            <div class="flex flex-col md:flex-row justify-between items-start gap-6 mb-10">
+                                <div class="flex-1">
+                                    <h1 class="text-3xl font-black italic uppercase tracking-tighter mb-2">Siber Gelecek: LimeVideo 2.0 Yayında</h1>
+                                    <div class="flex items-center gap-4 text-[10px] font-bold text-gray-600 uppercase tracking-widest">
+                                        <span>45.283 İzlenme</span>
+                                        <span>•</span>
+                                        <span>14 Nisan 2024</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-4">
+                                    <!-- Vote System -->
+                                    <div class="flex items-center bg-[#1a1a1a] border border-[#333] rounded-full p-1 shadow-lg shadow-black">
+                                        <div class="vote-btn w-10 h-10 ${this.state.userVote === 'up' ? 'active bg-[#00ff41]/10' : ''}" onclick="app.handleVideoVote('up')">
+                                            <i class="fa-solid fa-arrow-up"></i>
+                                        </div>
+                                        <span class="px-4 text-sm font-black min-w-[50px] text-center ${this.state.userVote === 'up' ? 'text-[#00ff41]' : (this.state.userVote === 'down' ? 'text-[#ff3e3e]' : 'text-white')}">
+                                            ${this.state.videoScore}
+                                        </span>
+                                        <div class="vote-btn w-10 h-10 ${this.state.userVote === 'down' ? 'active bg-[#ff3e3e]/10' : ''}" onclick="app.handleVideoVote('down')">
+                                            <i class="fa-solid fa-arrow-down"></i>
+                                        </div>
+                                    </div>
+
+                                    <!-- Save Button -->
+                                    <button onclick="app.handleSaveVideo({id: 1, title: 'Siber Gelecek: LimeVideo 2.0', views: '45K'})" class="w-12 h-12 rounded-full border border-[#333] bg-[#1a1a1a] flex items-center justify-center hover:border-[#00ff41] transition-all">
+                                        <i class="fa-solid fa-bookmark ${isSaved ? 'text-[#00ff41]' : 'text-gray-500'}"></i>
+                                    </button>
+
+                                    <button class="bg-[#00ff41] text-black h-12 px-8 rounded-full font-black uppercase text-xs tracking-widest hover:scale-105 transition-all">TAKİP ET</button>
+                                </div>
+                            </div>
+
+                            <div class="bg-[#1a1a1a] p-6 rounded-2xl border border-[#222] mb-12">
+                                <p class="text-sm text-gray-400 leading-relaxed">Bu videoda LimeVideo Engine v2.0 ile gelen inanılmaz düşük gecikmeli veri işleme mimarisini inceliyoruz. Saniyede 60 kare render gücü ve bulut tabanlı encoding özelliklerini keşfedin.</p>
+                            </div>
+
+                            <section>
+                                <h3 class="text-xl font-black uppercase tracking-tighter mb-8">${this.state.comments.length} Yorum</h3>
+                                <div class="space-y-6">
+                                    ${this.state.comments.map(c => `
+                                        <div class="flex gap-4 p-4 border-b border-[#1a1a1a]">
+                                            <div class="w-10 h-10 rounded-full bg-[#222] flex-shrink-0"></div>
+                                            <div>
+                                                <div class="flex items-center gap-3 mb-1">
+                                                    <span class="text-xs font-black uppercase tracking-widest text-[#00ff41]">@${c.user}</span>
+                                                    <span class="text-[9px] text-gray-600 font-bold">${c.date}</span>
+                                                </div>
+                                                <p class="text-sm text-gray-400">${c.text}</p>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </section>
+                        </div>
+                    `;
+                }
+                else if (this.state.currentPage === 'profile') {
+                    const profile = this.state.userProfile;
+                    root.innerHTML = `
+                        <div class="max-w-5xl mx-auto px-4">
+                            <div class="flex flex-col md:flex-row items-center gap-10 mb-12">
+                                <div class="w-32 h-32 rounded-full bg-gradient-to-tr from-[#00ff41] to-black p-1">
+                                    <div class="w-full h-full bg-[#0a0a0a] rounded-full flex items-center justify-center">
+                                        <i class="fa-solid fa-user-secret text-5xl text-[#00ff41]"></i>
+                                    </div>
+                                </div>
+                                <div class="flex-1 text-center md:text-left">
+                                    <h1 class="text-4xl font-black italic uppercase tracking-tighter mb-4">@${profile.username}</h1>
+                                    <div class="flex justify-center md:justify-start gap-10 text-xs font-bold uppercase tracking-widest">
+                                        <div class="flex flex-col items-center md:items-start">
+                                            <span class="text-[#00ff41] text-lg font-black">${profile.followers}</span>
+                                            <span class="text-gray-600">Takipçi</span>
+                                        </div>
+                                        <div class="flex flex-col items-center md:items-start">
+                                            <span class="text-[#00ff41] text-lg font-black">${profile.following}</span>
+                                            <span class="text-gray-600">Takip Edilen</span>
+                                        </div>
+                                        <div class="flex flex-col items-center md:items-start">
+                                            <span class="text-[#00ff41] text-lg font-black">${profile.myVideos.length + profile.savedVideos.length}</span>
+                                            <span class="text-gray-600">Video</span>
+                                        </div>
+                                    </div>
+                                    <div class="mt-8 flex justify-center md:justify-start gap-4">
+                                        <button class="bg-[#1a1a1a] border border-[#333] px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest hover:border-[#00ff41] transition-all">Profili Düzenle</button>
+                                        <button onclick="app.logout()" class="text-[#ff3e3e] border border-[#ff3e3e]/20 px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#ff3e3e]/10 transition-all">Çıkış Yap</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex border-b border-[#1a1a1a] mb-10 gap-8">
+                                <button class="pb-4 text-xs font-black uppercase tracking-widest border-b-2 border-[#00ff41] text-[#00ff41]">Videolarım</button>
+                                <button class="pb-4 text-xs font-black uppercase tracking-widest border-b-2 border-transparent text-gray-600 hover:text-white">Kaydedilenler (${profile.savedVideos.length})</button>
+                                <button class="pb-4 text-xs font-black uppercase tracking-widest border-b-2 border-transparent text-gray-600 hover:text-white">Ayarlar</button>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                ${profile.savedVideos.length > 0 ? profile.savedVideos.map(v => `
+                                    <div class="limevideo-card flex gap-4 p-4 items-center">
+                                        <div class="w-32 aspect-video bg-[#111] rounded flex items-center justify-center text-[#333]">
+                                            <i class="fa-solid fa-play"></i>
+                                        </div>
+                                        <div class="flex-1">
+                                            <h4 class="text-sm font-bold uppercase tracking-tight">${v.title}</h4>
+                                            <p class="text-[10px] text-gray-600 uppercase font-black mt-1">${v.views} İZLENME</p>
+                                        </div>
+                                    </div>
+                                `).join('') : `
+                                    <div class="col-span-full py-20 text-center text-gray-700 uppercase font-black tracking-widest text-sm">
+                                        Henüz kaydedilen video yok.
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        };
+
+        window.onload = () => app.init();
+    </script>
+</body>
+</html>

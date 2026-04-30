@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LimeVideo - İzle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --limevideo-green: #00ff41;
+            --limevideo-black: #0a0a0a;
+            --limevideo-dark-grey: #121212;
+            --limevideo-light-grey: #1e1e1e;
+            --limevideo-border: rgba(255,255,255,0.08);
+        }
+
+        body {
+            background-color: var(--limevideo-black);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+        }
+
+        .nav-fixed {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(10,10,10,0.8);
+            backdrop-filter: blur(15px);
+            border-bottom: 1px solid var(--limevideo-border);
+        }
+
+        .video-container {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 24px;
+            overflow: hidden;
+            border: 1px solid var(--limevideo-border);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+            position: relative;
+        }
+
+        .video-overlay {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, rgba(0,255,65,0.05) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .limevideo-card {
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-border);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .suggestion-card {
+            background: #181818;
+            border: 1px solid var(--limevideo-border);
+            border-radius: 12px;
+            padding: 10px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .suggestion-card:hover {
+            border-color: var(--limevideo-green);
+            background: #1e1e1e;
+        }
+
+        .vote-pill {
+            background: #1a1a1a;
+            border: 1px solid var(--limevideo-border);
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .vote-btn {
+            padding: 8px 16px;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+
+        .vote-btn:hover {
+            background: rgba(255,255,255,0.05);
+        }
+
+        .comment-input {
+            background: #0a0a0a;
+            border: 1px solid var(--limevideo-border);
+            border-radius: 12px;
+            padding: 12px;
+            width: 100%;
+            color: white;
+            font-size: 0.9rem;
+            resize: none;
+            transition: border-color 0.2s;
+        }
+
+        .comment-input:focus {
+            outline: none;
+            border-color: var(--limevideo-green);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #444; }
+
+        @media (max-width: 1024px) {
+            .layout-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="nav-fixed h-16 flex items-center justify-between px-6">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="location.href='index.html'">
+            <div class="w-8 h-8 bg-[#00ff41] rounded-lg flex items-center justify-center">
+                <i class="fa-solid fa-bolt text-black text-sm"></i>
+            </div>
+            <span class="text-xl font-black tracking-tighter uppercase italic">LIMEVIDEO</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="w-8 h-8 rounded-full border border-white/10 overflow-hidden">
+                <div class="w-full h-full bg-[#111] flex items-center justify-center">
+                    <i class="fa-solid fa-user-secret text-[#00ff41] text-xs"></i>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="pt-24 pb-20 px-4 md:px-8 max-w-[1400px] mx-auto">
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 layout-grid">
+
+            <!-- Sol Alan: Video ve Yorumlar (8/12) -->
+            <div class="lg:col-span-8 flex flex-col gap-6">
+
+                <!-- Video Player -->
+                <div class="video-container group">
+                    <div class="video-overlay"></div>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <i class="fa-solid fa-circle-play text-8xl text-[#00ff41] opacity-20 group-hover:opacity-60 transition-all cursor-pointer"></i>
+                    </div>
+                    <!-- Mock Progress Bar -->
+                    <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-white/10">
+                        <div class="h-full bg-[#00ff41] w-1/3 shadow-[0_0_15px_#00ff41]"></div>
+                    </div>
+                </div>
+
+                <!-- Video Info -->
+                <div class="limevideo-card">
+                    <div class="flex flex-col md:flex-row justify-between items-start gap-4 mb-6">
+                        <div>
+                            <h1 class="text-2xl font-black italic uppercase tracking-tight mb-2">LimeVideo v3 Engine: Geleceğin Video İşleme Teknolojisi</h1>
+                            <div class="flex items-center gap-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                <span>124.502 İzlenme</span>
+                                <span>•</span>
+                                <span>2 saat önce</span>
+                                <span class="bg-[#00ff41]/10 text-[#00ff41] px-2 py-0.5 rounded">#teknoloji</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <div class="vote-pill">
+                                <div class="vote-btn border-r border-white/5"><i class="fa-solid fa-arrow-up mr-2"></i>12K</div>
+                                <div class="vote-btn"><i class="fa-solid fa-arrow-down"></i></div>
+                            </div>
+                            <button class="bg-white/5 border border-white/10 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all">
+                                <i class="fa-solid fa-share mr-2"></i>Paylaş
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Creator Info -->
+                    <div class="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-[#00ff41] to-black p-[1px]">
+                                <div class="w-full h-full bg-[#111] rounded-xl flex items-center justify-center">
+                                    <i class="fa-solid fa-user-secret text-[#00ff41]"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-1">
+                                    <span class="text-sm font-black uppercase">LimeVideoMaster</span>
+                                    <i class="fa-solid fa-circle-check text-[#00ff41] text-[10px]"></i>
+                                </div>
+                                <span class="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">42.8K TAKİPÇİ</span>
+                            </div>
+                        </div>
+                        <button class="bg-[#00ff41] text-black text-[10px] font-black px-6 py-2.5 rounded-xl uppercase tracking-widest hover:scale-105 transition-all">Takip Et</button>
+                    </div>
+                </div>
+
+                <!-- Yorumlar Bölümü (Sol Dikey) -->
+                <div class="limevideo-card flex flex-col gap-8">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-black uppercase tracking-[0.2em] text-gray-400">Yorumlar (24)</h3>
+                        <button class="text-[10px] font-bold text-gray-500 uppercase"><i class="fa-solid fa-sliders mr-2"></i>Sırala</button>
+                    </div>
+
+                    <!-- Yorum Yaz -->
+                    <div class="flex gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-[#111] flex-shrink-0 border border-white/5 flex items-center justify-center">
+                            <i class="fa-solid fa-user text-xs text-gray-600"></i>
+                        </div>
+                        <div class="flex-1">
+                            <textarea class="comment-input" rows="2" placeholder="Düşüncelerini paylaş..."></textarea>
+                            <div class="flex justify-end mt-2">
+                                <button class="text-[10px] font-black uppercase tracking-widest text-[#00ff41] px-4 py-2">Gönder</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Yorum Listesi -->
+                    <div class="space-y-6">
+                        <div class="flex gap-4 p-2">
+                            <div class="w-10 h-10 rounded-lg bg-[#1a1a1a] flex-shrink-0 border border-white/5"></div>
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-xs font-black uppercase text-[#00ff41]">@cyber_wanderer</span>
+                                    <span class="text-[9px] text-gray-600 font-bold uppercase">10 dk önce</span>
+                                </div>
+                                <p class="text-sm text-gray-400 leading-relaxed">LimeVideo v3'ün render hızı gerçekten inanılmaz. Eski motorlara göre %40 daha performanslı görünüyor.</p>
+                                <div class="flex items-center gap-4 mt-3">
+                                    <div class="flex items-center gap-1 text-[10px] text-gray-600 font-bold"><i class="fa-solid fa-arrow-up"></i> 42</div>
+                                    <span class="text-[10px] text-gray-600 font-bold uppercase cursor-pointer hover:text-white">Yanıtla</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4 p-2">
+                            <div class="w-10 h-10 rounded-lg bg-[#1a1a1a] flex-shrink-0 border border-white/5"></div>
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-xs font-black uppercase text-[#00ff41]">@dev_mode</span>
+                                    <span class="text-[9px] text-gray-600 font-bold uppercase">1 saat önce</span>
+                                </div>
+                                <p class="text-sm text-gray-400 leading-relaxed">API dokümantasyonu ne zaman güncellenecek? Yeni özellikleri projelerimize dahil etmek istiyoruz.</p>
+                                <div class="flex items-center gap-4 mt-3">
+                                    <div class="flex items-center gap-1 text-[10px] text-gray-600 font-bold"><i class="fa-solid fa-arrow-up"></i> 18</div>
+                                    <span class="text-[10px] text-gray-600 font-bold uppercase cursor-pointer hover:text-white">Yanıtla</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sağ Alan: Önerilen Videolar (4/12) -->
+            <div class="lg:col-span-4 flex flex-col gap-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-black uppercase tracking-[0.2em] text-[#00ff41]">Sıradaki Videolar</h3>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[9px] font-bold text-gray-600 uppercase">Otomatik Oynat</span>
+                        <div class="w-8 h-4 bg-[#00ff41] rounded-full relative"><div class="absolute right-1 top-1 w-2 h-2 bg-black rounded-full"></div></div>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <!-- Öneri Kartları -->
+                    <div class="suggestion-card flex gap-4">
+                        <div class="w-32 aspect-video bg-[#050505] rounded-lg overflow-hidden flex-shrink-0 relative">
+                            <div class="absolute bottom-1 right-1 bg-black/80 text-[8px] font-black px-1 py-0.5 rounded">15:20</div>
+                        </div>
+                        <div class="flex flex-col justify-center">
+                            <h4 class="text-xs font-bold uppercase tracking-tight line-clamp-2 leading-snug">Sanal Gerçeklikte LimeVideo Deneyimi</h4>
+                            <p class="text-[9px] text-gray-500 font-bold uppercase mt-1">TechVision • 45K İzlenme</p>
+                        </div>
+                    </div>
+
+                    <div class="suggestion-card flex gap-4">
+                        <div class="w-32 aspect-video bg-[#050505] rounded-lg overflow-hidden flex-shrink-0 relative">
+                            <div class="absolute bottom-1 right-1 bg-black/80 text-[8px] font-black px-1 py-0.5 rounded">10:05</div>
+                        </div>
+                        <div class="flex flex-col justify-center">
+                            <h4 class="text-xs font-bold uppercase tracking-tight line-clamp-2 leading-snug">60 FPS Streaming Nasıl Yapılır?</h4>
+                            <p class="text-[9px] text-gray-500 font-bold uppercase mt-1">LimeVideo Academy • 12K İzlenme</p>
+                        </div>
+                    </div>
+
+                    <div class="suggestion-card flex gap-4">
+                        <div class="w-32 aspect-video bg-[#050505] rounded-lg overflow-hidden flex-shrink-0 relative">
+                            <div class="absolute bottom-1 right-1 bg-black/80 text-[8px] font-black px-1 py-0.5 rounded">22:15</div>
+                        </div>
+                        <div class="flex flex-col justify-center">
+                            <h4 class="text-xs font-bold uppercase tracking-tight line-clamp-2 leading-snug">LimeVideo ile Cloud Rendering Sırları</h4>
+                            <p class="text-[9px] text-gray-500 font-bold uppercase mt-1">CloudDevs • 89K İzlenme</p>
+                        </div>
+                    </div>
+
+                    <div class="suggestion-card flex gap-4">
+                        <div class="w-32 aspect-video bg-[#050505] rounded-lg overflow-hidden flex-shrink-0 relative">
+                            <div class="absolute bottom-1 right-1 bg-black/80 text-[8px] font-black px-1 py-0.5 rounded">05:40</div>
+                        </div>
+                        <div class="flex flex-col justify-center">
+                            <h4 class="text-xs font-bold uppercase tracking-tight line-clamp-2 leading-snug">Haftalık Update v3.1</h4>
+                            <p class="text-[9px] text-gray-500 font-bold uppercase mt-1">LimeVideoMaster • 5K İzlenme</p>
+                        </div>
+                    </div>
+
+                    <!-- Reklam Alanı (Sidebar) -->
+                    <div class="mt-4 p-6 bg-gradient-to-br from-[#00ff41]/5 to-transparent border border-dashed border-[#00ff41]/20 rounded-2xl text-center">
+                        <span class="text-[8px] font-black text-[#00ff41] uppercase tracking-[0.3em] block mb-2">Sponsorlu</span>
+                        <h5 class="text-[11px] font-bold uppercase mb-2">LimeVideo Pro'ya Geçin</h5>
+                        <p class="text-[9px] text-gray-500 leading-tight mb-4">4K İzleme ve reklamsız deneyim için yükseltin.</p>
+                        <button class="w-full py-2 border border-[#00ff41] text-[#00ff41] text-[9px] font-black uppercase rounded-lg hover:bg-[#00ff41] hover:text-black transition-all">Planları Gör</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+</body>
+</html>

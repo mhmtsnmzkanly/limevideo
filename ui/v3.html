@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LimeVideo Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* LimeVideo.css Temelleri & Özel Yeşil-Siyah Tema */
+        :root {
+            --limevideo-green: #00ff41;
+            --limevideo-black: #0a0a0a;
+            --limevideo-dark-grey: #1a1a1a;
+            --limevideo-light-grey: #2a2a2a;
+        }
+
+        body {
+            background-color: var(--limevideo-black);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .limevideo-gradient-text {
+            background: linear-gradient(90deg, #00ff41, #008f11);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .limevideo-btn-primary {
+            background-color: var(--limevideo-green);
+            color: black;
+            font-weight: bold;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .limevideo-btn-primary:hover {
+            box-shadow: 0 0 15px var(--limevideo-green);
+            transform: translateY(-2px);
+        }
+
+        .limevideo-card {
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-light-grey);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .limevideo-input {
+            background: var(--limevideo-light-grey);
+            border: 1px solid #333;
+            color: white;
+            padding: 0.8rem;
+            border-radius: 8px;
+            width: 100%;
+        }
+
+        .limevideo-input:focus {
+            outline: none;
+            border-color: var(--limevideo-green);
+        }
+
+        /* Video Preview Animation Placeholder */
+        .video-placeholder {
+            background: linear-gradient(270deg, #1a1a1a, #2a2a2a, #1a1a1a);
+            background-size: 400% 400%;
+            animation: pulse 3s ease infinite;
+            aspect-ratio: 16/9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        @keyframes pulse {
+            0% { background-position: 0% 50% }
+            50% { background-position: 100% 50% }
+            100% { background-position: 0% 50% }
+        }
+
+        .fixed-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--limevideo-light-grey);
+        }
+
+        .page-content {
+            padding-top: 70px;
+            min-height: 100vh;
+        }
+
+        .nav-link {
+            color: #888;
+            transition: color 0.3s;
+            cursor: pointer;
+        }
+
+        .nav-link.active {
+            color: var(--limevideo-green);
+        }
+
+        .comment-box {
+            border-left: 2px solid var(--limevideo-green);
+            background: rgba(0, 255, 65, 0.05);
+        }
+
+        .infinity-loader {
+            height: 4px;
+            background: var(--limevideo-green);
+            width: 0%;
+            transition: width 0.5s;
+        }
+
+        /* Stats Card Styling - Row & Slim */
+        .stats-card-row-item {
+            background: linear-gradient(145deg, #1a1a1a, #111111);
+            border: 1px solid #222;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            gap: 8px;
+            border-radius: 12px;
+            flex-shrink: 0;
+            min-width: fit-content;
+        }
+
+        .stats-card-row-item:hover {
+            border-color: var(--limevideo-green);
+            transform: scale(1.02);
+        }
+
+        .tab-loader {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid var(--limevideo-green);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* No Scrollbar for horizontal container */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sabit Header -->
+    <header class="fixed-header h-16 flex items-center justify-between px-4">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="app.navigate('gallery')">
+            <div class="w-8 h-8 bg-[#00ff41] rounded flex items-center justify-center">
+                <i class="fa-solid fa-bolt text-black"></i>
+            </div>
+            <span class="text-xl font-black tracking-tighter limevideo-gradient-text">LIMEVIDEO</span>
+        </div>
+        <nav class="flex gap-6 text-xl">
+            <i class="fa-solid fa-house nav-link" id="nav-gallery" onclick="app.navigate('gallery')"></i>
+            <i class="fa-solid fa-user nav-link" id="nav-user" onclick="app.navigate('user')"></i>
+            <i class="fa-solid fa-right-to-bracket nav-link" id="nav-auth" onclick="app.navigate('auth')"></i>
+        </nav>
+    </header>
+
+    <main id="app-root" class="page-content">
+        <!-- Sayfalar buraya render edilecek -->
+    </main>
+
+    <div id="scroll-loader" class="infinity-loader fixed bottom-0 left-0"></div>
+
+    <script>
+        const app = {
+            state: {
+                currentPage: 'auth',
+                activeUserTab: 'videos',
+                isTabLoading: false,
+                user: {
+                    name: "LimeVideo Developer",
+                    joined: "Nisan 2024",
+                    stats: {
+                        videoCount: 12,
+                        totalViews: "45.2K",
+                        followers: "1.8K"
+                    },
+                    myVideos: [
+                        { id: 101, title: "LimeVideo Framework Giriş", views: "1.2K", date: "2 gün önce" },
+                        { id: 102, title: "CSS Animasyonları", views: "800", date: "5 gün önce" },
+                        { id: 103, title: "Mobil Tasarım Sırları", views: "2.4K", date: "1 hafta önce" }
+                    ],
+                    likedVideos: [
+                        { id: 1, title: "Modern Sanat", author: "ArtX", views: "10K" },
+                        { id: 2, title: "Gelecek Teknolojileri", author: "Future", views: "250K" }
+                    ],
+                    myComments: [
+                        { id: 501, video: "JS Rehberi", text: "Çok faydalı bir anlatım olmuş.", date: "Dün" },
+                        { id: 502, video: "SPA Mimarisi", text: "Performans testleri yapıldı mı?", date: "3 gün önce" }
+                    ]
+                },
+                videos: [
+                    { id: 1, title: "LimeVideo UI Tasarım Rehberi", author: "Aiedrow", views: "1.2K", duration: "05:20" },
+                    { id: 2, title: "Modern SPA Mimarisi", author: "DevLimeVideo", views: "850", duration: "12:15" },
+                    { id: 3, title: "Yeşil ve Siyahın Gücü", author: "DesignX", views: "3.4K", duration: "03:45" },
+                    { id: 4, title: "Mobile First Yaklaşımlar", author: "FrontendGuru", views: "2.1K", duration: "08:10" }
+                ],
+                comments: [
+                    { id: 1, user: "Kullanıcı123", text: "Bu arayüz gerçekten çok hızlı görünüyor!", votes: 12 },
+                    { id: 2, user: "LimeVideoFan", text: "Renk paleti harika olmuş.", votes: 5 }
+                ]
+            },
+
+            init() {
+                this.navigate('auth');
+                this.setupInfiniteScroll();
+            },
+
+            navigate(page) {
+                this.state.currentPage = page;
+                this.render();
+                window.scrollTo(0, 0);
+
+                document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+                const activeNav = document.getElementById(`nav-${page}`);
+                if(activeNav) activeNav.classList.add('active');
+            },
+
+            switchTab(tabName) {
+                this.state.activeUserTab = tabName;
+                this.state.isTabLoading = true;
+                this.render();
+
+                setTimeout(() => {
+                    this.state.isTabLoading = false;
+                    this.render();
+                }, 600);
+            },
+
+            render() {
+                const root = document.getElementById('app-root');
+                switch(this.state.currentPage) {
+                    case 'auth': root.innerHTML = this.pages.auth(); break;
+                    case 'gallery': root.innerHTML = this.pages.gallery(); break;
+                    case 'video': root.innerHTML = this.pages.video(); break;
+                    case 'user': root.innerHTML = this.pages.user(); break;
+                }
+            },
+
+            pages: {
+                auth: () => `
+                    <div class="flex flex-col items-center justify-center px-6 py-12 animate-fade-in">
+                        <div class="w-full max-w-md p-8 limevideo-card">
+                            <h2 class="text-3xl font-bold mb-6 text-center">Hoş Geldiniz</h2>
+                            <div class="flex gap-4 mb-8">
+                                <button class="flex-1 border-b-2 border-[#00ff41] pb-2 font-bold uppercase text-xs tracking-widest">Giriş Yap</button>
+                                <button class="flex-1 border-b-2 border-transparent pb-2 text-gray-500 uppercase text-xs tracking-widest">Kayıt Ol</button>
+                            </div>
+                            <div class="space-y-4">
+                                <input type="email" class="limevideo-input" placeholder="E-posta">
+                                <input type="password" class="limevideo-input" placeholder="Şifre">
+                                <button onclick="app.navigate('gallery')" class="w-full limevideo-btn-primary mt-4 uppercase tracking-widest">Sisteme Gir</button>
+                            </div>
+                        </div>
+                    </div>
+                `,
+
+                gallery: () => `
+                    <div class="p-4 animate-fade-in">
+                        <div class="flex items-center justify-between mb-6">
+                            <h1 class="text-2xl font-bold uppercase italic tracking-tighter">Keşfet</h1>
+                            <div class="flex gap-2">
+                                <span class="bg-[#1a1a1a] p-2 rounded text-[10px] font-bold uppercase">Trendler</span>
+                                <span class="bg-[#00ff41] p-2 rounded text-[10px] text-black font-black uppercase">Yeni</span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            ${app.state.videos.map(v => `
+                                <div class="limevideo-card cursor-pointer group" onclick="app.navigate('video')">
+                                    <div class="video-placeholder">
+                                        <i class="fa-solid fa-play text-4xl opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                                        <span class="absolute bottom-2 right-2 bg-black/80 text-[10px] px-2 py-1 rounded">${v.duration}</span>
+                                    </div>
+                                    <div class="p-4">
+                                        <h3 class="font-bold text-lg mb-1 truncate">${v.title}</h3>
+                                        <div class="flex justify-between text-[11px] text-gray-500 uppercase tracking-tighter font-bold">
+                                            <span>${v.author}</span>
+                                            <span>${v.views} izlenme</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `,
+
+                video: () => `
+                    <div class="animate-fade-in">
+                        <div class="w-full bg-black aspect-video flex items-center justify-center border-b border-[#333]">
+                            <div class="video-placeholder w-full h-full">
+                                <i class="fa-solid fa-circle-play text-6xl text-[#00ff41]"></i>
+                            </div>
+                        </div>
+                        <div class="p-4">
+                            <h1 class="text-xl font-bold mb-4 uppercase italic">LimeVideo UI Tasarım Rehberi</h1>
+                            <div class="flex items-center justify-between mb-6">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-[#1a1a1a] border border-[#00ff41] flex items-center justify-center">
+                                        <i class="fa-solid fa-user-ninja text-[#00ff41]"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-bold text-sm">Aiedrow Labs</p>
+                                        <p class="text-[10px] text-gray-500 uppercase">1.2M Abone</p>
+                                    </div>
+                                </div>
+                                <button class="bg-[#00ff41] text-black px-5 py-2 rounded-full text-xs font-black uppercase">ABONE OL</button>
+                            </div>
+                            <div class="bg-[#111] p-4 rounded-lg mb-8 text-sm text-gray-400 border border-[#222]">
+                                LimeVideo.css bileşenlerini ve modern SPA yapılarını inceliyoruz.
+                            </div>
+                            <div class="space-y-6">
+                                <h3 class="font-bold border-b border-[#333] pb-2 text-xs uppercase tracking-widest text-[#00ff41]">Yorumlar</h3>
+                                <div class="relative">
+                                    <textarea maxlength="250" class="limevideo-input h-24 resize-none pr-12 text-sm" placeholder="Yorum ekle..."></textarea>
+                                    <button class="absolute bottom-3 right-3 text-[#00ff41]"><i class="fa-solid fa-paper-plane"></i></button>
+                                </div>
+                                <div class="space-y-4">
+                                    ${app.state.comments.map(c => `
+                                        <div class="p-3 rounded-lg comment-box">
+                                            <p class="text-[10px] font-black text-[#00ff41] mb-1 uppercase tracking-tighter">@${c.user}</p>
+                                            <p class="text-sm text-gray-300 mb-2">${c.text}</p>
+                                            <div class="flex items-center gap-4 text-[10px] font-bold">
+                                                <span class="cursor-pointer hover:text-[#00ff41] flex items-center gap-1"><i class="fa-solid fa-arrow-up"></i> ${c.votes}</span>
+                                                <span class="cursor-pointer hover:text-red-500"><i class="fa-solid fa-arrow-down"></i></span>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `,
+
+                user: () => {
+                    const u = app.state.user;
+                    const activeTab = app.state.activeUserTab;
+
+                    let content = '';
+                    if (app.state.isTabLoading) {
+                        content = `
+                            <div class="flex flex-col items-center justify-center py-20 gap-4">
+                                <div class="tab-loader"></div>
+                                <p class="text-[10px] text-gray-500 uppercase tracking-widest">Veriler Çekiliyor...</p>
+                            </div>
+                        `;
+                    } else if (activeTab === 'videos') {
+                        content = `
+                            <div class="grid grid-cols-2 gap-3">
+                                ${u.myVideos.map(v => `
+                                    <div class="limevideo-card aspect-video relative group">
+                                        <div class="video-placeholder h-full bg-[#111] opacity-50"></div>
+                                        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                            <i class="fa-solid fa-pen-to-square text-[#00ff41]"></i>
+                                        </div>
+                                        <div class="absolute bottom-0 left-0 right-0 bg-black/80 p-2 border-t border-[#333]">
+                                            <p class="text-[10px] font-bold truncate">${v.title}</p>
+                                            <p class="text-[8px] text-gray-500 uppercase">${v.views} İzlenme • ${v.date}</p>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    } else if (activeTab === 'liked') {
+                        content = u.likedVideos.map(v => `
+                            <div class="limevideo-card p-3 mb-3 flex items-center justify-between border-l-2 border-[#00ff41]">
+                                <div>
+                                    <p class="text-xs font-black uppercase tracking-tight">${v.title}</p>
+                                    <p class="text-[9px] text-gray-500 uppercase font-bold tracking-widest">${v.author} • ${v.views} İzlenme</p>
+                                </div>
+                                <i class="fa-solid fa-heart text-[#00ff41] text-sm"></i>
+                            </div>
+                        `).join('');
+                    } else if (activeTab === 'comments') {
+                        content = u.myComments.map(c => `
+                            <div class="bg-[#111] border border-[#222] p-3 mb-3 rounded-lg border-l-4 border-[#00ff41]">
+                                <p class="text-[9px] text-[#00ff41] font-black uppercase mb-1 tracking-widest underline">${c.video}</p>
+                                <p class="text-sm text-gray-300 italic mb-2">"${c.text}"</p>
+                                <p class="text-[8px] text-gray-600 text-right uppercase font-bold">${c.date}</p>
+                            </div>
+                        `).join('');
+                    }
+
+                    return `
+                        <div class="p-4 animate-fade-in">
+                            <!-- Profil Kartı Üst Kısım -->
+                            <div class="flex flex-col items-center mb-6">
+                                <div class="w-20 h-20 rounded-full bg-[#111] border-2 border-[#00ff41] mb-4 flex items-center justify-center relative shadow-[0_0_30px_rgba(0,255,65,0.1)]">
+                                    <i class="fa-solid fa-user-secret text-3xl text-[#00ff41]"></i>
+                                    <div class="absolute bottom-1 right-1 w-6 h-6 bg-[#00ff41] rounded-full border-2 border-black flex items-center justify-center">
+                                        <i class="fa-solid fa-check text-black text-[10px]"></i>
+                                    </div>
+                                </div>
+                                <h2 class="text-2xl font-black italic uppercase tracking-tighter limevideo-gradient-text">${u.name}</h2>
+                                <p class="text-gray-500 text-[10px] uppercase tracking-widest mt-1 font-bold">Üyelik: ${u.joined}</p>
+                            </div>
+
+                            <!-- Yan yana Stats Container -->
+                            <div class="flex gap-3 mb-8 overflow-x-auto no-scrollbar pb-2">
+                                <div class="stats-card-row-item">
+                                    <i class="fa-solid fa-video text-[#00ff41] text-xs"></i>
+                                    <div class="flex gap-1.5 items-center">
+                                        <span class="text-lg font-black tracking-tighter">${u.stats.videoCount}</span>
+                                        <span class="text-[8px] text-gray-500 uppercase font-black tracking-widest leading-none">Video</span>
+                                    </div>
+                                </div>
+                                <div class="stats-card-row-item">
+                                    <i class="fa-solid fa-eye text-[#00ff41] text-xs"></i>
+                                    <div class="flex gap-1.5 items-center">
+                                        <span class="text-lg font-black tracking-tighter">${u.stats.totalViews}</span>
+                                        <span class="text-[8px] text-gray-500 uppercase font-black tracking-widest leading-none">İzlenme</span>
+                                    </div>
+                                </div>
+                                <div class="stats-card-row-item">
+                                    <i class="fa-solid fa-users text-[#00ff41] text-xs"></i>
+                                    <div class="flex gap-1.5 items-center">
+                                        <span class="text-lg font-black tracking-tighter">${u.stats.followers}</span>
+                                        <span class="text-[8px] text-gray-500 uppercase font-black tracking-widest leading-none">Takipçi</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sekme Menüsü -->
+                            <div class="flex gap-4 mb-6 border-b border-[#222]">
+                                <button onclick="app.switchTab('videos')" class="pb-2 text-[10px] font-black uppercase transition-all tracking-widest ${activeTab === 'videos' ? 'text-[#00ff41] border-b-2 border-[#00ff41]' : 'text-gray-500'}">Videolarım</button>
+                                <button onclick="app.switchTab('liked')" class="pb-2 text-[10px] font-black uppercase transition-all tracking-widest ${activeTab === 'liked' ? 'text-[#00ff41] border-b-2 border-[#00ff41]' : 'text-gray-500'}">Favoriler</button>
+                                <button onclick="app.switchTab('comments')" class="pb-2 text-[10px] font-black uppercase transition-all tracking-widest ${activeTab === 'comments' ? 'text-[#00ff41] border-b-2 border-[#00ff41]' : 'text-gray-500'}">Yorumlarım</button>
+                            </div>
+
+                            <!-- Tab İçeriği -->
+                            <div id="tab-content" class="min-h-[300px]">
+                                ${content}
+                            </div>
+                        </div>
+                    `;
+                }
+            },
+
+            setupInfiniteScroll() {
+                window.addEventListener('scroll', () => {
+                    if (this.state.currentPage !== 'video' && this.state.currentPage !== 'gallery') return;
+                    const scrollPercent = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+                    const loader = document.getElementById('scroll-loader');
+                    if(loader) loader.style.width = `${scrollPercent}%`;
+                });
+            }
+        };
+
+        window.onload = () => app.init();
+    </script>
+
+    <style>
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</body>
+</html>

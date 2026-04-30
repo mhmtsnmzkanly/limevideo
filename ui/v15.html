@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LimeVideo - İzle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --limevideo-green: #00ff41;
+            --limevideo-black: #0a0a0a;
+            --limevideo-dark-grey: #121212;
+            --limevideo-light-grey: #1e1e1e;
+            --limevideo-border: rgba(255,255,255,0.08);
+        }
+
+        body {
+            background-color: var(--limevideo-black);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .nav-fixed {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(10,10,10,0.8);
+            backdrop-filter: blur(15px);
+            border-bottom: 1px solid var(--limevideo-border);
+        }
+
+        /* Video Alanı */
+        .video-main-container {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 24px;
+            overflow: hidden;
+            border: 1px solid var(--limevideo-border);
+            position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .limevideo-card {
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-border);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        /* Oynatma Listesi Bileşeni */
+        .playlist-card {
+            background: var(--limevideo-dark-grey);
+            border: 1px solid var(--limevideo-border);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            max-height: 450px;
+            overflow: hidden;
+        }
+
+        .playlist-items {
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .playlist-items::-webkit-scrollbar { width: 4px; }
+        .playlist-items::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+
+        .playlist-item {
+            display: flex;
+            gap: 12px;
+            padding: 10px 16px;
+            cursor: pointer;
+            transition: background 0.2s;
+            border-bottom: 1px solid rgba(255,255,255,0.02);
+        }
+
+        .playlist-item:hover { background: rgba(255,255,255,0.03); }
+        .playlist-item.active { background: rgba(0, 255, 65, 0.05); border-left: 3px solid var(--limevideo-green); }
+
+        .playlist-thumb {
+            width: 100px;
+            aspect-ratio: 16/9;
+            background: #1a1a1a;
+            border-radius: 8px;
+            flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Vote Sistemi: Ok | Sayı | Ok */
+        .vote-pill-v2 {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--limevideo-border);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .vote-btn-v2 {
+            padding: 8px 12px;
+            transition: all 0.2s;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .vote-btn-v2:hover { color: var(--limevideo-green); background: rgba(255,255,255,0.05); }
+
+        .vote-count {
+            padding: 0 10px;
+            font-size: 12px;
+            font-weight: 800;
+            color: white;
+            border-left: 1px solid var(--limevideo-border);
+            border-right: 1px solid var(--limevideo-border);
+            min-width: 45px;
+            text-align: center;
+        }
+
+        /* Yorumlar */
+        .reply-line {
+            position: absolute;
+            left: 18px;
+            top: 40px;
+            bottom: 0;
+            width: 2px;
+            background: var(--limevideo-border);
+        }
+
+        .suggestion-card {
+            background: #161616;
+            border: 1px solid var(--limevideo-border);
+            border-radius: 12px;
+            padding: 8px;
+            transition: all 0.2s;
+        }
+
+        .suggestion-card:hover { border-color: rgba(255,255,255,0.2); }
+    </style>
+</head>
+<body>
+
+    <nav class="nav-fixed h-16 flex items-center justify-between px-6">
+        <div class="flex items-center gap-2 cursor-pointer">
+            <div class="w-8 h-8 bg-[#00ff41] rounded-lg flex items-center justify-center">
+                <i class="fa-solid fa-bolt text-black text-sm"></i>
+            </div>
+            <span class="text-xl font-black tracking-tighter uppercase italic">LIMEVIDEO</span>
+        </div>
+        <div class="hidden md:flex items-center bg-white/5 border border-white/10 rounded-full px-5 py-2 w-1/3">
+            <input type="text" placeholder="İçerik ara..." class="bg-transparent border-none outline-none text-xs w-full text-white">
+        </div>
+        <div class="flex items-center gap-4">
+            <button class="text-gray-400 hover:text-white"><i class="fa-solid fa-upload"></i></button>
+            <div class="w-8 h-8 rounded-full bg-[#1a1a1a] border border-white/10"></div>
+        </div>
+    </nav>
+
+    <main class="pt-24 pb-20 px-4 md:px-8 lg:px-12 max-w-[1700px] mx-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+            <!-- SOL SÜTUN (%70 Yaklaşık) -->
+            <div class="lg:col-span-8 flex flex-col gap-6">
+
+                <!-- 1. Video Player -->
+                <div class="video-main-container group">
+                    <div class="absolute inset-0 flex items-center justify-center cursor-pointer">
+                        <i class="fa-solid fa-play text-7xl text-[#00ff41] opacity-40 group-hover:opacity-80 transition-all"></i>
+                    </div>
+                </div>
+
+                <!-- 2. Video Detayları -->
+                <div class="limevideo-card">
+                    <h1 class="text-2xl font-bold mb-4 leading-tight">LimeVideo Tasarım Sistemleri: Ders 04 - Modern Playlist ve UX Mimarisi</h1>
+                    <div class="flex flex-wrap items-center justify-between gap-6 pb-6 border-bottom border-white/5">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                                <i class="fa-solid fa-shield-halved text-[#00ff41] text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold flex items-center gap-1">LimeVideo Academy <i class="fa-solid fa-circle-check text-[#00ff41] text-[10px]"></i></h3>
+                                <p class="text-[10px] text-gray-500 font-black uppercase tracking-widest">950K ABONE</p>
+                            </div>
+                            <button class="bg-white text-black px-6 py-2 rounded-xl text-xs font-black uppercase ml-2">Abone Ol</button>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="vote-pill-v2">
+                                <div class="vote-btn-v2"><i class="fa-solid fa-arrow-up"></i></div>
+                                <div class="vote-count">12.4K</div>
+                                <div class="vote-btn-v2"><i class="fa-solid fa-arrow-down"></i></div>
+                            </div>
+                            <button class="bg-white/5 border border-white/10 px-5 py-2.5 rounded-xl text-xs font-bold uppercase"><i class="fa-solid fa-share mr-2"></i>Paylaş</button>
+                        </div>
+                    </div>
+                    <div class="mt-6 p-4 bg-white/5 rounded-xl text-sm leading-relaxed text-gray-300">
+                        <span class="font-bold text-white mr-2">1.2M İzlenme • 2 gün önce</span>
+                        Bu bölümde, bir video platformunda UX dengesini nasıl kuracağımızı inceliyoruz. Oynatma listeleri, yorum bölümleri ve önerilen videolar arasındaki hiyerarşiyi optimize ediyoruz... <button class="text-white font-bold ml-1">Daha fazla göster</button>
+                    </div>
+                </div>
+
+                <!-- 3. Yorumlar -->
+                <div class="limevideo-card flex flex-col gap-8">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-black uppercase tracking-[0.2em] text-gray-400">Yorumlar (422)</h3>
+                        <button class="text-xs font-bold text-gray-500"><i class="fa-solid fa-sort mr-2"></i>Sırala</button>
+                    </div>
+
+                    <div class="space-y-10">
+                        <!-- Örnek Yorum -->
+                        <div class="relative">
+                            <div class="flex gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-white/5 flex-shrink-0 flex items-center justify-center border border-white/5">
+                                    <i class="fa-solid fa-user-astronaut text-[#00ff41]"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="text-xs font-black">@cyber_wanderer</span>
+                                        <span class="text-[10px] text-gray-600 font-bold uppercase">10 dk önce</span>
+                                    </div>
+                                    <p class="text-sm text-gray-300 leading-relaxed mb-3">Tasarım bütünlüğü gerçekten harika olmuş, sağ taraftaki playlist yerleşimi UX'i çok rahatlatıyor.</p>
+                                    <div class="flex items-center gap-4">
+                                        <div class="vote-pill-v2 scale-75 origin-left">
+                                            <div class="vote-btn-v2"><i class="fa-solid fa-arrow-up"></i></div>
+                                            <div class="vote-count">42</div>
+                                            <div class="vote-btn-v2"><i class="fa-solid fa-arrow-down"></i></div>
+                                        </div>
+                                        <button class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Yanıtla</button>
+                                    </div>
+
+                                    <!-- Yanıtlar -->
+                                    <div class="mt-6 space-y-6 relative ml-2">
+                                        <div class="reply-line"></div>
+                                        <div class="flex gap-3 pl-6">
+                                            <div class="w-8 h-8 rounded-lg bg-[#222] flex-shrink-0 flex items-center justify-center border border-white/5">
+                                                <i class="fa-solid fa-user text-[10px]"></i>
+                                            </div>
+                                            <div>
+                                                <div class="flex items-center gap-2 mb-0.5">
+                                                    <span class="text-[11px] font-bold">@dev_guru</span>
+                                                    <span class="text-[9px] text-gray-600 font-bold">5 dk önce</span>
+                                                </div>
+                                                <p class="text-xs text-gray-400 italic">Kesinlikle katılıyorum.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SAĞ SÜTUN (%30 Yaklaşık) -->
+            <div class="lg:col-span-4 flex flex-col gap-8">
+
+                <!-- 1. Oynatma Listesi (Üstte) -->
+                <div class="playlist-card">
+                    <div class="p-4 bg-white/5 border-b border-white/5">
+                        <div class="flex justify-between items-center mb-1">
+                            <h2 class="text-xs font-black uppercase tracking-widest text-[#00ff41]">LimeVideo Tasarım Serisi</h2>
+                            <span class="text-[10px] font-bold text-gray-500">1 / 12</span>
+                        </div>
+                        <p class="text-[10px] text-gray-500 font-bold uppercase">LimeVideo Academy • Sıralı</p>
+                    </div>
+                    <div class="playlist-items">
+                        <div class="playlist-item active">
+                            <div class="playlist-thumb">
+                                <div class="absolute bottom-1 right-1 bg-black/80 px-1 rounded text-[8px] font-bold">12:45</div>
+                                <div class="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                    <i class="fa-solid fa-play text-[#00ff41] text-[10px]"></i>
+                                </div>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h4 class="text-xs font-bold leading-tight line-clamp-2">LimeVideo Tasarım Sistemleri: Ders 04</h4>
+                                <p class="text-[9px] text-gray-500 mt-1 uppercase font-bold">1.2M İzlenme</p>
+                            </div>
+                        </div>
+                        <div class="playlist-item">
+                            <div class="playlist-thumb"><div class="absolute bottom-1 right-1 bg-black/80 px-1 rounded text-[8px] font-bold">08:12</div></div>
+                            <div class="flex-1 min-w-0">
+                                <h4 class="text-xs font-bold leading-tight line-clamp-2">Grid Sistemleri ve Esnek Arayüzler</h4>
+                                <p class="text-[9px] text-gray-500 mt-1 uppercase font-bold">850K İzlenme</p>
+                            </div>
+                        </div>
+                        <div class="playlist-item">
+                            <div class="playlist-thumb"><div class="absolute bottom-1 right-1 bg-black/80 px-1 rounded text-[8px] font-bold">15:20</div></div>
+                            <div class="flex-1 min-w-0">
+                                <h4 class="text-xs font-bold leading-tight line-clamp-2">Dark Mode ve Renk Teorisi</h4>
+                                <p class="text-[9px] text-gray-500 mt-1 uppercase font-bold">2.1M İzlenme</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Önerilen Videolar (Altta) -->
+                <div class="flex flex-col gap-4">
+                    <h3 class="text-[10px] font-black text-gray-600 uppercase tracking-[0.2em] px-1">Sıradaki Öneri</h3>
+
+                    <div class="suggestion-card flex gap-4 group cursor-pointer">
+                        <div class="w-32 aspect-video bg-[#1a1a1a] rounded-lg overflow-hidden flex-shrink-0 relative">
+                            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <i class="fa-solid fa-play text-sm text-[#00ff41]"></i>
+                            </div>
+                        </div>
+                        <div class="flex flex-col justify-center min-w-0">
+                            <h4 class="text-xs font-bold leading-snug line-clamp-2 group-hover:text-[#00ff41] transition-colors">Figma'dan Kod'a: Eksiksiz LimeVideo İş Akışı</h4>
+                            <div class="mt-1">
+                                <p class="text-[9px] text-gray-500 font-black uppercase">Design Labs</p>
+                                <p class="text-[9px] text-gray-600 font-bold">120K İzlenme</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="suggestion-card flex gap-4 group cursor-pointer">
+                        <div class="w-32 aspect-video bg-[#1a1a1a] rounded-lg overflow-hidden flex-shrink-0 relative"></div>
+                        <div class="flex flex-col justify-center min-w-0">
+                            <h4 class="text-xs font-bold leading-snug line-clamp-2 group-hover:text-[#00ff41] transition-colors">UI Animasyonlarında İnce Detaylar</h4>
+                            <div class="mt-1">
+                                <p class="text-[9px] text-gray-500 font-black uppercase">Creative Hub</p>
+                                <p class="text-[9px] text-gray-600 font-bold">45K İzlenme</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+</body>
+</html>
