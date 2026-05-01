@@ -14,7 +14,6 @@ final class Portal
         "DEV_MODE" => false,
         "SITE_DOMAIN" => "127.0.0.1:8010",
         "SITE_HTTPS" => false,
-        "SITE_BASE_URL" => "http://127.0.0.1:8010",
         "DB_HOST" => "127.0.0.1",
         "DB_PORT" => 3306,
         "DB_NAME" => "limevideo",
@@ -138,6 +137,13 @@ final class Portal
             $this->config,
             parse_ini_file(__DIR__ . "/.ini", false, INI_SCANNER_TYPED) ?: [],
         );
+        $domain = preg_replace(
+            "#^https?://#",
+            "",
+            rtrim((string) $this->config["SITE_DOMAIN"], "/"),
+        );
+        $scheme = (bool) $this->config["SITE_HTTPS"] ? "https" : "http";
+        $this->config["SITE_BASE_URL"] = $scheme . "://" . $domain;
 
         $this->tempDir = rtrim(sys_get_temp_dir(), "/") . "/limevideo";
         if (!is_dir($this->tempDir)) {
@@ -2320,7 +2326,25 @@ final class Portal
         );
     }
 
-    public function recordAnalytics(array $input): void
+    private function analyticsInputList(array $input): array
+    {
+        if (isset($input["events"]) && is_array($input["events"])) {
+            return array_values(
+                array_filter($input["events"], static fn($event) => is_array($event)),
+            );
+        }
+
+        $isList = array_is_list($input);
+        if ($isList) {
+            return array_values(
+                array_filter($input, static fn($event) => is_array($event)),
+            );
+        }
+
+        return [$input];
+    }
+
+    private function insertAnalyticsEvent(array $input): void
     {
         $eventType = $this->validate($input["event_type"] ?? "", "text", [
             "max" => 50,
@@ -2329,7 +2353,7 @@ final class Portal
             "max" => 36,
         ]);
         if (!$eventType || !$sessionId) {
-            $this->jsonResponse(["error" => "Invalid analytics event"], 400);
+            throw new InvalidArgumentException("Invalid analytics event");
         }
 
         $metadata = $input["metadata"] ?? null;
@@ -2385,8 +2409,34 @@ final class Portal
             hash("sha256", $_SERVER["REMOTE_ADDR"] ?? "127.0.0.1"),
             mb_substr((string) ($_SERVER["HTTP_USER_AGENT"] ?? ""), 0, 255),
         ]);
+    }
 
-        $this->jsonResponse(["success" => true]);
+    public function recordAnalytics(array $input): void
+    {
+        $events = array_slice($this->analyticsInputList($input), 0, 25);
+        if (!$events) {
+            $this->jsonResponse(["error" => "Invalid analytics event"], 400);
+        }
+
+        try {
+            $this->db()->beginTransaction();
+            foreach ($events as $event) {
+                $this->insertAnalyticsEvent($event);
+            }
+            $this->db()->commit();
+        } catch (InvalidArgumentException $exception) {
+            if ($this->db()->inTransaction()) {
+                $this->db()->rollBack();
+            }
+            $this->jsonResponse(["error" => $exception->getMessage()], 400);
+        } catch (Throwable $exception) {
+            if ($this->db()->inTransaction()) {
+                $this->db()->rollBack();
+            }
+            throw $exception;
+        }
+
+        $this->jsonResponse(["success" => true, "count" => count($events)]);
     }
 
     public function login(string $user, string $pass): void

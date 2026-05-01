@@ -6,7 +6,6 @@ DEV_MODE=false
 ; Site Settings
 SITE_DOMAIN=127.0.0.1:8010
 SITE_HTTPS=false
-SITE_BASE_URL=http://127.0.0.1:8010
 
 ; Database
 DB_HOST=127.0.0.1

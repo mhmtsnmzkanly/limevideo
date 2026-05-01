@@ -28,6 +28,8 @@ const app = {
     commentSort: "new",
     profileView: "grid",
     analyticsSessionId: "",
+    analyticsQueue: [],
+    analyticsFlushTimer: null,
     currentRoute: "",
     currentPageStartedAt: 0,
     currentPageMaxScroll: 0,
@@ -49,6 +51,7 @@ const app = {
     reportSubmitting: false,
     templateCache: new Map(),
     routeToken: 0,
+    scrollRaf: null,
   },
 
   reportIcons: {
@@ -1421,6 +1424,7 @@ const app = {
   setupAnalytics() {
     this.state.analyticsSessionId = this.getAnalyticsSessionId();
     window.addEventListener("beforeunload", () => {
+      this.flushAnalyticsQueue(true);
       this.flushVideoAnalytics("unload");
       this.flushPageAnalytics("unload");
     });
@@ -1464,8 +1468,30 @@ const app = {
 
   trackAnalytics(eventType, extra = {}, immediate = false) {
     if (!this.state.analyticsSessionId) return;
-    const payload = JSON.stringify(this.analyticsBasePayload(eventType, extra));
-    const blob = new Blob([payload], { type: "application/json" });
+    const payload = this.analyticsBasePayload(eventType, extra);
+    if (immediate) {
+      this.flushAnalyticsQueue(true);
+      this.sendAnalyticsPayload(payload, true);
+      return;
+    }
+
+    this.state.analyticsQueue.push(payload);
+    if (this.state.analyticsQueue.length >= 10) {
+      this.flushAnalyticsQueue();
+      return;
+    }
+
+    if (!this.state.analyticsFlushTimer) {
+      this.state.analyticsFlushTimer = setTimeout(
+        () => this.flushAnalyticsQueue(),
+        1500,
+      );
+    }
+  },
+
+  sendAnalyticsPayload(payload, immediate = false) {
+    const body = JSON.stringify(payload);
+    const blob = new Blob([body], { type: "application/json" });
     if (
       immediate &&
       navigator.sendBeacon &&
@@ -1475,9 +1501,20 @@ const app = {
     fetch("/api/analytics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: payload,
+      body,
       keepalive: immediate,
     }).catch(() => {});
+  },
+
+  flushAnalyticsQueue(immediate = false) {
+    if (this.state.analyticsFlushTimer) {
+      clearTimeout(this.state.analyticsFlushTimer);
+      this.state.analyticsFlushTimer = null;
+    }
+    if (!this.state.analyticsQueue.length) return;
+
+    const events = this.state.analyticsQueue.splice(0, 25);
+    this.sendAnalyticsPayload({ events }, immediate);
   },
 
   trackPageView(page, route) {
@@ -2471,10 +2508,18 @@ const app = {
   },
 
   setupInfiniteScroll() {
-    window.addEventListener("scroll", () => this.updateScrollProgress(), {
+    window.addEventListener("scroll", () => this.scheduleScrollProgress(), {
       passive: true,
     });
-    window.addEventListener("resize", () => this.updateScrollProgress());
+    window.addEventListener("resize", () => this.scheduleScrollProgress());
+  },
+
+  scheduleScrollProgress() {
+    if (this.state.scrollRaf) return;
+    this.state.scrollRaf = requestAnimationFrame(() => {
+      this.state.scrollRaf = null;
+      this.updateScrollProgress();
+    });
   },
 
   updateScrollProgress() {
