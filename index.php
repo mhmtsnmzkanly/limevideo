@@ -8,7 +8,7 @@ declare(strict_types=1);
  * Veri güncellendiğinde ilgili önbellek otomatik temizlenir.
  */
 
-final class Portal
+final class LimeVideo
 {
     private array $config = [
         "DEV_MODE" => false,
@@ -390,6 +390,60 @@ final class Portal
             ->execute([$chatVideoId, $ownerId]);
     }
 
+    private function isAbsoluteMediaUrl(string $url): bool
+    {
+        return (bool) preg_match("#^https?://#i", $url);
+    }
+
+    private function isDirectVideoUrl(string $url): bool
+    {
+        $path = parse_url($url, PHP_URL_PATH) ?: $url;
+        return (bool) preg_match("#\.(mp4|webm|ogg|ogv|mov|m4v|m3u8)(\?.*)?$#i", $path);
+    }
+
+    private function publicMediaUrl(?string $path): string
+    {
+        $path = trim((string) $path);
+        if ($path === "") {
+            return "";
+        }
+        if ($this->isAbsoluteMediaUrl($path) || str_starts_with($path, "/")) {
+            return $path;
+        }
+        if (!str_contains($path, "/")) {
+            return "/uploads/videos/" . $path;
+        }
+        return "/" . ltrim($path, "/");
+    }
+
+    private function detectPlaybackMode(string $url): string
+    {
+        return $this->isDirectVideoUrl($url) ? "direct" : "external_page";
+    }
+
+    private function videoPlaybackUrl(array $video): string
+    {
+        if (($video["storage_type"] ?? "internal") === "external") {
+            return trim((string) ($video["playback_url"] ?? ""));
+        }
+        return $this->publicMediaUrl($video["file_path"] ?? "");
+    }
+
+    private function hydrateVideoPlayback(array $video): array
+    {
+        $sourceUrl = $this->videoPlaybackUrl($video);
+        $mode = (string) ($video["playback_mode"] ?? "");
+        if ($mode === "") {
+            $mode =
+                ($video["storage_type"] ?? "internal") === "external"
+                    ? $this->detectPlaybackMode($sourceUrl)
+                    : "direct";
+        }
+        $video["playback_source_url"] = $sourceUrl;
+        $video["player_mode"] = $mode === "external_page" ? "external_page" : "direct";
+        return $video;
+    }
+
     public function generateId(string $prefix, int $length = 8): string
     {
         $bodyLength = max(1, $length - strlen($prefix) - 1);
@@ -676,6 +730,124 @@ final class Portal
             $body,
             $data ? json_encode($data) : null,
         ]);
+    }
+
+    public function createBan(
+        string $userId,
+        string $type,
+        string $reason,
+        ?string $endsAt = null,
+        string $bannedByType = "system",
+        ?string $bannedByUserId = null,
+    ): string {
+        if (!in_array($type, ["general", "comment", "video", "chat"], true)) {
+            throw new InvalidArgumentException("Invalid ban type");
+        }
+        $bannedByType = $bannedByType === "user" ? "user" : "system";
+        if ($bannedByType === "system") {
+            $bannedByUserId = null;
+        }
+
+        $banId = $this->generateId("b", 12);
+        $stmt = $this->db()->prepare(
+            "INSERT INTO bans
+            (id, user_id, type, reason, ends_at, banned_by_type, banned_by_user_id)
+            VALUES (?,?,?,?,?,?,?)",
+        );
+        $stmt->execute([
+            $banId,
+            $userId,
+            $type,
+            $reason,
+            $endsAt,
+            $bannedByType,
+            $bannedByUserId,
+        ]);
+
+        $untilText = $endsAt ? "until {$endsAt}" : "indefinitely";
+        $this->createNotification(
+            $userId,
+            "BAN_APPLIED",
+            "Action Restriction Applied",
+            "You were restricted from {$type} actions {$untilText}. Reason: {$reason}",
+            null,
+            "ban",
+            $banId,
+            [
+                "ban_id" => $banId,
+                "type" => $type,
+                "reason" => $reason,
+                "ends_at" => $endsAt,
+                "banned_by_type" => $bannedByType,
+                "banned_by_user_id" => $bannedByUserId,
+            ],
+        );
+
+        return $banId;
+    }
+
+    private function activeBanFor(string $userId, string $action): ?array
+    {
+        $stmt = $this->db()->prepare(
+            "SELECT id, type, reason, ends_at, banned_by_type, banned_by_user_id, created_at
+            FROM bans
+            WHERE user_id = ?
+              AND revoked_at IS NULL
+              AND starts_at <= NOW()
+              AND (ends_at IS NULL OR ends_at > NOW())
+              AND type IN ('general', ?)
+            ORDER BY FIELD(type, 'general', ?) ASC, created_at DESC
+            LIMIT 1",
+        );
+        $stmt->execute([$userId, $action, $action]);
+        return $stmt->fetch() ?: null;
+    }
+
+    private function banActionLabel(string $action): string
+    {
+        return match ($action) {
+            "comment" => "commenting",
+            "video" => "video publishing",
+            "chat" => "global chat messaging",
+            default => $action,
+        };
+    }
+
+    private function banMessage(array $ban, string $action): string
+    {
+        $scope =
+            $ban["type"] === "general"
+                ? "all restricted actions"
+                : $this->banActionLabel($action);
+        $until = $ban["ends_at"]
+            ? " until " . $ban["ends_at"]
+            : " indefinitely";
+        return "You are banned from {$scope}{$until}. Reason: " .
+            ($ban["reason"] ?: "No reason provided.");
+    }
+
+    private function assertActionAllowed(string $action): void
+    {
+        if (empty($_SESSION["user"])) {
+            return;
+        }
+        $ban = $this->activeBanFor($_SESSION["user"]["id"], $action);
+        if (!$ban) {
+            return;
+        }
+        $this->jsonResponse(
+            [
+                "error" => $this->banMessage($ban, $action),
+                "ban" => [
+                    "id" => $ban["id"],
+                    "type" => $ban["type"],
+                    "action" => $action,
+                    "reason" => $ban["reason"],
+                    "ends_at" => $ban["ends_at"],
+                ],
+            ],
+            403,
+        );
     }
 
     private function enqueueCronJob(
@@ -1121,6 +1293,7 @@ final class Portal
         if (empty($_SESSION["user"])) {
             $this->jsonResponse(["error" => "Auth required"], 401);
         }
+        $this->assertActionAllowed("comment");
         if ($this->isChatVideoId($videoId)) {
             $this->jsonResponse(
                 ["error" => "Use the chat endpoint for global chat messages"],
@@ -1224,6 +1397,7 @@ final class Portal
         if (empty($_SESSION["user"])) {
             $this->jsonResponse(["error" => "Auth required"], 401);
         }
+        $this->assertActionAllowed("chat");
         $body = $this->validate($body ?? "", "text", [
             "max" => (int) $this->cfg("CHAT_MESSAGE_MAX_LENGTH", 500),
         ]);
@@ -1409,7 +1583,7 @@ final class Portal
             $stmt = $this->db()->prepare("SELECT
                 v.id, v.user_id, v.title, v.description, v.duration, v.is_sensitive, v.disable_comments, v.status, v.created_at, v.updated_at,
                 u.username, u.display_name, u.avatar_url,
-                v.storage_type, v.provider, v.provider_asset_id, v.file_path, v.playback_url,
+                v.storage_type, v.provider, v.provider_asset_id, v.file_path, v.playback_url, v.playback_mode,
                 COALESCE(NULLIF(v.thumbnail_url, ''), v.thumbnail_path) AS thumbnail_path,
                 v.thumbnail_url, v.processing_status
                 FROM videos v
@@ -1450,7 +1624,9 @@ final class Portal
             FROM videos v
             WHERE v.id = ? LIMIT 1");
         $dynamicStmt->execute([$viewerId, $viewerId, $viewerId, $id]);
-        $video = array_merge($video, $dynamicStmt->fetch() ?: []);
+        $video = $this->hydrateVideoPlayback(
+            array_merge($video, $dynamicStmt->fetch() ?: []),
+        );
 
         // Log VIEW action
         $this->logActivity(
@@ -1580,9 +1756,12 @@ final class Portal
         array $tags = [],
         int $disableComments = 0,
     ): string {
+        if (!empty($_SESSION["user"]) && $_SESSION["user"]["id"] === $userId) {
+            $this->assertActionAllowed("video");
+        }
         $vid = $this->generateId("v", 12);
         $stmt = $this->db()->prepare(
-            "INSERT INTO videos (id, user_id, title, description, disable_comments, storage_type, file_path, thumbnail_path, processing_status) VALUES (?,?,?,?,?, 'internal', ?, ?, 'ready')",
+            "INSERT INTO videos (id, user_id, title, description, disable_comments, storage_type, file_path, thumbnail_path, playback_mode, processing_status) VALUES (?,?,?,?,?, 'internal', ?, ?, 'direct', 'ready')",
         );
         $stmt->execute([
             $vid,
@@ -1627,6 +1806,7 @@ final class Portal
         if (empty($_SESSION["user"])) {
             $this->jsonResponse(["error" => "Auth required"], 401);
         }
+        $this->assertActionAllowed("video");
 
         $provider = $this->validate(
             $input["provider"] ?? "manual_external",
@@ -1643,6 +1823,11 @@ final class Portal
         $thumbnailUrl = $this->validate($input["thumbnail_url"] ?? "", "url", [
             "max" => 500,
         ]);
+        $playbackMode = $this->validate(
+            $input["playback_mode"] ?? "",
+            "enum",
+            ["allowed" => ["direct", "external_page"]],
+        );
         $duration = max(0, (int) ($input["duration"] ?? 0));
         $isSensitive = !empty($input["is_sensitive"]) ? 1 : 0;
         $disableComments = !empty($input["disable_comments"]) ? 1 : 0;
@@ -1674,6 +1859,7 @@ final class Portal
                 400,
             );
         }
+        $playbackMode = $playbackMode ?: $this->detectPlaybackMode($playbackUrl);
 
         $config = $this->getVideoProvider($provider);
         if (!$config || !$config["enabled"]) {
@@ -1692,8 +1878,8 @@ final class Portal
         $this->db()
             ->prepare(
                 "INSERT INTO videos
-            (id, user_id, title, description, duration, is_sensitive, disable_comments, status, storage_type, provider, provider_asset_id, playback_url, thumbnail_url, processing_status, metadata)
-            VALUES (?,?,?,?,?,?,?,?, 'external', ?, ?, ?, ?, 'ready', ?)",
+            (id, user_id, title, description, duration, is_sensitive, disable_comments, status, storage_type, provider, provider_asset_id, playback_url, thumbnail_url, playback_mode, processing_status, metadata)
+            VALUES (?,?,?,?,?,?,?,?, 'external', ?, ?, ?, ?, ?, 'ready', ?)",
             )
             ->execute([
                 $videoId,
@@ -1708,6 +1894,7 @@ final class Portal
                 $assetId,
                 $playbackUrl,
                 $thumbnailUrl,
+                $playbackMode,
                 json_encode(["source" => "manual_external_create"]),
             ]);
 
@@ -1881,12 +2068,13 @@ final class Portal
             : null;
 
         $stmt = $this->db()->prepare(
-            "UPDATE videos SET processing_status = ?, playback_url = COALESCE(NULLIF(?, ''), playback_url), thumbnail_url = COALESCE(NULLIF(?, ''), thumbnail_url), metadata = ? WHERE provider = ? AND provider_asset_id = ?",
+            "UPDATE videos SET processing_status = ?, playback_url = COALESCE(NULLIF(?, ''), playback_url), thumbnail_url = COALESCE(NULLIF(?, ''), thumbnail_url), playback_mode = CASE WHEN COALESCE(NULLIF(?, ''), playback_url) REGEXP '\\.(mp4|webm|ogg|ogv|mov|m4v|m3u8)(\\\\?.*)?$' THEN 'direct' ELSE 'external_page' END, metadata = ? WHERE provider = ? AND provider_asset_id = ?",
         );
         $stmt->execute([
             $status,
             $playbackUrl,
             $thumbnailUrl,
+            $playbackUrl,
             json_encode($input),
             $provider,
             $assetId,
@@ -2455,18 +2643,29 @@ final class Portal
         if (!$video) {
             $this->jsonResponse(["error" => "Video not found"], 404);
         }
+        $rawPath = trim((string) ($video["file_path"] ?? ""));
+        $sourceUrl = $this->videoPlaybackUrl($video);
         if (
             ($video["storage_type"] ?? "internal") === "external" &&
-            !empty($video["playback_url"])
+            $sourceUrl
         ) {
-            header("Location: " . $video["playback_url"], true, 302);
+            header("Location: " . $sourceUrl, true, 302);
+            exit();
+        }
+        if (
+            $sourceUrl &&
+            ($this->isAbsoluteMediaUrl($rawPath) ||
+                str_starts_with($rawPath, "/") ||
+                str_contains($rawPath, "/"))
+        ) {
+            header("Location: " . $sourceUrl, true, 302);
             exit();
         }
 
         $path =
             rtrim((string) $this->cfg("STORAGE_VIDEO_PATH"), "/") .
             "/" .
-            $video["file_path"];
+            ltrim($rawPath, "/");
         if (!file_exists($path)) {
             $this->jsonResponse(["error" => "File not found"], 404);
         }
@@ -2743,7 +2942,7 @@ final class Portal
 }
 
 // 3. API ROUTER
-$App = new Portal();
+$App = new LimeVideo();
 ini_set("session.use_strict_mode", "1");
 session_set_cookie_params([
     "lifetime" => 0,

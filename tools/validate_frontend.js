@@ -120,8 +120,10 @@ function sampleContext() {
         posterUrl: '',
         displayName: '<Demo>',
         url: 'https://example.test/x.png',
+        sourceUrl: 'https://example.test/video.mp4',
         className: 'video-thumb-img',
-        commentFormHtml: ''
+        commentFormHtml: '',
+        playerHtml: ''
     };
 }
 

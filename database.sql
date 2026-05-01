@@ -31,7 +31,32 @@ CREATE TABLE `users` (
   CONSTRAINT `fk_users_banned_by` FOREIGN KEY (`banned_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2. VİDEOLAR (Benzersiz ID: char(12))
+-- 2. ACTION BANS
+DROP TABLE IF EXISTS `bans`;
+CREATE TABLE `bans` (
+  `id` char(12) NOT NULL,
+  `user_id` char(8) NOT NULL,
+  `type` enum('general','comment','video','chat') NOT NULL,
+  `reason` text NOT NULL,
+  `starts_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `ends_at` datetime DEFAULT NULL,
+  `banned_by_type` enum('system','user') NOT NULL DEFAULT 'system',
+  `banned_by_user_id` char(8) DEFAULT NULL,
+  `revoked_at` datetime DEFAULT NULL,
+  `revoked_by_user_id` char(8) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_bans_user_active` (`user_id`,`type`,`revoked_at`,`starts_at`,`ends_at`),
+  KEY `idx_bans_ends_at` (`ends_at`),
+  KEY `idx_bans_banned_by` (`banned_by_user_id`),
+  KEY `idx_bans_revoked_by` (`revoked_by_user_id`),
+  CONSTRAINT `fk_bans_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_bans_banned_by_user` FOREIGN KEY (`banned_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_bans_revoked_by_user` FOREIGN KEY (`revoked_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 3. VİDEOLAR (Benzersiz ID: char(12))
 DROP TABLE IF EXISTS `video_data`;
 DROP TABLE IF EXISTS `videos`;
 CREATE TABLE `videos` (
@@ -51,6 +76,7 @@ CREATE TABLE `videos` (
   `playback_url` varchar(500) DEFAULT NULL,
   `thumbnail_path` varchar(255) DEFAULT NULL,
   `thumbnail_url` varchar(500) DEFAULT NULL,
+  `playback_mode` enum('direct','external_page') NOT NULL DEFAULT 'direct',
   `processing_status` enum('pending','processing','ready','failed') NOT NULL DEFAULT 'ready',
   `metadata` json DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -63,7 +89,7 @@ CREATE TABLE `videos` (
   CONSTRAINT `fk_video_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 3. LİSTELER (Benzersiz ID: char(8))
+-- 4. LİSTELER (Benzersiz ID: char(8))
 DROP TABLE IF EXISTS `lists`;
 CREATE TABLE `lists` (
   `id` char(8) NOT NULL,
@@ -77,7 +103,7 @@ CREATE TABLE `lists` (
   CONSTRAINT `fk_list_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 4. YORUMLAR (Benzersiz ID: char(10))
+-- 5. YORUMLAR (Benzersiz ID: char(10))
 DROP TABLE IF EXISTS `comments`;
 CREATE TABLE `comments` (
   `id` char(10) NOT NULL,
@@ -95,7 +121,7 @@ CREATE TABLE `comments` (
   CONSTRAINT `fk_comment_parent` FOREIGN KEY (`parent_id`) REFERENCES `comments` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 5. OYLAR
+-- 6. OYLAR
 DROP TABLE IF EXISTS `votes`;
 CREATE TABLE `votes` (
   `voter_user_id` char(8) NOT NULL,
@@ -109,7 +135,7 @@ CREATE TABLE `votes` (
   CONSTRAINT `fk_vote_voter` FOREIGN KEY (`voter_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 6. KAYDEDİLENLER (Savings)
+-- 7. KAYDEDİLENLER (Savings)
 DROP TABLE IF EXISTS `savings`;
 CREATE TABLE `savings` (
   `user_id` char(8) NOT NULL,
@@ -121,7 +147,7 @@ CREATE TABLE `savings` (
   CONSTRAINT `fk_save_video` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 7. LİSTE ÖĞELERİ
+-- 8. LİSTE ÖĞELERİ
 DROP TABLE IF EXISTS `list_items`;
 CREATE TABLE `list_items` (
   `list_id` char(8) NOT NULL,
@@ -133,7 +159,7 @@ CREATE TABLE `list_items` (
   CONSTRAINT `fk_li_video` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 8. TAGS
+-- 9. TAGS
 DROP TABLE IF EXISTS `tags`;
 CREATE TABLE `tags` (
   `name` varchar(50) NOT NULL,
@@ -142,7 +168,7 @@ CREATE TABLE `tags` (
   UNIQUE KEY `slug` (`slug`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 9. VIDEO TAGS (Map)
+-- 10. VIDEO TAGS (Map)
 DROP TABLE IF EXISTS `video_tags`;
 CREATE TABLE `video_tags` (
   `video_id` char(12) NOT NULL,
@@ -153,7 +179,7 @@ CREATE TABLE `video_tags` (
   CONSTRAINT `fk_vt_tag` FOREIGN KEY (`tag_slug`) REFERENCES `tags` (`slug`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 10. BİLDİRİMLER
+-- 11. BİLDİRİMLER
 DROP TABLE IF EXISTS `notifications`;
 CREATE TABLE `notifications` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -174,7 +200,7 @@ CREATE TABLE `notifications` (
   CONSTRAINT `fk_notifications_actor` FOREIGN KEY (`actor_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 11. TAKİPLER
+-- 12. TAKİPLER
 DROP TABLE IF EXISTS `follows`;
 CREATE TABLE `follows` (
   `follower_id` char(8) NOT NULL,
@@ -186,7 +212,7 @@ CREATE TABLE `follows` (
   CONSTRAINT `fk_follows_followed` FOREIGN KEY (`followed_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 12. UNIFIED ACTIVITY LOGGING SYSTEM
+-- 13. UNIFIED ACTIVITY LOGGING SYSTEM
 DROP TABLE IF EXISTS `activity_logs`;
 CREATE TABLE `activity_logs` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -207,7 +233,7 @@ CREATE TABLE `activity_logs` (
   KEY `idx_log_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 13. ANALYTICS EVENTS
+-- 14. ANALYTICS EVENTS
 DROP TABLE IF EXISTS `analytics_events`;
 CREATE TABLE `analytics_events` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -241,7 +267,7 @@ CREATE TABLE `analytics_events` (
   CONSTRAINT `fk_analytics_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 14. ANALYTICS ROLLUPS
+-- 15. ANALYTICS ROLLUPS
 DROP TABLE IF EXISTS `analytics_rollups`;
 CREATE TABLE `analytics_rollups` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -269,7 +295,7 @@ CREATE TABLE `analytics_rollups` (
   KEY `idx_rollups_search_bucket` (`search_query`,`category`,`bucket_unit`,`bucket_start`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 15. USER SETTINGS
+-- 16. USER SETTINGS
 DROP TABLE IF EXISTS `user_settings`;
 CREATE TABLE `user_settings` (
   `user_id` char(8) NOT NULL,
@@ -283,7 +309,7 @@ CREATE TABLE `user_settings` (
   CONSTRAINT `fk_settings_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 16. REPORTS / MODERATION QUEUE
+-- 17. REPORTS / MODERATION QUEUE
 DROP TABLE IF EXISTS `reports`;
 CREATE TABLE `reports` (
   `id` char(12) NOT NULL,
@@ -306,7 +332,7 @@ CREATE TABLE `reports` (
   CONSTRAINT `fk_reports_reviewer` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 17. CRON JOBS / BACKGROUND QUEUE
+-- 18. CRON JOBS / BACKGROUND QUEUE
 DROP TABLE IF EXISTS `cron_jobs`;
 CREATE TABLE `cron_jobs` (
   `id` char(14) NOT NULL,
@@ -338,6 +364,6 @@ CREATE TABLE `cron_jobs` (
   KEY `idx_cron_jobs_target` (`target_type`,`target_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 18. ADMİN AYARLARI (Opsiyonel, eğer gerekirse)
+-- 19. ADMİN AYARLARI (Opsiyonel, eğer gerekirse)
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -301,7 +301,7 @@ const app = {
         this.setText(counter, "0 / 500");
         await this.fetchChatMessages(false);
       } catch (e) {
-        this.showStatus("Message could not be sent.", "error");
+        this.showStatus(e.message || "Message could not be sent.", "error");
       }
     },
     "cancel-chat-confirm"() {
@@ -476,7 +476,7 @@ const app = {
           this.showStatus(data.error || "Comment failed.", "error");
         }
       } catch (e) {
-        this.showStatus("Comment failed.", "error");
+        this.showStatus(e.message || "Comment failed.", "error");
       }
     },
     "begin-reply"(target) {
@@ -1916,6 +1916,23 @@ const app = {
     return this.safeUrl(video.thumbnail_url || video.thumbnail_path || "");
   },
 
+  videoSourceUrl(video = {}) {
+    return this.safeUrl(video.playback_source_url || video.playback_url || "");
+  },
+
+  renderWatchPlayer(video = {}) {
+    const sourceUrl = this.videoSourceUrl(video);
+    if (!sourceUrl || video.player_mode === "external_page") {
+      return this.renderTemplate("partial-watch-external-player", {
+        sourceUrl: sourceUrl || "#",
+      });
+    }
+    return this.renderTemplate("partial-watch-direct-player", {
+      sourceUrl,
+      posterUrl: this.thumbnailUrl(video),
+    });
+  },
+
   renderThumbnail(video = {}, className = "") {
     const url = this.thumbnailUrl(video);
     return url
@@ -2464,6 +2481,7 @@ const app = {
         v,
         avatarHtml,
         posterUrl: app.thumbnailUrl(v),
+        playerHtml: app.renderWatchPlayer(v),
         commentFormHtml:
           Number(v.disable_comments) === 1
             ? app.renderTemplate("partial-comments-disabled")

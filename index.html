@@ -875,7 +875,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 <div class="lg:col-span-8 flex flex-col gap-6">
                     <div class="watch-player-shell group">
-                        <video id="main-player" controls class="w-full h-full" poster="${posterUrl}"><source src="/stream/${v.id}" type="video/mp4"></video>
+                        ${playerHtml}
                     </div>
                     <div class="lime-card watch-detail-card">
                         <h1 class="text-2xl font-bold mb-5 leading-tight tracking-tight">${v.title || 'Loading...'}</h1>
@@ -935,6 +935,23 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Template Engine: direct internal/external video source player -->
+    <template id="tpl-partial-watch-direct-player">
+        <video id="main-player" controls class="w-full h-full" poster="${posterUrl}"><source src="${sourceUrl}"></video>
+    </template>
+
+    <!-- Template Engine: external provider page fallback -->
+    <template id="tpl-partial-watch-external-player">
+        <div class="w-full h-full min-h-[360px] flex items-center justify-center bg-black/80">
+            <div class="lime-card max-w-md text-center p-8">
+                <p class="text-[10px] font-black uppercase tracking-[0.25em] text-[#00ff41]">External Player</p>
+                <h3 class="text-2xl font-black mt-3">This video opens on its provider page.</h3>
+                <p class="text-sm text-gray-400 mt-3">The source is not a direct video file, so LimeVideo will open it in a new tab.</p>
+                <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" class="lime-btn-primary inline-flex mt-6 text-xs uppercase">Open Player</a>
             </div>
         </div>
     </template>
