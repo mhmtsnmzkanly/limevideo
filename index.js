@@ -1,5 +1,5 @@
 const AppConfig = {
-  dev_mode: false, // Üretimde false, geliştirmede true yapılmalı
+  dev_mode: false, // Keep false in production; enable only during development.
 };
 
 const app = {

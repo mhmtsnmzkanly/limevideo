@@ -1133,7 +1133,7 @@ body {
     transform: translateX(0);
 }
 
-/* Yeni Vote Yapısı (v13) */
+/* Vote layout (v13) */
 .vote-pill-v2 {
     background: rgba(255,255,255,0.03);
     border: 1px solid var(--lime-light-grey);
@@ -1242,14 +1242,14 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* 18+ Yaş Doğrulama Katmanı */
+/* 18+ age verification layer */
 #age-verification-overlay {
     position: fixed;
     inset: 0;
     z-index: 2000;
     background: rgba(10, 10, 10, 0.6);
     backdrop-filter: blur(40px);
-    display: none; /* Dinamik olarak gösterilecek */
+    display: none; /* Shown dynamically */
     align-items: center;
     justify-content: center;
     padding: 20px;

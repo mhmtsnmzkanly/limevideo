@@ -1,11 +1,11 @@
 -- --------------------------------------------------------
--- LimeVideo Platform - Nihai Veritabanı Şeması
+-- LimeVideo Platform - Final Database Schema
 -- --------------------------------------------------------
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- 1. KULLANICILAR (Benzersiz ID: char(8))
+-- 1. USERS (unique id: char(8))
 DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
   `id` char(8) NOT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE `bans` (
   CONSTRAINT `fk_bans_revoked_by_user` FOREIGN KEY (`revoked_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 3. VİDEOLAR (Benzersiz ID: char(12))
+-- 3. VIDEOS (unique id: char(12))
 DROP TABLE IF EXISTS `video_data`;
 DROP TABLE IF EXISTS `videos`;
 CREATE TABLE `videos` (
@@ -89,7 +89,7 @@ CREATE TABLE `videos` (
   CONSTRAINT `fk_video_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 4. LİSTELER (Benzersiz ID: char(8))
+-- 4. LISTS (unique id: char(8))
 DROP TABLE IF EXISTS `lists`;
 CREATE TABLE `lists` (
   `id` char(8) NOT NULL,
@@ -103,7 +103,7 @@ CREATE TABLE `lists` (
   CONSTRAINT `fk_list_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 5. YORUMLAR (Benzersiz ID: char(10))
+-- 5. COMMENTS (unique id: char(10))
 DROP TABLE IF EXISTS `comments`;
 CREATE TABLE `comments` (
   `id` char(10) NOT NULL,
@@ -121,7 +121,7 @@ CREATE TABLE `comments` (
   CONSTRAINT `fk_comment_parent` FOREIGN KEY (`parent_id`) REFERENCES `comments` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 6. OYLAR
+-- 6. VOTES
 DROP TABLE IF EXISTS `votes`;
 CREATE TABLE `votes` (
   `voter_user_id` char(8) NOT NULL,
@@ -135,7 +135,7 @@ CREATE TABLE `votes` (
   CONSTRAINT `fk_vote_voter` FOREIGN KEY (`voter_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 7. KAYDEDİLENLER (Savings)
+-- 7. SAVED VIDEOS
 DROP TABLE IF EXISTS `savings`;
 CREATE TABLE `savings` (
   `user_id` char(8) NOT NULL,
@@ -147,7 +147,7 @@ CREATE TABLE `savings` (
   CONSTRAINT `fk_save_video` FOREIGN KEY (`video_id`) REFERENCES `videos` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 8. LİSTE ÖĞELERİ
+-- 8. LIST ITEMS
 DROP TABLE IF EXISTS `list_items`;
 CREATE TABLE `list_items` (
   `list_id` char(8) NOT NULL,
@@ -179,7 +179,7 @@ CREATE TABLE `video_tags` (
   CONSTRAINT `fk_vt_tag` FOREIGN KEY (`tag_slug`) REFERENCES `tags` (`slug`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 11. BİLDİRİMLER
+-- 11. NOTIFICATIONS
 DROP TABLE IF EXISTS `notifications`;
 CREATE TABLE `notifications` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -200,7 +200,7 @@ CREATE TABLE `notifications` (
   CONSTRAINT `fk_notifications_actor` FOREIGN KEY (`actor_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 12. TAKİPLER
+-- 12. FOLLOWS
 DROP TABLE IF EXISTS `follows`;
 CREATE TABLE `follows` (
   `follower_id` char(8) NOT NULL,
@@ -364,6 +364,6 @@ CREATE TABLE `cron_jobs` (
   KEY `idx_cron_jobs_target` (`target_type`,`target_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 19. ADMİN AYARLARI (Opsiyonel, eğer gerekirse)
+-- 19. ADMIN SETTINGS (optional, if needed later)
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -4,9 +4,9 @@ declare(strict_types=1);
 /**
  * LimeVideo Monolith
  * ------------------
- * Tek dosyalı PHP API ve SPA shell giriş noktasıdır.
- * API, kimlik doğrulama, cache, moderation, analytics, cron queue ve video
- * oynatma meta verisini aynı monolit içinde yönetir.
+ * Single-file PHP API and SPA shell entry point.
+ * API routing, authentication, cache, moderation, analytics, cron queue and
+ * video playback metadata are intentionally kept in one monolith.
  */
 
 final class LimeVideo
@@ -38,31 +38,6 @@ final class LimeVideo
         "ANALYTICS_RAW_RETENTION_DAYS" => 90,
         "ANALYTICS_AUTO_ENQUEUE_MIN_INTERVAL" => 300,
         "SECURITY_CSRF_EXEMPT" => "login,register,provider_webhook,analytics",
-        "VIDEO_PROVIDER_KEYS" =>
-            "manual_external,mux,bunny_stream,cloudflare_stream",
-        "VIDEO_PROVIDER_MANUAL_EXTERNAL_DISPLAY_NAME" =>
-            "Manual External Provider",
-        "VIDEO_PROVIDER_MANUAL_EXTERNAL_API_BASE_URL" => "",
-        "VIDEO_PROVIDER_MANUAL_EXTERNAL_WEBHOOK_SECRET" => "change-me",
-        "VIDEO_PROVIDER_MANUAL_EXTERNAL_ENABLED" => true,
-        "VIDEO_PROVIDER_MANUAL_EXTERNAL_SETTING_MODE" => "manual",
-        "VIDEO_PROVIDER_MUX_DISPLAY_NAME" => "Mux",
-        "VIDEO_PROVIDER_MUX_API_BASE_URL" => "https://api.mux.com",
-        "VIDEO_PROVIDER_MUX_WEBHOOK_SECRET" => "",
-        "VIDEO_PROVIDER_MUX_ENABLED" => false,
-        "VIDEO_PROVIDER_MUX_SETTING_ADAPTER" => "planned",
-        "VIDEO_PROVIDER_BUNNY_STREAM_DISPLAY_NAME" => "Bunny Stream",
-        "VIDEO_PROVIDER_BUNNY_STREAM_API_BASE_URL" =>
-            "https://video.bunnycdn.com",
-        "VIDEO_PROVIDER_BUNNY_STREAM_WEBHOOK_SECRET" => "",
-        "VIDEO_PROVIDER_BUNNY_STREAM_ENABLED" => false,
-        "VIDEO_PROVIDER_BUNNY_STREAM_SETTING_ADAPTER" => "planned",
-        "VIDEO_PROVIDER_CLOUDFLARE_STREAM_DISPLAY_NAME" => "Cloudflare Stream",
-        "VIDEO_PROVIDER_CLOUDFLARE_STREAM_API_BASE_URL" =>
-            "https://api.cloudflare.com/client/v4",
-        "VIDEO_PROVIDER_CLOUDFLARE_STREAM_WEBHOOK_SECRET" => "",
-        "VIDEO_PROVIDER_CLOUDFLARE_STREAM_ENABLED" => false,
-        "VIDEO_PROVIDER_CLOUDFLARE_STREAM_SETTING_ADAPTER" => "planned",
         "AD_SERVICE_KEYS" => "internal,vast,gam,custom_js",
         "AD_SERVICE_INTERNAL_DISPLAY_NAME" => "Internal Ad Placements",
         "AD_SERVICE_INTERNAL_SCRIPT_URL" => "",
@@ -161,9 +136,9 @@ final class LimeVideo
     }
 
     /**
-     * Düz config anahtarını okur.
-     * Input: $key config adı, $default bulunamazsa dönecek değer.
-     * Output: config değeri veya default değer.
+     * Reads a flat configuration key.
+     * Input: $key config name, $default fallback when missing.
+     * Output: configured value or fallback value.
      */
     public function cfg(string $key, mixed $default = null): mixed
     {
@@ -237,9 +212,9 @@ final class LimeVideo
     }
 
     /**
-     * Cache anahtarını dosya adına güvenli hale getirir.
+     * Converts a cache key into a safe file-name fragment.
      * Input: raw cache key.
-     * Output: dosya adı içinde kullanılabilir kısa key.
+     * Output: short key that can be used inside a file name.
      */
     private function cacheSafeKey(string $key): string
     {
@@ -576,7 +551,7 @@ final class LimeVideo
     public function fetch(string $name): mixed
     {
         return match ($name) {
-            // UI kategori/etiket seçicileri için aktif tag listesi.
+            // Active tag list used by UI category/tag selectors.
             "tags" => $this->remember("portal_tags_v2", 3600, function () {
                 return $this->db()
                     ->query("SELECT name, slug FROM tags ORDER BY name ASC")
@@ -585,7 +560,7 @@ final class LimeVideo
             }),
 
             default => throw new RuntimeException(
-                "Bilinmeyen fetch: " . $name,
+                "Unknown fetch: " . $name,
             ),
         };
     }
@@ -593,9 +568,9 @@ final class LimeVideo
     // --- Read-side API helpers ---
 
     /**
-     * Kullanıcı profil temel verisini cache destekli getirir.
-     * Input: $id kullanıcı id.
-     * Output: kullanıcı satırı veya null.
+     * Loads basic user profile data with cache support.
+     * Input: $id user id.
+     * Output: user row or null.
      */
     public function getUser(string $id): ?array
     {
@@ -624,9 +599,9 @@ final class LimeVideo
     }
 
     /**
-     * Ana sayfa/global sayaçları cache destekli hesaplar.
-     * Input: yok.
-     * Output: kullanıcı, video ve izlenme sayıları.
+     * Calculates homepage/global counters with cache support.
+     * Input: none.
+     * Output: user, video and view counters.
      */
     public function getStats(): array
     {
@@ -741,7 +716,7 @@ final class LimeVideo
             return;
         }
 
-        // Aynı aktörden gelen aynı tip bildirimleri kısa vadede tekilleştir.
+        // Deduplicate short-term notifications from the same actor and type.
         if ($actorId) {
             $stmt = $this->db()->prepare(
                 "SELECT 1 FROM notifications WHERE user_id = ? AND actor_user_id = ? AND type = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 DAY) LIMIT 1",
@@ -1333,7 +1308,7 @@ final class LimeVideo
         );
         $stmt->execute([$uid, $targetType, $targetId, $type]);
 
-        // Oy değişimi yorum/profil türevlerini etkiler.
+        // Vote changes affect comment and profile-derived caches.
         if ($targetType === "comment" && $commentVideoId) {
             $this->cacheDeletePrefix("comments_" . $commentVideoId . "_");
         }
@@ -1383,7 +1358,7 @@ final class LimeVideo
         );
         $stmt->execute([$cid, $uid, $videoId, $parentId, strip_tags($body)]);
 
-        // Yorum ve yanıt bildirimlerini ilgili kullanıcıya ilet.
+        // Send comment and reply notifications to the affected user.
         if ($parentId) {
             $pStmt = $this->db()->prepare(
                 "SELECT user_id FROM comments WHERE id = ? LIMIT 1",
@@ -1421,7 +1396,7 @@ final class LimeVideo
             }
         }
 
-        // Yeni yorum sayısı ve profil yorum listeleri cache dışına alınır.
+        // New comments invalidate comment counts and profile comment lists.
         $this->cacheDeletePrefix("comments_" . $videoId . "_");
         $this->cacheDeletePrefix("profile_");
         $this->jsonResponse(["success" => true, "id" => $cid]);
@@ -1527,9 +1502,9 @@ final class LimeVideo
     }
 
     /**
-     * Video yorumlarını zaman bazlı sayfalama ve kısa TTL cache ile getirir.
-     * Input: video id, önceki sayfa tarihi, sıralama tipi.
-     * Output: JSON yorum listesi.
+     * Loads video comments with time-based pagination and short TTL cache.
+     * Input: video id, previous page timestamp, sort type.
+     * Output: JSON comment list.
      */
     public function getComments(
         string $videoId,
@@ -1688,7 +1663,7 @@ final class LimeVideo
             array_merge($video, $dynamicStmt->fetch() ?: []),
         );
 
-        // İzleme aksiyonunu activity log içinde takip et.
+        // Track the watch action in the activity log.
         $this->logActivity(
             "USER_ACTION",
             "VIEW_VIDEO",
@@ -1868,11 +1843,7 @@ final class LimeVideo
         }
         $this->assertActionAllowed("video");
 
-        $provider = $this->validate(
-            $input["provider"] ?? "manual_external",
-            "text",
-            ["max" => 50],
-        );
+        $provider = "manual_external";
         $title = $this->validate($input["title"] ?? "", "text", ["max" => 200]);
         $description = $this->validate($input["description"] ?? "", "text", [
             "max" => 1000,
@@ -1910,24 +1881,16 @@ final class LimeVideo
                 ),
             )
             : [];
-        if (!$provider || !$title || !$playbackUrl || $thumbnailUrl === null) {
+        if (!$title || !$playbackUrl || $thumbnailUrl === null) {
             $this->jsonResponse(
                 [
                     "error" =>
-                        "Provider, title and valid playback_url are required",
+                        "Title and valid playback_url are required",
                 ],
                 400,
             );
         }
         $playbackMode = $playbackMode ?: $this->detectPlaybackMode($playbackUrl);
-
-        $config = $this->getVideoProvider($provider);
-        if (!$config || !$config["enabled"]) {
-            $this->jsonResponse(
-                ["error" => "Video provider is not enabled"],
-                400,
-            );
-        }
 
         $videoId = $this->generateId("v", 12);
         $assetId = $this->validate(
@@ -1995,111 +1958,11 @@ final class LimeVideo
         ]);
     }
 
-    private function getVideoProvider(string $provider): ?array
-    {
-        $keys = array_values(
-            array_filter(
-                array_map(
-                    "trim",
-                    explode(
-                        ",",
-                        (string) $this->cfg("VIDEO_PROVIDER_KEYS", ""),
-                    ),
-                ),
-            ),
-        );
-        if (!in_array($provider, $keys, true)) {
-            return null;
-        }
-        $part = strtoupper(
-            (string) preg_replace("/[^a-z0-9]+/i", "_", $provider),
-        );
-        $settings = [];
-        foreach ($this->config as $key => $value) {
-            $prefix = "VIDEO_PROVIDER_{$part}_SETTING_";
-            if (str_starts_with($key, $prefix)) {
-                $settings[strtolower(substr($key, strlen($prefix)))] =
-                    $value === "" ? null : $value;
-            }
-        }
-        return [
-            "provider" => $provider,
-            "display_name" => (string) $this->cfg(
-                "VIDEO_PROVIDER_{$part}_DISPLAY_NAME",
-                $provider,
-            ),
-            "api_base_url" =>
-                ($value = $this->cfg(
-                    "VIDEO_PROVIDER_{$part}_API_BASE_URL",
-                    "",
-                )) === ""
-                    ? null
-                    : $value,
-            "webhook_secret" =>
-                ($value = $this->cfg(
-                    "VIDEO_PROVIDER_{$part}_WEBHOOK_SECRET",
-                    "",
-                )) === ""
-                    ? null
-                    : $value,
-            "enabled" => (bool) $this->cfg("VIDEO_PROVIDER_{$part}_ENABLED"),
-            "settings" => $settings,
-        ];
-    }
-
-    public function listVideoProviders(): void
-    {
-        $providers = $this->remember("video_providers_v1", 300, function () {
-            $providers = [];
-            $keys = array_values(
-                array_filter(
-                    array_map(
-                        "trim",
-                        explode(
-                            ",",
-                            (string) $this->cfg("VIDEO_PROVIDER_KEYS", ""),
-                        ),
-                    ),
-                ),
-            );
-            foreach ($keys as $provider) {
-                $config = $this->getVideoProvider($provider);
-                if (!$config) {
-                    continue;
-                }
-                $providers[] = [
-                    "provider" => $provider,
-                    "display_name" => $config["display_name"],
-                    "api_base_url" => $config["api_base_url"],
-                    "enabled" => (int) $config["enabled"],
-                    "settings" => $config["settings"],
-                ];
-            }
-            usort(
-                $providers,
-                fn($a, $b) => [$b["enabled"], $a["display_name"]] <=> [
-                    $a["enabled"],
-                    $b["display_name"],
-                ],
-            );
-            return $providers;
-        });
-        $this->jsonResponse($providers);
-    }
-
     public function providerWebhook(string $provider, array $input): void
     {
-        $config = $this->getVideoProvider($provider);
-        if (!$config || !$config["enabled"]) {
-            $this->jsonResponse(["error" => "Provider disabled"], 404);
-        }
-
-        $secret = $_SERVER["HTTP_X_LIMEVIDEO_WEBHOOK_SECRET"] ?? "";
-        if (
-            !empty($config["webhook_secret"]) &&
-            !hash_equals((string) $config["webhook_secret"], $secret)
-        ) {
-            $this->jsonResponse(["error" => "Invalid webhook secret"], 401);
+        $provider = $this->validate($provider, "text", ["max" => 50]);
+        if (!$provider) {
+            $this->jsonResponse(["error" => "Invalid provider"], 400);
         }
 
         $assetId = $this->validate($input["provider_asset_id"] ?? "", "text", [
@@ -2186,7 +2049,7 @@ final class LimeVideo
                 )
                 ->execute([$followerId, $targetUserId]);
 
-            // Takip edilen kullanıcıya takip bildirimi gönder.
+            // Notify the followed user.
             $this->createNotification(
                 $targetUserId,
                 "FOLLOW",
@@ -2889,7 +2752,7 @@ final class LimeVideo
                 "csrf" => $_SESSION["csrf_token"],
             ]);
         } else {
-            // Başarısız giriş denemesini audit için kaydet.
+            // Store failed login attempts for audit.
             $this->logActivity(
                 "LOGIN_ATTEMPT",
                 "LOGIN_FAILED",
@@ -3091,7 +2954,6 @@ if (strpos($uri, "/api/") === 0) {
             "report" => $App->createReport($input),
             "ads" => $App->getAds(),
             "ad_services" => $App->listAdServices(),
-            "video_providers" => $App->listVideoProviders(),
             "external_video" => $App->createExternalVideo($input),
             "provider_webhook" => $App->providerWebhook(
                 $App->validate($_GET["provider"] ?? "", "text", ["max" => 50]),
@@ -3117,6 +2979,6 @@ if (strpos($uri, "/api/") === 0) {
 }
 
 // --- SPA shell fallback ---
-// API dışındaki tüm path'ler index.html'e düşer; route kararını frontend verir.
+// Every non-API path falls back to index.html; frontend owns route resolution.
 include "index.html";
 exit();
