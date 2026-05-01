@@ -28,6 +28,14 @@ final class Portal
         "CHAT_MESSAGE_LIMIT" => 50,
         "CHAT_MESSAGE_MAX_LENGTH" => 500,
         "CRON_TOKEN" => "",
+        "CRON_AUTO_RUN_ENABLED" => false,
+        "CRON_AUTO_RUN_LIMIT" => 2,
+        "CRON_AUTO_RUN_MIN_INTERVAL" => 60,
+        "ANALYTICS_ROLLUP_ENABLED" => true,
+        "ANALYTICS_ROLLUP_LOOKBACK_HOURS" => 48,
+        "ANALYTICS_ROLLUP_LOOKBACK_DAYS" => 14,
+        "ANALYTICS_RAW_RETENTION_DAYS" => 90,
+        "ANALYTICS_AUTO_ENQUEUE_MIN_INTERVAL" => 300,
         "SECURITY_CSRF_EXEMPT" => "login,register,provider_webhook,analytics",
         "VIDEO_PROVIDER_KEYS" =>
             "manual_external,mux,bunny_stream,cloudflare_stream",
@@ -706,13 +714,97 @@ final class Portal
         return $jobId;
     }
 
-    public function runCronJobs(int $limit = 10, ?string $token = null): void
+    private function cronMarkerFile(string $name): string
     {
-        $expectedToken = (string) $this->cfg("CRON_TOKEN", "");
-        if ($expectedToken !== "" && !hash_equals($expectedToken, (string) $token)) {
-            $this->jsonResponse(["error" => "Invalid cron token"], 403);
+        return $this->tempDir .
+            "/cron_" .
+            preg_replace("/[^a-zA-Z0-9_]+/", "_", $name) .
+            ".tmp";
+    }
+
+    private function markerRecentlyTouched(string $name, int $seconds): bool
+    {
+        $file = $this->cronMarkerFile($name);
+        return file_exists($file) && time() - filemtime($file) < $seconds;
+    }
+
+    private function touchCronMarker(string $name): void
+    {
+        file_put_contents($this->cronMarkerFile($name), (string) time(), LOCK_EX);
+    }
+
+    private function maybeScheduleAnalyticsJobs(): void
+    {
+        if (!(bool) $this->cfg("ANALYTICS_ROLLUP_ENABLED", true)) {
+            return;
         }
 
+        $interval = max(
+            60,
+            (int) $this->cfg("ANALYTICS_AUTO_ENQUEUE_MIN_INTERVAL", 300),
+        );
+        if ($this->markerRecentlyTouched("analytics_enqueue", $interval)) {
+            return;
+        }
+        $this->touchCronMarker("analytics_enqueue");
+
+        $hourTarget = gmdate("YmdH", strtotime("-1 hour"));
+        $dayTarget = gmdate("Ymd", strtotime("-1 day"));
+        $this->enqueueCronJob(
+            "analytics_rollup_hourly",
+            "analytics",
+            $hourTarget,
+            [
+                "lookback_hours" => (int) $this->cfg(
+                    "ANALYTICS_ROLLUP_LOOKBACK_HOURS",
+                    48,
+                ),
+            ],
+            -10,
+        );
+        $this->enqueueCronJob(
+            "analytics_rollup_daily",
+            "analytics",
+            $dayTarget,
+            [
+                "lookback_days" => (int) $this->cfg(
+                    "ANALYTICS_ROLLUP_LOOKBACK_DAYS",
+                    14,
+                ),
+            ],
+            -20,
+        );
+        $this->enqueueCronJob(
+            "analytics_cleanup_raw",
+            "analytics",
+            "retention_" . gmdate("Ymd"),
+            [
+                "retention_days" => (int) $this->cfg(
+                    "ANALYTICS_RAW_RETENTION_DAYS",
+                    90,
+                ),
+            ],
+            -30,
+        );
+        $this->maybeAutoRunCronJobs();
+    }
+
+    private function maybeAutoRunCronJobs(): void
+    {
+        if (!(bool) $this->cfg("CRON_AUTO_RUN_ENABLED", false)) {
+            return;
+        }
+
+        $interval = max(10, (int) $this->cfg("CRON_AUTO_RUN_MIN_INTERVAL", 60));
+        if ($this->markerRecentlyTouched("auto_run", $interval)) {
+            return;
+        }
+        $this->touchCronMarker("auto_run");
+        $this->runCronJobBatch((int) $this->cfg("CRON_AUTO_RUN_LIMIT", 2));
+    }
+
+    private function runCronJobBatch(int $limit = 10): array
+    {
         $limit = min(50, max(1, $limit));
         $workerId = gethostname() . "-" . getmypid() . "-" . bin2hex(random_bytes(3));
         $processed = [];
@@ -725,10 +817,22 @@ final class Portal
             $processed[] = $this->processCronJob($job, $workerId);
         }
 
+        return ["worker" => $workerId, "processed" => $processed];
+    }
+
+    public function runCronJobs(int $limit = 10, ?string $token = null): void
+    {
+        $expectedToken = (string) $this->cfg("CRON_TOKEN", "");
+        if ($expectedToken !== "" && !hash_equals($expectedToken, (string) $token)) {
+            $this->jsonResponse(["error" => "Invalid cron token"], 403);
+        }
+
+        $result = $this->runCronJobBatch($limit);
+
         $this->jsonResponse([
             "success" => true,
-            "worker" => $workerId,
-            "processed" => $processed,
+            "worker" => $result["worker"],
+            "processed" => $result["processed"],
         ]);
     }
 
@@ -773,6 +877,9 @@ final class Portal
         try {
             $result = match ($job["event_type"]) {
                 "notification_video" => $this->processVideoNotificationJob($job),
+                "analytics_rollup_hourly" => $this->processAnalyticsRollupJob($job, "hour"),
+                "analytics_rollup_daily" => $this->processAnalyticsRollupJob($job, "day"),
+                "analytics_cleanup_raw" => $this->processAnalyticsCleanupJob($job),
                 default => throw new RuntimeException(
                     "Unknown cron event: " . $job["event_type"],
                 ),
@@ -861,6 +968,103 @@ final class Portal
         }
 
         return ["sent" => $sent, "video_id" => $video["id"]];
+    }
+
+    private function processAnalyticsRollupJob(array $job, string $unit): array
+    {
+        $payload = json_decode((string) ($job["payload"] ?? "{}"), true) ?: [];
+        $lookback = $unit === "hour"
+            ? max(
+                1,
+                min(
+                    168,
+                    (int) ($payload["lookback_hours"] ??
+                        $this->cfg("ANALYTICS_ROLLUP_LOOKBACK_HOURS", 48)),
+                ),
+            )
+            : max(
+                1,
+                min(
+                    365,
+                    (int) ($payload["lookback_days"] ??
+                        $this->cfg("ANALYTICS_ROLLUP_LOOKBACK_DAYS", 14)),
+                ),
+            );
+        $cutoff = (new DateTimeImmutable())
+            ->modify("-{$lookback} " . ($unit === "hour" ? "hours" : "days"))
+            ->format($unit === "hour" ? "Y-m-d H:00:00" : "Y-m-d 00:00:00");
+        $bucketExpr =
+            $unit === "hour"
+                ? "STR_TO_DATE(DATE_FORMAT(created_at, '%Y-%m-%d %H:00:00'), '%Y-%m-%d %H:%i:%s')"
+                : "STR_TO_DATE(DATE_FORMAT(created_at, '%Y-%m-%d 00:00:00'), '%Y-%m-%d %H:%i:%s')";
+
+        $this->db()->beginTransaction();
+        try {
+            $delete = $this->db()->prepare(
+                "DELETE FROM analytics_rollups WHERE bucket_unit = ? AND bucket_start >= ?",
+            );
+            $delete->execute([$unit, $cutoff]);
+            $deleted = $delete->rowCount();
+
+            $insert = $this->db()->prepare(
+                "INSERT INTO analytics_rollups
+                (bucket_unit, bucket_start, event_type, page, target_type, target_id, source, search_query, category,
+                 event_count, unique_sessions, unique_users, total_duration_ms, total_watch_time_ms, max_scroll_depth)
+                SELECT
+                    ?,
+                    {$bucketExpr} AS bucket_start,
+                    event_type,
+                    page,
+                    target_type,
+                    target_id,
+                    source,
+                    search_query,
+                    category,
+                    COUNT(*) AS event_count,
+                    COUNT(DISTINCT session_id) AS unique_sessions,
+                    COUNT(DISTINCT user_id) AS unique_users,
+                    COALESCE(SUM(duration_ms), 0) AS total_duration_ms,
+                    COALESCE(SUM(watch_time_ms), 0) AS total_watch_time_ms,
+                    MAX(scroll_depth) AS max_scroll_depth
+                FROM analytics_events
+                WHERE created_at >= ?
+                GROUP BY bucket_start, event_type, page, target_type, target_id, source, search_query, category",
+            );
+            $insert->execute([$unit, $cutoff]);
+            $inserted = $insert->rowCount();
+            $this->db()->commit();
+        } catch (Throwable $exception) {
+            if ($this->db()->inTransaction()) {
+                $this->db()->rollBack();
+            }
+            throw $exception;
+        }
+
+        return [
+            "unit" => $unit,
+            "cutoff" => $cutoff,
+            "deleted" => $deleted,
+            "inserted" => $inserted,
+        ];
+    }
+
+    private function processAnalyticsCleanupJob(array $job): array
+    {
+        $payload = json_decode((string) ($job["payload"] ?? "{}"), true) ?: [];
+        $retentionDays = max(
+            1,
+            (int) ($payload["retention_days"] ??
+                $this->cfg("ANALYTICS_RAW_RETENTION_DAYS", 90)),
+        );
+        $cutoff = (new DateTimeImmutable())
+            ->modify("-{$retentionDays} days")
+            ->format("Y-m-d H:i:s");
+        $stmt = $this->db()->prepare(
+            "DELETE FROM analytics_events WHERE created_at < ?",
+        );
+        $stmt->execute([$cutoff]);
+
+        return ["retention_days" => $retentionDays, "deleted" => $stmt->rowCount()];
     }
 
     public function vote(
@@ -2436,6 +2640,7 @@ final class Portal
             throw $exception;
         }
 
+        $this->maybeScheduleAnalyticsJobs();
         $this->jsonResponse(["success" => true, "count" => count($events)]);
     }
 

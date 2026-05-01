@@ -241,7 +241,35 @@ CREATE TABLE `analytics_events` (
   CONSTRAINT `fk_analytics_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 14. USER SETTINGS
+-- 14. ANALYTICS ROLLUPS
+DROP TABLE IF EXISTS `analytics_rollups`;
+CREATE TABLE `analytics_rollups` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `bucket_unit` enum('hour','day') NOT NULL,
+  `bucket_start` datetime NOT NULL,
+  `event_type` varchar(50) NOT NULL,
+  `page` varchar(50) DEFAULT NULL,
+  `target_type` varchar(50) DEFAULT NULL,
+  `target_id` varchar(64) DEFAULT NULL,
+  `source` varchar(80) DEFAULT NULL,
+  `search_query` varchar(150) DEFAULT NULL,
+  `category` varchar(80) DEFAULT NULL,
+  `event_count` int(10) unsigned NOT NULL DEFAULT 0,
+  `unique_sessions` int(10) unsigned NOT NULL DEFAULT 0,
+  `unique_users` int(10) unsigned NOT NULL DEFAULT 0,
+  `total_duration_ms` bigint(20) unsigned NOT NULL DEFAULT 0,
+  `total_watch_time_ms` bigint(20) unsigned NOT NULL DEFAULT 0,
+  `max_scroll_depth` tinyint(3) unsigned DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_rollups_bucket` (`bucket_unit`,`bucket_start`),
+  KEY `idx_rollups_event_bucket` (`event_type`,`bucket_unit`,`bucket_start`),
+  KEY `idx_rollups_target_bucket` (`target_type`,`target_id`,`bucket_unit`,`bucket_start`),
+  KEY `idx_rollups_search_bucket` (`search_query`,`category`,`bucket_unit`,`bucket_start`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 15. USER SETTINGS
 DROP TABLE IF EXISTS `user_settings`;
 CREATE TABLE `user_settings` (
   `user_id` char(8) NOT NULL,
@@ -255,7 +283,7 @@ CREATE TABLE `user_settings` (
   CONSTRAINT `fk_settings_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 15. REPORTS / MODERATION QUEUE
+-- 16. REPORTS / MODERATION QUEUE
 DROP TABLE IF EXISTS `reports`;
 CREATE TABLE `reports` (
   `id` char(12) NOT NULL,
@@ -278,7 +306,7 @@ CREATE TABLE `reports` (
   CONSTRAINT `fk_reports_reviewer` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 16. CRON JOBS / BACKGROUND QUEUE
+-- 17. CRON JOBS / BACKGROUND QUEUE
 DROP TABLE IF EXISTS `cron_jobs`;
 CREATE TABLE `cron_jobs` (
   `id` char(14) NOT NULL,
@@ -310,6 +338,6 @@ CREATE TABLE `cron_jobs` (
   KEY `idx_cron_jobs_target` (`target_type`,`target_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 17. ADMİN AYARLARI (Opsiyonel, eğer gerekirse)
+-- 18. ADMİN AYARLARI (Opsiyonel, eğer gerekirse)
 
 SET FOREIGN_KEY_CHECKS = 1;
