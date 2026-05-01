@@ -390,17 +390,32 @@ final class LimeVideo
             ->execute([$chatVideoId, $ownerId]);
     }
 
+    /**
+     * Checks whether a media source is already an absolute HTTP(S) URL.
+     * Input: $url media URL or path.
+     * Output: true when the source starts with http:// or https://.
+     */
     private function isAbsoluteMediaUrl(string $url): bool
     {
         return (bool) preg_match("#^https?://#i", $url);
     }
 
+    /**
+     * Detects direct browser-playable video URLs by file extension.
+     * Input: $url external/internal source URL.
+     * Output: true for direct video files such as mp4, webm or m3u8.
+     */
     private function isDirectVideoUrl(string $url): bool
     {
         $path = parse_url($url, PHP_URL_PATH) ?: $url;
         return (bool) preg_match("#\.(mp4|webm|ogg|ogv|mov|m4v|m3u8)(\?.*)?$#i", $path);
     }
 
+    /**
+     * Converts an internal storage value into a public browser URL.
+     * Input: $path raw videos.file_path value.
+     * Output: public URL; bare filenames map to /uploads/videos/{file}.
+     */
     private function publicMediaUrl(?string $path): string
     {
         $path = trim((string) $path);
@@ -416,11 +431,21 @@ final class LimeVideo
         return "/" . ltrim($path, "/");
     }
 
+    /**
+     * Chooses how the watch page should present a playback source.
+     * Input: $url resolved playback URL.
+     * Output: "direct" for in-page player, "external_page" for new-tab provider pages.
+     */
     private function detectPlaybackMode(string $url): string
     {
         return $this->isDirectVideoUrl($url) ? "direct" : "external_page";
     }
 
+    /**
+     * Resolves the canonical playback URL from the unified videos row.
+     * Input: $video database row from videos.
+     * Output: playback URL for frontend consumption.
+     */
     private function videoPlaybackUrl(array $video): string
     {
         if (($video["storage_type"] ?? "internal") === "external") {
@@ -429,6 +454,11 @@ final class LimeVideo
         return $this->publicMediaUrl($video["file_path"] ?? "");
     }
 
+    /**
+     * Adds frontend playback metadata to a video row.
+     * Input: $video database row.
+     * Output: row plus playback_source_url and player_mode.
+     */
     private function hydrateVideoPlayback(array $video): array
     {
         $sourceUrl = $this->videoPlaybackUrl($video);
@@ -732,6 +762,11 @@ final class LimeVideo
         ]);
     }
 
+    /**
+     * Creates an action ban and notifies the restricted user.
+     * Input: target user, ban type, reason, optional end time and moderator identity.
+     * Output: created ban id.
+     */
     public function createBan(
         string $userId,
         string $type,
@@ -786,6 +821,11 @@ final class LimeVideo
         return $banId;
     }
 
+    /**
+     * Finds the active ban that blocks a specific action.
+     * Input: $userId target user id, $action comment/video/chat.
+     * Output: active ban row or null.
+     */
     private function activeBanFor(string $userId, string $action): ?array
     {
         $stmt = $this->db()->prepare(
@@ -803,6 +843,11 @@ final class LimeVideo
         return $stmt->fetch() ?: null;
     }
 
+    /**
+     * Converts internal ban action keys into human-readable labels.
+     * Input: action key.
+     * Output: short action label for API errors/toasts.
+     */
     private function banActionLabel(string $action): string
     {
         return match ($action) {
@@ -813,6 +858,11 @@ final class LimeVideo
         };
     }
 
+    /**
+     * Builds the user-facing blocked-action message.
+     * Input: active ban row and attempted action.
+     * Output: localized-ready status/error message.
+     */
     private function banMessage(array $ban, string $action): string
     {
         $scope =
@@ -826,6 +876,11 @@ final class LimeVideo
             ($ban["reason"] ?: "No reason provided.");
     }
 
+    /**
+     * Stops restricted mutating actions before they touch business logic.
+     * Input: action key comment/video/chat.
+     * Output: no return; sends HTTP 403 JSON response when banned.
+     */
     private function assertActionAllowed(string $action): void
     {
         if (empty($_SESSION["user"])) {
@@ -2630,54 +2685,6 @@ final class LimeVideo
         $this->jsonResponse(["status" => "added"]);
     }
 
-    /**
-     * Video Stream Motoru
-     */
-    public function streamVideo(string $id): void
-    {
-        $stmt = $this->db()->prepare(
-            "SELECT file_path, storage_type, playback_url FROM videos WHERE id = ? AND status = 'public' LIMIT 1",
-        );
-        $stmt->execute([$id]);
-        $video = $stmt->fetch();
-        if (!$video) {
-            $this->jsonResponse(["error" => "Video not found"], 404);
-        }
-        $rawPath = trim((string) ($video["file_path"] ?? ""));
-        $sourceUrl = $this->videoPlaybackUrl($video);
-        if (
-            ($video["storage_type"] ?? "internal") === "external" &&
-            $sourceUrl
-        ) {
-            header("Location: " . $sourceUrl, true, 302);
-            exit();
-        }
-        if (
-            $sourceUrl &&
-            ($this->isAbsoluteMediaUrl($rawPath) ||
-                str_starts_with($rawPath, "/") ||
-                str_contains($rawPath, "/"))
-        ) {
-            header("Location: " . $sourceUrl, true, 302);
-            exit();
-        }
-
-        $path =
-            rtrim((string) $this->cfg("STORAGE_VIDEO_PATH"), "/") .
-            "/" .
-            ltrim($rawPath, "/");
-        if (!file_exists($path)) {
-            $this->jsonResponse(["error" => "File not found"], 404);
-        }
-
-        $size = filesize($path);
-        header("Content-Type: video/mp4");
-        header("Content-Length: " . $size);
-        header("Accept-Ranges: bytes");
-        readfile($path);
-        exit();
-    }
-
     public function logActivity(
         string $eventType,
         string $action,
@@ -3101,13 +3108,8 @@ if (strpos($uri, "/api/") === 0) {
     }
 }
 
-// Stream Route
-if (preg_match('/^\/stream\/([v]_[a-zA-Z0-9]+)$/', $uri, $m)) {
-    $App->streamVideo($m[1]);
-}
-
 // --- FRONTEND SHELL (PATH-BASED ROUTING) ---
-// API veya Stream değilse, her zaman index.html shell'ini ver.
+// API değilse, her zaman index.html shell'ini ver.
 // SPA kendi içinde URL'e göre hangi sayfayı render edeceğini seçecek.
 include "index.html";
 exit();
