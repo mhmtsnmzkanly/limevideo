@@ -8,188 +8,150 @@ declare(strict_types=1);
  * Veri güncellendiğinde ilgili önbellek otomatik temizlenir.
  */
 
-// 1. YAPILANDIRMA
-$AppConfig = [
-    "dev_mode" => false, // True için detaylı hata mesajları gösterilir
-    "site" => [
-        "domain" => "127.0.0.1:8010",
-        "https" => false,
-        "base_url" => "http://127.0.0.1:8010",
-    ],
-    "db" => [
-        "host" => "127.0.0.1",
-        "port" => 3306,
-        "name" => "limevideo",
-        "user" => "root",
-        "password" => "default000",
-        "charset" => "utf8mb4",
-    ],
-    "storage" => [
-        "video_path" => __DIR__ . "/uploads/videos",
-        "thumb_path" => __DIR__ . "/uploads/thumbs",
-        "max_size" => 100 * 1024 * 1024,
-    ],
-    "cache" => [
-        "path" => __DIR__ . "/cachedir/limevideo",
-    ],
-    "chat" => [
-        "video_id" => "globalchat01",
-        "owner_user_id" => "u_system",
-        "message_limit" => 50,
-        "message_max_length" => 500,
-    ],
-    "security" => [
-        "csrf_exempt" => ["login", "register", "provider_webhook", "analytics"],
-    ],
-    "video_providers" => [
-        "manual_external" => [
-            "display_name" => "Manual External Provider",
-            "api_base_url" => null,
-            "webhook_secret" => "change-me",
-            "enabled" => true,
-            "settings" => ["mode" => "manual"],
-        ],
-        "mux" => [
-            "display_name" => "Mux",
-            "api_base_url" => "https://api.mux.com",
-            "webhook_secret" => null,
-            "enabled" => false,
-            "settings" => ["adapter" => "planned"],
-        ],
-        "bunny_stream" => [
-            "display_name" => "Bunny Stream",
-            "api_base_url" => "https://video.bunnycdn.com",
-            "webhook_secret" => null,
-            "enabled" => false,
-            "settings" => ["adapter" => "planned"],
-        ],
-        "cloudflare_stream" => [
-            "display_name" => "Cloudflare Stream",
-            "api_base_url" => "https://api.cloudflare.com/client/v4",
-            "webhook_secret" => null,
-            "enabled" => false,
-            "settings" => ["adapter" => "planned"],
-        ],
-    ],
-    "ad_services" => [
-        "internal" => [
-            "display_name" => "Internal Ad Placements",
-            "script_url" => null,
-            "enabled" => true,
-            "settings" => ["mode" => "fallback"],
-        ],
-        "vast" => [
-            "display_name" => "VAST Compatible Service",
-            "script_url" => null,
-            "enabled" => false,
-            "settings" => ["adapter" => "planned"],
-        ],
-        "gam" => [
-            "display_name" => "Google Ad Manager",
-            "script_url" => null,
-            "enabled" => false,
-            "settings" => ["adapter" => "planned"],
-        ],
-        "custom_js" => [
-            "display_name" => "Custom JavaScript Ad Service",
-            "script_url" => null,
-            "enabled" => false,
-            "settings" => ["adapter" => "planned"],
-        ],
-    ],
-    "ad_placements" => [
-        "feed_native" => [
-            "source" => "internal",
-            "service" => "internal",
-            "external_zone_id" => null,
-            "label" => "Sponsored",
-            "title" => "LimeVideo VPN Pro",
-            "body" => "Secure creator sessions from every network.",
-            "cta_label" => "Learn More",
-            "cta_url" => "#",
-            "enabled" => true,
-            "frequency" => 5,
-        ],
-        "watch_sidebar" => [
-            "source" => "internal",
-            "service" => "internal",
-            "external_zone_id" => null,
-            "label" => "Sponsored",
-            "title" => "Upgrade to LimeVideo Pro",
-            "body" => "Creator analytics and cleaner watch sessions.",
-            "cta_label" => "View Plans",
-            "cta_url" => "#",
-            "enabled" => true,
-            "frequency" => 1,
-        ],
-        "preroll" => [
-            "source" => "internal",
-            "service" => "internal",
-            "external_zone_id" => null,
-            "label" => "Advertisement",
-            "title" => "Sponsored Video",
-            "body" => "Video will start shortly.",
-            "cta_label" => "Skip Ad",
-            "cta_url" => "#",
-            "enabled" => true,
-            "frequency" => 1,
-        ],
-        "popunder" => [
-            "source" => "internal",
-            "service" => "internal",
-            "external_zone_id" => null,
-            "label" => "Special Offer",
-            "title" => "LimeVideo API",
-            "body" => "Build your own platform in 10 minutes.",
-            "cta_label" => "Check Now",
-            "cta_url" => "#",
-            "enabled" => true,
-            "frequency" => 1,
-        ],
-        "leaderboard" => [
-            "source" => "internal",
-            "service" => "internal",
-            "external_zone_id" => null,
-            "label" => "Sponsored",
-            "title" => "LimeVideo Creator Stack",
-            "body" => "A compact toolkit for creators and curators.",
-            "cta_label" => "Explore",
-            "cta_url" => "#",
-            "enabled" => true,
-            "frequency" => 1,
-        ],
-    ],
-];
-
 final class Portal
 {
-    private array $config;
+    private array $config = [
+        "DEV_MODE" => false,
+        "SITE_DOMAIN" => "127.0.0.1:8010",
+        "SITE_HTTPS" => false,
+        "SITE_BASE_URL" => "http://127.0.0.1:8010",
+        "DB_HOST" => "127.0.0.1",
+        "DB_PORT" => 3306,
+        "DB_NAME" => "limevideo",
+        "DB_USER" => "root",
+        "DB_PASSWORD" => "default000",
+        "DB_CHARSET" => "utf8mb4",
+        "STORAGE_VIDEO_PATH" => __DIR__ . "/uploads/videos",
+        "STORAGE_THUMB_PATH" => __DIR__ . "/uploads/thumbs",
+        "STORAGE_MAX_SIZE" => 100 * 1024 * 1024,
+        "CHAT_VIDEO_ID" => "globalchat01",
+        "CHAT_OWNER_USER_ID" => "u_system",
+        "CHAT_MESSAGE_LIMIT" => 50,
+        "CHAT_MESSAGE_MAX_LENGTH" => 500,
+        "CRON_TOKEN" => "",
+        "SECURITY_CSRF_EXEMPT" => "login,register,provider_webhook,analytics",
+        "VIDEO_PROVIDER_KEYS" =>
+            "manual_external,mux,bunny_stream,cloudflare_stream",
+        "VIDEO_PROVIDER_MANUAL_EXTERNAL_DISPLAY_NAME" =>
+            "Manual External Provider",
+        "VIDEO_PROVIDER_MANUAL_EXTERNAL_API_BASE_URL" => "",
+        "VIDEO_PROVIDER_MANUAL_EXTERNAL_WEBHOOK_SECRET" => "change-me",
+        "VIDEO_PROVIDER_MANUAL_EXTERNAL_ENABLED" => true,
+        "VIDEO_PROVIDER_MANUAL_EXTERNAL_SETTING_MODE" => "manual",
+        "VIDEO_PROVIDER_MUX_DISPLAY_NAME" => "Mux",
+        "VIDEO_PROVIDER_MUX_API_BASE_URL" => "https://api.mux.com",
+        "VIDEO_PROVIDER_MUX_WEBHOOK_SECRET" => "",
+        "VIDEO_PROVIDER_MUX_ENABLED" => false,
+        "VIDEO_PROVIDER_MUX_SETTING_ADAPTER" => "planned",
+        "VIDEO_PROVIDER_BUNNY_STREAM_DISPLAY_NAME" => "Bunny Stream",
+        "VIDEO_PROVIDER_BUNNY_STREAM_API_BASE_URL" =>
+            "https://video.bunnycdn.com",
+        "VIDEO_PROVIDER_BUNNY_STREAM_WEBHOOK_SECRET" => "",
+        "VIDEO_PROVIDER_BUNNY_STREAM_ENABLED" => false,
+        "VIDEO_PROVIDER_BUNNY_STREAM_SETTING_ADAPTER" => "planned",
+        "VIDEO_PROVIDER_CLOUDFLARE_STREAM_DISPLAY_NAME" => "Cloudflare Stream",
+        "VIDEO_PROVIDER_CLOUDFLARE_STREAM_API_BASE_URL" =>
+            "https://api.cloudflare.com/client/v4",
+        "VIDEO_PROVIDER_CLOUDFLARE_STREAM_WEBHOOK_SECRET" => "",
+        "VIDEO_PROVIDER_CLOUDFLARE_STREAM_ENABLED" => false,
+        "VIDEO_PROVIDER_CLOUDFLARE_STREAM_SETTING_ADAPTER" => "planned",
+        "AD_SERVICE_KEYS" => "internal,vast,gam,custom_js",
+        "AD_SERVICE_INTERNAL_DISPLAY_NAME" => "Internal Ad Placements",
+        "AD_SERVICE_INTERNAL_SCRIPT_URL" => "",
+        "AD_SERVICE_INTERNAL_ENABLED" => true,
+        "AD_SERVICE_INTERNAL_SETTING_MODE" => "fallback",
+        "AD_SERVICE_VAST_DISPLAY_NAME" => "VAST Compatible Service",
+        "AD_SERVICE_VAST_SCRIPT_URL" => "",
+        "AD_SERVICE_VAST_ENABLED" => false,
+        "AD_SERVICE_VAST_SETTING_ADAPTER" => "planned",
+        "AD_SERVICE_GAM_DISPLAY_NAME" => "Google Ad Manager",
+        "AD_SERVICE_GAM_SCRIPT_URL" => "",
+        "AD_SERVICE_GAM_ENABLED" => false,
+        "AD_SERVICE_GAM_SETTING_ADAPTER" => "planned",
+        "AD_SERVICE_CUSTOM_JS_DISPLAY_NAME" => "Custom JavaScript Ad Service",
+        "AD_SERVICE_CUSTOM_JS_SCRIPT_URL" => "",
+        "AD_SERVICE_CUSTOM_JS_ENABLED" => false,
+        "AD_SERVICE_CUSTOM_JS_SETTING_ADAPTER" => "planned",
+        "AD_PLACEMENT_KEYS" =>
+            "feed_native,watch_sidebar,preroll,popunder,leaderboard",
+        "AD_PLACEMENT_FEED_NATIVE_SOURCE" => "internal",
+        "AD_PLACEMENT_FEED_NATIVE_SERVICE" => "internal",
+        "AD_PLACEMENT_FEED_NATIVE_EXTERNAL_ZONE_ID" => "",
+        "AD_PLACEMENT_FEED_NATIVE_LABEL" => "Sponsored",
+        "AD_PLACEMENT_FEED_NATIVE_TITLE" => "LimeVideo VPN Pro",
+        "AD_PLACEMENT_FEED_NATIVE_BODY" =>
+            "Secure creator sessions from every network.",
+        "AD_PLACEMENT_FEED_NATIVE_CTA_LABEL" => "Learn More",
+        "AD_PLACEMENT_FEED_NATIVE_CTA_URL" => "#",
+        "AD_PLACEMENT_FEED_NATIVE_ENABLED" => true,
+        "AD_PLACEMENT_FEED_NATIVE_FREQUENCY" => 5,
+        "AD_PLACEMENT_WATCH_SIDEBAR_SOURCE" => "internal",
+        "AD_PLACEMENT_WATCH_SIDEBAR_SERVICE" => "internal",
+        "AD_PLACEMENT_WATCH_SIDEBAR_EXTERNAL_ZONE_ID" => "",
+        "AD_PLACEMENT_WATCH_SIDEBAR_LABEL" => "Sponsored",
+        "AD_PLACEMENT_WATCH_SIDEBAR_TITLE" => "Upgrade to LimeVideo Pro",
+        "AD_PLACEMENT_WATCH_SIDEBAR_BODY" =>
+            "Creator analytics and cleaner watch sessions.",
+        "AD_PLACEMENT_WATCH_SIDEBAR_CTA_LABEL" => "View Plans",
+        "AD_PLACEMENT_WATCH_SIDEBAR_CTA_URL" => "#",
+        "AD_PLACEMENT_WATCH_SIDEBAR_ENABLED" => true,
+        "AD_PLACEMENT_WATCH_SIDEBAR_FREQUENCY" => 1,
+        "AD_PLACEMENT_PREROLL_SOURCE" => "internal",
+        "AD_PLACEMENT_PREROLL_SERVICE" => "internal",
+        "AD_PLACEMENT_PREROLL_EXTERNAL_ZONE_ID" => "",
+        "AD_PLACEMENT_PREROLL_LABEL" => "Advertisement",
+        "AD_PLACEMENT_PREROLL_TITLE" => "Sponsored Video",
+        "AD_PLACEMENT_PREROLL_BODY" => "Video will start shortly.",
+        "AD_PLACEMENT_PREROLL_CTA_LABEL" => "Skip Ad",
+        "AD_PLACEMENT_PREROLL_CTA_URL" => "#",
+        "AD_PLACEMENT_PREROLL_ENABLED" => true,
+        "AD_PLACEMENT_PREROLL_FREQUENCY" => 1,
+        "AD_PLACEMENT_POPUNDER_SOURCE" => "internal",
+        "AD_PLACEMENT_POPUNDER_SERVICE" => "internal",
+        "AD_PLACEMENT_POPUNDER_EXTERNAL_ZONE_ID" => "",
+        "AD_PLACEMENT_POPUNDER_LABEL" => "Special Offer",
+        "AD_PLACEMENT_POPUNDER_TITLE" => "LimeVideo API",
+        "AD_PLACEMENT_POPUNDER_BODY" =>
+            "Build your own platform in 10 minutes.",
+        "AD_PLACEMENT_POPUNDER_CTA_LABEL" => "Check Now",
+        "AD_PLACEMENT_POPUNDER_CTA_URL" => "#",
+        "AD_PLACEMENT_POPUNDER_ENABLED" => true,
+        "AD_PLACEMENT_POPUNDER_FREQUENCY" => 1,
+        "AD_PLACEMENT_LEADERBOARD_SOURCE" => "internal",
+        "AD_PLACEMENT_LEADERBOARD_SERVICE" => "internal",
+        "AD_PLACEMENT_LEADERBOARD_EXTERNAL_ZONE_ID" => "",
+        "AD_PLACEMENT_LEADERBOARD_LABEL" => "Sponsored",
+        "AD_PLACEMENT_LEADERBOARD_TITLE" => "LimeVideo Creator Stack",
+        "AD_PLACEMENT_LEADERBOARD_BODY" =>
+            "A compact toolkit for creators and curators.",
+        "AD_PLACEMENT_LEADERBOARD_CTA_LABEL" => "Explore",
+        "AD_PLACEMENT_LEADERBOARD_CTA_URL" => "#",
+        "AD_PLACEMENT_LEADERBOARD_ENABLED" => true,
+        "AD_PLACEMENT_LEADERBOARD_FREQUENCY" => 1,
+    ];
     private ?PDO $pdo = null;
     private string $tempDir;
-    private string $cacheDir;
-    private string $rateLimitDir;
 
-    public function __construct(array $config)
+    public function __construct()
     {
-        $this->config = $config;
-        $this->tempDir = rtrim(
-            (string) ($config["cache"]["path"] ??
-                __DIR__ . "/cachedir/limevideo"),
-            "/",
+        $this->config = array_replace(
+            $this->config,
+            parse_ini_file(__DIR__ . "/.ini", false, INI_SCANNER_TYPED) ?: [],
         );
-        $this->cacheDir = $this->tempDir . "/cache";
-        $this->rateLimitDir = $this->tempDir . "/ratelimit";
-        foreach (
-            [$this->tempDir, $this->cacheDir, $this->rateLimitDir]
-            as $dir
-        ) {
-            if (!is_dir($dir)) {
-                mkdir($dir, 0775, true);
-            }
+
+        $this->tempDir = rtrim(sys_get_temp_dir(), "/") . "/limevideo";
+        if (!is_dir($this->tempDir)) {
+            mkdir($this->tempDir, 0775, true);
         }
-        if (random_int(1, 100) === 1) {
-            $this->cleanupCache();
-        }
+    }
+
+    /**
+     * Get configuration value by flat key
+     * Example: cfg("DB_HOST") instead of cfg("db.host")
+     */
+    public function cfg(string $key, mixed $default = null): mixed
+    {
+        return $this->config[$key] ?? $default;
     }
 
     public function db(): PDO
@@ -197,27 +159,38 @@ final class Portal
         if ($this->pdo) {
             return $this->pdo;
         }
-        $db = $this->config["db"];
-        $dsn = "mysql:host={$db["host"]};port={$db["port"]};dbname={$db["name"]};charset={$db["charset"]}";
-        $this->pdo = new PDO($dsn, $db["user"], $db["password"], [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]);
-        return $this->pdo;
-    }
-
-    public function siteConfig(): array
-    {
-        return $this->remember(
-            "site_config_v1",
-            300,
-            fn() => $this->config["site"],
+        $dsn =
+            "mysql:host=" .
+            $this->cfg("DB_HOST") .
+            ";port=" .
+            (int) $this->cfg("DB_PORT", 3306) .
+            ";dbname=" .
+            $this->cfg("DB_NAME") .
+            ";charset=" .
+            $this->cfg("DB_CHARSET", "utf8mb4");
+        $this->pdo = new PDO(
+            $dsn,
+            $this->cfg("DB_USER"),
+            $this->cfg("DB_PASSWORD"),
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ],
         );
+        unset(
+            $this->config["DB_HOST"],
+            $this->config["DB_PORT"],
+            $this->config["DB_NAME"],
+            $this->config["DB_USER"],
+            $this->config["DB_PASSWORD"],
+            $this->config["DB_CHARSET"],
+        );
+        return $this->pdo;
     }
 
     public function baseUrl(string $path = ""): string
     {
-        return rtrim($this->config["site"]["base_url"], "/") .
+        return rtrim((string) $this->cfg("SITE_BASE_URL"), "/") .
             "/" .
             ltrim($path, "/");
     }
@@ -228,7 +201,7 @@ final class Portal
     {
         $ip = hash("sha256", $_SERVER["REMOTE_ADDR"] ?? "127.0.0.1");
         $file =
-            $this->rateLimitDir . "/rate_limit_" . sha1($key . $ip) . ".tmp";
+            $this->tempDir . "/ratelimit_" . sha1($key . $ip) . ".tmp";
         $data = file_exists($file)
             ? json_decode((string) file_get_contents($file), true)
             : null;
@@ -240,7 +213,7 @@ final class Portal
         file_put_contents($file, json_encode($data), LOCK_EX);
         if ($data["count"] > $limit) {
             $response = ["error" => "Rate limit exceeded"];
-            if ($this->config["dev_mode"] ?? false) {
+            if ((bool) $this->cfg("DEV_MODE")) {
                 $response["retry_after"] = $period - (time() - $data["start"]);
             }
             $this->jsonResponse($response, 429);
@@ -258,7 +231,7 @@ final class Portal
 
     private function cacheFile(string $key): string
     {
-        return $this->cacheDir .
+        return $this->tempDir .
             "/cache_" .
             $this->cacheSafeKey($key) .
             "_" .
@@ -282,8 +255,9 @@ final class Portal
     {
         $file = $this->cacheFile($key);
         if (!file_exists($file)) {
-            $legacyFile = $this->tempDir . "/cache_" . sha1($key) . ".tmp";
-            $file = file_exists($legacyFile) ? $legacyFile : $file;
+            $file = file_exists($this->tempDir . "/cache_" . sha1($key) . ".tmp")
+                ? $this->tempDir . "/cache_" . sha1($key) . ".tmp"
+                : $file;
         }
         if (file_exists($file)) {
             $payload = unserialize((string) file_get_contents($file), [
@@ -327,7 +301,7 @@ final class Portal
     {
         $safePrefix = $this->cacheSafeKey($prefix);
         foreach (
-            glob($this->cacheDir . "/cache_" . $safePrefix . "*.tmp") ?: []
+            glob($this->tempDir . "/cache_" . $safePrefix . "*.tmp") ?: []
             as $file
         ) {
             @unlink($file);
@@ -343,36 +317,6 @@ final class Portal
         $data = $callback();
         $this->cacheSet($key, $data, $ttl);
         return $data;
-    }
-
-    private function cleanupCache(): void
-    {
-        $now = time();
-        foreach (glob($this->cacheDir . "/cache_*.tmp") ?: [] as $file) {
-            $payload = @unserialize((string) @file_get_contents($file), [
-                "allowed_classes" => false,
-            ]);
-            if (
-                is_array($payload) &&
-                isset($payload["expires_at"]) &&
-                (int) $payload["expires_at"] < $now
-            ) {
-                @unlink($file);
-            }
-        }
-        foreach (
-            glob($this->rateLimitDir . "/rate_limit_*.tmp") ?: []
-            as $file
-        ) {
-            if ($now - filemtime($file) > 86400) {
-                @unlink($file);
-            }
-        }
-        foreach (glob($this->tempDir . "/rate_limit_*.tmp") ?: [] as $file) {
-            if ($now - filemtime($file) > 86400) {
-                @unlink($file);
-            }
-        }
     }
 
     private function invalidateDiscoveryCaches(): void
@@ -394,7 +338,7 @@ final class Portal
 
     private function chatVideoId(): string
     {
-        return (string) ($this->config["chat"]["video_id"] ?? "globalchat01");
+        return (string) $this->cfg("CHAT_VIDEO_ID", "globalchat01");
     }
 
     private function isChatVideoId(string $videoId): bool
@@ -405,8 +349,7 @@ final class Portal
     private function ensureChatChannel(): void
     {
         $chatVideoId = $this->chatVideoId();
-        $ownerId =
-            (string) ($this->config["chat"]["owner_user_id"] ?? "u_system");
+        $ownerId = (string) $this->cfg("CHAT_OWNER_USER_ID", "u_system");
 
         $exists = $this->db()->prepare(
             "SELECT 1 FROM videos WHERE id = ? LIMIT 1",
@@ -452,7 +395,7 @@ final class Portal
 
     public function errorResponse(\Throwable $exception, int $code = 500): void
     {
-        if ($this->config["dev_mode"] ?? false) {
+        if ((bool) $this->cfg("DEV_MODE")) {
             // DEV MODE: Detaylı hata mesajı göster
             $data = [
                 "error" => $exception->getMessage(),
@@ -508,7 +451,17 @@ final class Portal
         if (
             in_array(
                 $endpoint,
-                $this->config["security"]["csrf_exempt"] ?? [],
+                array_values(
+                    array_filter(
+                        array_map(
+                            "trim",
+                            explode(
+                                ",",
+                                (string) $this->cfg("SECURITY_CSRF_EXEMPT", ""),
+                            ),
+                        ),
+                    ),
+                ),
                 true,
             )
         ) {
@@ -562,7 +515,7 @@ final class Portal
             }
             return $user;
         } catch (\PDOException $e) {
-            if ($this->config["dev_mode"] ?? false) {
+            if ((bool) $this->cfg("DEV_MODE")) {
                 error_log("[DB Error] getUser($id): " . $e->getMessage());
             }
             return null;
@@ -711,6 +664,199 @@ final class Portal
         ]);
     }
 
+    private function enqueueCronJob(
+        string $eventType,
+        string $targetType,
+        string $targetId,
+        array $payload = [],
+        int $priority = 0,
+        ?string $dedupeKey = null,
+    ): string {
+        $jobId = $this->generateId("j", 14);
+        $dedupeKey ??= hash(
+            "sha256",
+            $eventType . "|" . $targetType . "|" . $targetId,
+        );
+        $stmt = $this->db()->prepare(
+            "INSERT INTO cron_jobs
+            (id, event_type, target_type, target_id, dedupe_key, priority, payload)
+            VALUES (?,?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE
+                updated_at = NOW(),
+                priority = GREATEST(priority, VALUES(priority)),
+                payload = VALUES(payload),
+                available_at = IF(status IN ('completed','working'), available_at, NOW()),
+                status = IF(status IN ('completed','working'), status, 'pending')",
+        );
+        $stmt->execute([
+            $jobId,
+            $eventType,
+            $targetType,
+            $targetId,
+            $dedupeKey,
+            $priority,
+            $payload ? json_encode($payload) : null,
+        ]);
+        return $jobId;
+    }
+
+    public function runCronJobs(int $limit = 10, ?string $token = null): void
+    {
+        $expectedToken = (string) $this->cfg("CRON_TOKEN", "");
+        if ($expectedToken !== "" && !hash_equals($expectedToken, (string) $token)) {
+            $this->jsonResponse(["error" => "Invalid cron token"], 403);
+        }
+
+        $limit = min(50, max(1, $limit));
+        $workerId = gethostname() . "-" . getmypid() . "-" . bin2hex(random_bytes(3));
+        $processed = [];
+
+        for ($i = 0; $i < $limit; $i++) {
+            $job = $this->claimCronJob($workerId);
+            if (!$job) {
+                break;
+            }
+            $processed[] = $this->processCronJob($job, $workerId);
+        }
+
+        $this->jsonResponse([
+            "success" => true,
+            "worker" => $workerId,
+            "processed" => $processed,
+        ]);
+    }
+
+    private function claimCronJob(string $workerId): ?array
+    {
+        $this->db()
+            ->prepare(
+                "UPDATE cron_jobs
+                SET status = 'working',
+                    attempts = attempts + 1,
+                    locked_by = ?,
+                    locked_at = NOW(),
+                    locked_until = DATE_ADD(NOW(), INTERVAL 5 MINUTE),
+                    started_at = COALESCE(started_at, NOW()),
+                    last_error = NULL
+                WHERE id = (
+                    SELECT id FROM (
+                        SELECT id
+                        FROM cron_jobs
+                        WHERE available_at <= NOW()
+                          AND (
+                            status = 'pending'
+                            OR (status = 'working' AND locked_until < NOW())
+                            OR (status = 'failed' AND attempts < max_attempts)
+                          )
+                        ORDER BY priority DESC, created_at ASC
+                        LIMIT 1
+                    ) picked
+                )",
+            )
+            ->execute([$workerId]);
+
+        $stmt = $this->db()->prepare(
+            "SELECT * FROM cron_jobs WHERE locked_by = ? AND status = 'working' ORDER BY locked_at DESC LIMIT 1",
+        );
+        $stmt->execute([$workerId]);
+        return $stmt->fetch() ?: null;
+    }
+
+    private function processCronJob(array $job, string $workerId): array
+    {
+        try {
+            $result = match ($job["event_type"]) {
+                "notification_video" => $this->processVideoNotificationJob($job),
+                default => throw new RuntimeException(
+                    "Unknown cron event: " . $job["event_type"],
+                ),
+            };
+
+            $this->db()
+                ->prepare(
+                    "UPDATE cron_jobs
+                    SET status = 'completed',
+                        locked_by = NULL,
+                        locked_until = NULL,
+                        result = ?,
+                        completed_at = NOW()
+                    WHERE id = ? AND locked_by = ?",
+                )
+                ->execute([json_encode($result), $job["id"], $workerId]);
+
+            return [
+                "id" => $job["id"],
+                "event_type" => $job["event_type"],
+                "status" => "completed",
+                "result" => $result,
+            ];
+        } catch (Throwable $e) {
+            $willRetry = (int) $job["attempts"] < (int) $job["max_attempts"];
+            $this->db()
+                ->prepare(
+                    "UPDATE cron_jobs
+                    SET status = ?,
+                        locked_by = NULL,
+                        locked_until = NULL,
+                        available_at = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+                        last_error = ?,
+                        failed_at = NOW()
+                    WHERE id = ? AND locked_by = ?",
+                )
+                ->execute([
+                    $willRetry ? "failed" : "cancelled",
+                    max(1, (int) $job["attempts"]),
+                    $e->getMessage(),
+                    $job["id"],
+                    $workerId,
+                ]);
+
+            return [
+                "id" => $job["id"],
+                "event_type" => $job["event_type"],
+                "status" => $willRetry ? "failed_retry_scheduled" : "cancelled",
+                "error" => $e->getMessage(),
+            ];
+        }
+    }
+
+    private function processVideoNotificationJob(array $job): array
+    {
+        $stmt = $this->db()->prepare(
+            "SELECT v.id, v.user_id, v.title, v.status, u.username
+            FROM videos v
+            JOIN users u ON u.id = v.user_id
+            WHERE v.id = ? LIMIT 1",
+        );
+        $stmt->execute([$job["target_id"]]);
+        $video = $stmt->fetch();
+        if (!$video || $video["status"] !== "public") {
+            return ["sent" => 0, "skipped" => "video_not_public"];
+        }
+
+        $followers = $this->db()->prepare(
+            "SELECT follower_id FROM follows WHERE followed_id = ?",
+        );
+        $followers->execute([$video["user_id"]]);
+
+        $sent = 0;
+        while ($follower = $followers->fetch()) {
+            $this->createNotification(
+                $follower["follower_id"],
+                "NEW_VIDEO",
+                "New Video!",
+                "{$video["username"]} uploaded: {$video["title"]}",
+                $video["user_id"],
+                "video",
+                $video["id"],
+                ["job_id" => $job["id"]],
+            );
+            $sent++;
+        }
+
+        return ["sent" => $sent, "video_id" => $video["id"]];
+    }
+
     public function vote(
         ?string $targetId,
         ?string $type,
@@ -844,10 +990,7 @@ final class Portal
     {
         $this->ensureChatChannel();
         $chatVideoId = $this->chatVideoId();
-        $limit = min(
-            100,
-            max(1, (int) ($this->config["chat"]["message_limit"] ?? 50)),
-        );
+        $limit = min(100, max(1, (int) $this->cfg("CHAT_MESSAGE_LIMIT", 50)));
         $params = [$chatVideoId];
         $sql = "SELECT c.id, c.user_id, c.body, c.created_at, u.username, u.display_name
                 FROM comments c
@@ -872,7 +1015,7 @@ final class Portal
             $this->jsonResponse(["error" => "Auth required"], 401);
         }
         $body = $this->validate($body ?? "", "text", [
-            "max" => (int) ($this->config["chat"]["message_max_length"] ?? 500),
+            "max" => (int) $this->cfg("CHAT_MESSAGE_MAX_LENGTH", 500),
         ]);
         if (!$body) {
             $this->jsonResponse(["error" => "Message is required"], 400);
@@ -1252,30 +1395,13 @@ final class Portal
                 ->execute([$vid, $t]);
         }
 
-        // TAKİPÇİLERE BİLDİRİM
-        $fStmt = $this->db()->prepare(
-            "SELECT follower_id FROM follows WHERE followed_id = ?",
+        $this->enqueueCronJob(
+            "notification_video",
+            "video",
+            $vid,
+            ["user_id" => $userId],
+            10,
         );
-        $fStmt->execute([$userId]);
-        $followers = $fStmt->fetchAll();
-
-        $uStmt = $this->db()->prepare(
-            "SELECT username FROM users WHERE id = ? LIMIT 1",
-        );
-        $uStmt->execute([$userId]);
-        $username = $uStmt->fetchColumn();
-
-        foreach ($followers as $f) {
-            $this->createNotification(
-                $f["follower_id"],
-                "NEW_VIDEO",
-                "New Video!",
-                "{$username} uploaded: {$title}",
-                $userId,
-                "video",
-                $vid,
-            );
-        }
 
         $this->invalidateDiscoveryCaches();
         if ($tags) {
@@ -1396,6 +1522,15 @@ final class Portal
         $userId = $_SESSION["user"]["id"];
         $this->cacheDeletePrefix("profile_" . $userId . "_");
         $this->cacheDelete("video_base_user_{$userId}_video_{$videoId}");
+        if ($status === "public") {
+            $this->enqueueCronJob(
+                "notification_video",
+                "video",
+                $videoId,
+                ["user_id" => $userId],
+                10,
+            );
+        }
         $this->jsonResponse([
             "success" => true,
             "id" => $videoId,
@@ -1405,12 +1540,53 @@ final class Portal
 
     private function getVideoProvider(string $provider): ?array
     {
-        if (!isset($this->config["video_providers"][$provider])) {
+        $keys = array_values(
+            array_filter(
+                array_map(
+                    "trim",
+                    explode(
+                        ",",
+                        (string) $this->cfg("VIDEO_PROVIDER_KEYS", ""),
+                    ),
+                ),
+            ),
+        );
+        if (!in_array($provider, $keys, true)) {
             return null;
+        }
+        $part = strtoupper(
+            (string) preg_replace("/[^a-z0-9]+/i", "_", $provider),
+        );
+        $settings = [];
+        foreach ($this->config as $key => $value) {
+            $prefix = "VIDEO_PROVIDER_{$part}_SETTING_";
+            if (str_starts_with($key, $prefix)) {
+                $settings[strtolower(substr($key, strlen($prefix)))] =
+                    $value === "" ? null : $value;
+            }
         }
         return [
             "provider" => $provider,
-            ...$this->config["video_providers"][$provider],
+            "display_name" => (string) $this->cfg(
+                "VIDEO_PROVIDER_{$part}_DISPLAY_NAME",
+                $provider,
+            ),
+            "api_base_url" =>
+                ($value = $this->cfg(
+                    "VIDEO_PROVIDER_{$part}_API_BASE_URL",
+                    "",
+                )) === ""
+                    ? null
+                    : $value,
+            "webhook_secret" =>
+                ($value = $this->cfg(
+                    "VIDEO_PROVIDER_{$part}_WEBHOOK_SECRET",
+                    "",
+                )) === ""
+                    ? null
+                    : $value,
+            "enabled" => (bool) $this->cfg("VIDEO_PROVIDER_{$part}_ENABLED"),
+            "settings" => $settings,
         ];
     }
 
@@ -1418,7 +1594,22 @@ final class Portal
     {
         $providers = $this->remember("video_providers_v1", 300, function () {
             $providers = [];
-            foreach ($this->config["video_providers"] as $provider => $config) {
+            $keys = array_values(
+                array_filter(
+                    array_map(
+                        "trim",
+                        explode(
+                            ",",
+                            (string) $this->cfg("VIDEO_PROVIDER_KEYS", ""),
+                        ),
+                    ),
+                ),
+            );
+            foreach ($keys as $provider) {
+                $config = $this->getVideoProvider($provider);
+                if (!$config) {
+                    continue;
+                }
                 $providers[] = [
                     "provider" => $provider,
                     "display_name" => $config["display_name"],
@@ -1773,14 +1964,111 @@ final class Portal
     {
         $ads = $this->remember("ad_placements_v1", 300, function () {
             $ads = [];
-            foreach ($this->config["ad_placements"] as $placement => $ad) {
+            $services = [];
+            foreach (
+                array_filter(
+                    array_map(
+                        "trim",
+                        explode(
+                            ",",
+                            (string) $this->cfg("AD_SERVICE_KEYS", ""),
+                        ),
+                    ),
+                )
+                as $service
+            ) {
+                $part = strtoupper(
+                    (string) preg_replace("/[^a-z0-9]+/i", "_", $service),
+                );
+                $settings = [];
+                foreach ($this->config as $key => $value) {
+                    $prefix = "AD_SERVICE_{$part}_SETTING_";
+                    if (str_starts_with($key, $prefix)) {
+                        $settings[strtolower(substr($key, strlen($prefix)))] =
+                            $value === "" ? null : $value;
+                    }
+                }
+                $services[$service] = [
+                    "display_name" => (string) $this->cfg(
+                        "AD_SERVICE_{$part}_DISPLAY_NAME",
+                        $service,
+                    ),
+                    "script_url" =>
+                        ($value = $this->cfg(
+                            "AD_SERVICE_{$part}_SCRIPT_URL",
+                            "",
+                        )) === ""
+                            ? null
+                            : $value,
+                    "enabled" => (bool) $this->cfg(
+                        "AD_SERVICE_{$part}_ENABLED",
+                    ),
+                    "settings" => $settings,
+                ];
+            }
+            foreach (
+                array_filter(
+                    array_map(
+                        "trim",
+                        explode(
+                            ",",
+                            (string) $this->cfg("AD_PLACEMENT_KEYS", ""),
+                        ),
+                    ),
+                )
+                as $placement
+            ) {
+                $part = strtoupper(
+                    (string) preg_replace("/[^a-z0-9]+/i", "_", $placement),
+                );
+                $ad = [
+                    "source" => (string) $this->cfg(
+                        "AD_PLACEMENT_{$part}_SOURCE",
+                        "internal",
+                    ),
+                    "service" => (string) $this->cfg(
+                        "AD_PLACEMENT_{$part}_SERVICE",
+                        "internal",
+                    ),
+                    "external_zone_id" =>
+                        ($value = $this->cfg(
+                            "AD_PLACEMENT_{$part}_EXTERNAL_ZONE_ID",
+                            "",
+                        )) === ""
+                            ? null
+                            : $value,
+                    "label" => (string) $this->cfg(
+                        "AD_PLACEMENT_{$part}_LABEL",
+                        "Sponsored",
+                    ),
+                    "title" => (string) $this->cfg(
+                        "AD_PLACEMENT_{$part}_TITLE",
+                        "Advertisement",
+                    ),
+                    "body" => (string) $this->cfg(
+                        "AD_PLACEMENT_{$part}_BODY",
+                        "",
+                    ),
+                    "cta_label" => (string) $this->cfg(
+                        "AD_PLACEMENT_{$part}_CTA_LABEL",
+                        "Learn More",
+                    ),
+                    "cta_url" => (string) $this->cfg(
+                        "AD_PLACEMENT_{$part}_CTA_URL",
+                        "#",
+                    ),
+                    "enabled" => (bool) $this->cfg(
+                        "AD_PLACEMENT_{$part}_ENABLED",
+                    ),
+                    "frequency" => (int) $this->cfg(
+                        "AD_PLACEMENT_{$part}_FREQUENCY",
+                        1,
+                    ),
+                ];
                 if (empty($ad["enabled"])) {
                     continue;
                 }
-                $service =
-                    $this->config["ad_services"][
-                        $ad["service"] ?? "internal"
-                    ] ?? null;
+                $service = $services[$ad["service"] ?? "internal"] ?? null;
                 if (
                     ($ad["source"] ?? "internal") === "external" &&
                     (!$service || empty($service["enabled"]))
@@ -1833,13 +2121,46 @@ final class Portal
     {
         $services = $this->remember("ad_services_v1", 300, function () {
             $services = [];
-            foreach ($this->config["ad_services"] as $service => $config) {
+            foreach (
+                array_filter(
+                    array_map(
+                        "trim",
+                        explode(
+                            ",",
+                            (string) $this->cfg("AD_SERVICE_KEYS", ""),
+                        ),
+                    ),
+                )
+                as $service
+            ) {
+                $part = strtoupper(
+                    (string) preg_replace("/[^a-z0-9]+/i", "_", $service),
+                );
+                $settings = [];
+                foreach ($this->config as $key => $value) {
+                    $prefix = "AD_SERVICE_{$part}_SETTING_";
+                    if (str_starts_with($key, $prefix)) {
+                        $settings[strtolower(substr($key, strlen($prefix)))] =
+                            $value === "" ? null : $value;
+                    }
+                }
                 $services[] = [
                     "service" => $service,
-                    "display_name" => $config["display_name"],
-                    "script_url" => $config["script_url"],
-                    "enabled" => (int) $config["enabled"],
-                    "settings" => $config["settings"],
+                    "display_name" => (string) $this->cfg(
+                        "AD_SERVICE_{$part}_DISPLAY_NAME",
+                        $service,
+                    ),
+                    "script_url" =>
+                        ($value = $this->cfg(
+                            "AD_SERVICE_{$part}_SCRIPT_URL",
+                            "",
+                        )) === ""
+                            ? null
+                            : $value,
+                    "enabled" => (int) (bool) $this->cfg(
+                        "AD_SERVICE_{$part}_ENABLED",
+                    ),
+                    "settings" => $settings,
                 ];
             }
             usort(
@@ -1933,7 +2254,9 @@ final class Portal
         }
 
         $path =
-            $this->config["storage"]["video_path"] . "/" . $video["file_path"];
+            rtrim((string) $this->cfg("STORAGE_VIDEO_PATH"), "/") .
+            "/" .
+            $video["file_path"];
         if (!file_exists($path)) {
             $this->jsonResponse(["error" => "File not found"], 404);
         }
@@ -2165,12 +2488,12 @@ final class Portal
 }
 
 // 3. API ROUTER
-$App = new Portal($AppConfig);
+$App = new Portal();
 ini_set("session.use_strict_mode", "1");
 session_set_cookie_params([
     "lifetime" => 0,
     "path" => "/",
-    "secure" => (bool) $AppConfig["site"]["https"],
+    "secure" => (bool) $App->cfg("SITE_HTTPS"),
     "httponly" => true,
     "samesite" => "Lax",
 ]);
@@ -2205,9 +2528,17 @@ if (strpos($uri, "/api/") === 0) {
             };
         }
         match ($endpoint) {
+            "cron/run" => $App->runCronJobs(
+                (int) ($_GET["limit"] ?? 10),
+                $_GET["token"] ?? null,
+            ),
             "stats" => $App->jsonResponse($App->getStats()),
             "tags" => $App->jsonResponse($App->fetch("tags")),
-            "site_config" => $App->jsonResponse($App->siteConfig()),
+            "site_config" => $App->jsonResponse([
+                "domain" => (string) $App->cfg("SITE_DOMAIN"),
+                "https" => (bool) $App->cfg("SITE_HTTPS"),
+                "base_url" => (string) $App->cfg("SITE_BASE_URL"),
+            ]),
             "trending" => $App->getTrending(),
             "search" => $App->search(
                 $App->validate($_GET["q"] ?? "", "text", ["max" => 100]),

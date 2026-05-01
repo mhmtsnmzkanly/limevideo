@@ -278,6 +278,38 @@ CREATE TABLE `reports` (
   CONSTRAINT `fk_reports_reviewer` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 16. ADMİN AYARLARI (Opsiyonel, eğer gerekirse)
+-- 16. CRON JOBS / BACKGROUND QUEUE
+DROP TABLE IF EXISTS `cron_jobs`;
+CREATE TABLE `cron_jobs` (
+  `id` char(14) NOT NULL,
+  `event_type` varchar(80) NOT NULL,
+  `target_type` varchar(40) NOT NULL,
+  `target_id` varchar(64) NOT NULL,
+  `dedupe_key` char(64) DEFAULT NULL,
+  `status` enum('pending','working','completed','failed','cancelled') NOT NULL DEFAULT 'pending',
+  `priority` smallint(6) NOT NULL DEFAULT 0,
+  `attempts` smallint(5) unsigned NOT NULL DEFAULT 0,
+  `max_attempts` smallint(5) unsigned NOT NULL DEFAULT 3,
+  `available_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `locked_by` varchar(80) DEFAULT NULL,
+  `locked_at` datetime DEFAULT NULL,
+  `locked_until` datetime DEFAULT NULL,
+  `payload` json DEFAULT NULL,
+  `result` json DEFAULT NULL,
+  `last_error` text DEFAULT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `failed_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_cron_jobs_dedupe` (`dedupe_key`),
+  KEY `idx_cron_jobs_pick` (`status`,`available_at`,`priority`,`created_at`),
+  KEY `idx_cron_jobs_lock` (`status`,`locked_until`),
+  KEY `idx_cron_jobs_event_status` (`event_type`,`status`,`created_at`),
+  KEY `idx_cron_jobs_target` (`target_type`,`target_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 17. ADMİN AYARLARI (Opsiyonel, eğer gerekirse)
 
 SET FOREIGN_KEY_CHECKS = 1;

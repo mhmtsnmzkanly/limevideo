@@ -1,1971 +1,2492 @@
+const AppConfig = {
+  dev_mode: false, // Üretimde false, geliştirmede true yapılmalı
+};
+
 const app = {
-    storageKeys: {
-        guestAutoplay: 'limevideo_pref_autoplay',
-        profileView: 'limevideo_pref_profile_view'
+  storageKeys: {
+    guestAutoplay: "limevideo_pref_autoplay",
+    profileView: "limevideo_pref_profile_view",
+  },
+
+  state: {
+    me: null,
+    popunderTriggered: false,
+    adTimer: 5,
+    adInterval: null,
+    isCaptchaVerified: false,
+    searchQuery: "",
+    searchSort: "newest",
+    activeTag: "all",
+    tags: ["all"],
+    videos: [],
+    notifications: [],
+    replyParentId: null,
+    autoplay: true,
+    settings: null,
+    ads: {},
+    csrfToken: "",
+    commentSort: "new",
+    profileView: "grid",
+    analyticsSessionId: "",
+    currentRoute: "",
+    currentPageStartedAt: 0,
+    currentPageMaxScroll: 0,
+    activeVideoId: null,
+    videoWatchStartedAt: 0,
+    videoWatchInterval: null,
+    chatOpen: false,
+    chatUnreadCount: 0,
+    chatPendingMessage: "",
+    chatMessages: [],
+    chatLastFetchedAt: "",
+    chatPollInterval: null,
+    uploadSource: "external",
+    uploadSelectedTags: [],
+    uploadSubmitting: false,
+    reportTargetType: null,
+    reportTargetId: null,
+    reportTargetLabel: "",
+    reportSubmitting: false,
+    templateCache: new Map(),
+    routeToken: 0,
+  },
+
+  reportIcons: {
+    video: "fa-solid fa-play-circle",
+    comment: "fa-solid fa-comment-slash",
+    user: "fa-solid fa-user-shield",
+  },
+
+  actions: {
+    navigate(target) {
+      const to = this.actionValue(target, "to");
+      if (!to) return;
+      this.navigateTo(to);
     },
+    "toggle-report"(target) {
+      const state = this.actionValue(target, "state", "toggle");
+      const modal = document.getElementById("report-modal");
+      if (
+        state === "close" ||
+        (state === "toggle" && modal?.classList.contains("active"))
+      ) {
+        if (this.state.reportSubmitting) return;
+        modal?.classList.remove("active");
+        return;
+      }
 
-    state: {
-        me: null,
-        popunderTriggered: false,
-        adTimer: 5,
-        adInterval: null,
-        isCaptchaVerified: false,
-        searchQuery: '',
-        searchSort: 'newest',
-        activeTag: 'all',
-        tags: ['all'],
-        videos: [],
-        notifications: [],
-        replyParentId: null,
-        autoplay: true,
-        settings: null,
-        ads: {},
-        csrfToken: '',
-        commentSort: 'new',
-        profileView: 'grid',
-        analyticsSessionId: '',
-        currentRoute: '',
-        currentPageStartedAt: 0,
-        currentPageMaxScroll: 0,
-        activeVideoId: null,
-        videoWatchStartedAt: 0,
-        videoWatchInterval: null,
-        chatOpen: false,
-        chatUnreadCount: 0,
-        chatPendingMessage: '',
-        chatMessages: [],
-        chatLastFetchedAt: '',
-        chatPollInterval: null,
-        uploadSource: 'external',
-        uploadSelectedTags: [],
-        uploadSubmitting: false,
-        reportTargetType: null,
-        reportTargetId: null,
-        reportTargetLabel: '',
-        reportSubmitting: false,
-        templateCache: new Map(),
-        routeToken: 0,
+      const type = this.actionValue(target, "type");
+      const id = this.actionValue(target, "id");
+      if (!this.state.me) {
+        this.navigateTo("/auth");
+        return;
+      }
+      const targetLabel = this.actionValue(target, "label", id);
+      this.state.reportTargetType = type;
+      this.state.reportTargetId = id;
+      this.state.reportTargetLabel = targetLabel || id;
+      this.state.reportSubmitting = false;
+
+      const form = document.getElementById("report-form");
+      const iconBox = document.getElementById("report-icon-box");
+      const badge = document.getElementById("report-target-badge");
+      const label = document.getElementById("report-target-label");
+      const warning = document.getElementById("report-warning");
+      const counter = document.getElementById("report-char-count");
+      const submitBtn = document.getElementById("report-submit-btn");
+
+      if (form) form.reset();
+      this.setTemplateHtml(
+        iconBox,
+        `<i class="${this.reportIcons[type] || "fa-solid fa-flag"}"></i>`,
+      );
+      this.setText(badge, type);
+      this.setText(label, targetLabel || id);
+      if (warning) warning.style.opacity = "0";
+      this.setText(counter, "0 / 500");
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        this.setText(submitBtn, "Submit Report");
+      }
+      if (modal) modal.classList.add("active");
     },
-
-    reportIcons: {
-        video: 'fa-solid fa-play-circle',
-        comment: 'fa-solid fa-comment-slash',
-        user: 'fa-solid fa-user-shield'
-    },
-
-    actions: {
-        navigate(target) {
-            const to = this.actionValue(target, 'to');
-            if (!to) return;
-            this.navigateTo(to);
-        },
-        'toggle-report'(target) {
-            const state = this.actionValue(target, 'state', 'toggle');
-            const modal = document.getElementById('report-modal');
-            if (state === 'close' || (state === 'toggle' && modal?.classList.contains('active'))) {
-                if (this.state.reportSubmitting) return;
-                modal?.classList.remove('active');
-                return;
-            }
-
-            const type = this.actionValue(target, 'type');
-            const id = this.actionValue(target, 'id');
-            if (!this.state.me) {
-                this.navigateTo('/auth');
-                return;
-            }
-            const targetLabel = this.actionValue(target, 'label', id);
-            this.state.reportTargetType = type;
-            this.state.reportTargetId = id;
-            this.state.reportTargetLabel = targetLabel || id;
-            this.state.reportSubmitting = false;
-
-            const form = document.getElementById('report-form');
-            const iconBox = document.getElementById('report-icon-box');
-            const badge = document.getElementById('report-target-badge');
-            const label = document.getElementById('report-target-label');
-            const warning = document.getElementById('report-warning');
-            const counter = document.getElementById('report-char-count');
-            const submitBtn = document.getElementById('report-submit-btn');
-
-            if (form) form.reset();
-            this.setTemplateHtml(iconBox, `<i class="${this.reportIcons[type] || 'fa-solid fa-flag'}"></i>`);
-            this.setText(badge, type);
-            this.setText(label, targetLabel || id);
-            if (warning) warning.style.opacity = '0';
-            this.setText(counter, '0 / 500');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                this.setText(submitBtn, 'Submit Report');
-            }
-            if (modal) modal.classList.add('active');
-        },
-        async 'submit-report'() {
-            if (this.state.reportSubmitting) return;
-            const reason = document.getElementById('report-reason')?.value || '';
-            const details = document.getElementById('report-details')?.value.trim() || '';
-            if (!reason || details.length < 10) {
-                const submitBtn = document.getElementById('report-submit-btn');
-                if (submitBtn) submitBtn.disabled = true;
-                return;
-            }
-            const submitBtn = document.getElementById('report-submit-btn');
-            try {
-                this.state.reportSubmitting = true;
-                if (submitBtn) {
-                    submitBtn.disabled = true;
-                    this.setTemplateHtml(submitBtn, '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Submitting...');
-                }
-                this.trackAnalytics('report_submit', {
-                    target_type: this.state.reportTargetType,
-                    target_id: this.state.reportTargetId,
-                    metadata: { reason, details_length: details.length }
-                });
-                const data = await this.apiPost('/api/report', {
-                    target_type: this.state.reportTargetType,
-                    target_id: this.state.reportTargetId,
-                    reason,
-                    details
-                });
-                if (data.success) {
-                    this.state.reportSubmitting = false;
-                    document.getElementById('report-modal')?.classList.remove('active');
-                    this.showStatus('Report submitted.');
-                } else {
-                    this.showStatus(data.error || 'Report failed.', 'error');
-                }
-            } catch (e) {
-                this.showStatus('Report failed.', 'error');
-            } finally {
-                this.state.reportSubmitting = false;
-                if (submitBtn) {
-                    this.setText(submitBtn, 'Submit Report');
-                    submitBtn.disabled = !(reason && details.length >= 10) || this.state.reportSubmitting;
-                }
-            }
-        },
-        'toggle-chat'(target, event) {
-            const state = this.actionValue(target, 'state', 'toggle');
-            if (event) event.stopPropagation();
-            if (state === 'close' || (state === 'toggle' && this.state.chatOpen)) {
-                this.state.chatOpen = false;
-                document.getElementById('chat-modal')?.classList.remove('active');
-                this.state.chatPendingMessage = '';
-                document.getElementById('chat-confirm-popup')?.classList.remove('active');
-                return;
-            }
-            if (!this.state.me) {
-                this.navigateTo('/auth');
-                return;
-            }
-            this.state.chatOpen = true;
-            this.updateChatUnreadCount(0);
-            const modal = document.getElementById('chat-modal');
-            if (modal) modal.classList.add('active');
-            this.fetchChatMessages(false);
-            setTimeout(() => document.getElementById('chat-input')?.focus(), 80);
-        },
-        'toggle-upload'(target) {
-            const modal = document.getElementById('upload-modal');
-            const state = this.actionValue(target, 'state', 'toggle');
-            const shouldClose = state === 'close' || (state === 'toggle' && modal?.classList.contains('active'));
-            if (shouldClose) {
-                if (this.state.uploadSubmitting) return;
-                modal?.classList.remove('active');
-                document.body.style.overflow = 'auto';
-                return;
-            }
-            if (!this.state.me) {
-                this.navigateTo('/auth');
-                return;
-            }
-            this.resetUploadForm();
-            modal?.classList.add('active');
-            document.body.style.overflow = 'hidden';
-            setTimeout(() => document.getElementById('upload-title')?.focus(), 80);
-        },
-        'set-upload-source'(target) {
-            const source = this.actionValue(target, 'value', 'external');
-            this.state.uploadSource = source === 'local' ? 'local' : 'external';
-            document.querySelectorAll('.upload-segment-btn').forEach(button => {
-                button.classList.toggle('active', this.actionValue(button, 'value') === this.state.uploadSource);
-            });
-            document.getElementById('upload-local-source')?.classList.toggle('hidden', this.state.uploadSource !== 'local');
-            document.getElementById('upload-external-source')?.classList.toggle('hidden', this.state.uploadSource !== 'external');
-        },
-        'toggle-upload-tag'(target) {
-            const tag = this.actionValue(target, 'value');
-            if (!tag) return;
-            if (this.state.uploadSelectedTags.includes(tag)) {
-                this.state.uploadSelectedTags = this.state.uploadSelectedTags.filter(item => item !== tag);
-                target.classList.remove('selected');
-                return;
-            }
-            this.state.uploadSelectedTags = [...this.state.uploadSelectedTags, tag].slice(0, 8);
-            target.classList.add('selected');
-        },
-        async 'toggle-notifications'(target, event) {
-            event.stopPropagation();
-            const panel = document.getElementById('notification-panel');
-            if (!panel) return;
-            panel.classList.toggle('active');
-            if (panel.classList.contains('active')) {
-                this.renderNotifications();
-                if (!this.state.me) return;
-                try {
-                    await this.apiPost('/api/read_notifications');
-                    this.state.notifications.forEach(n => {
-                        if (this.isUnreadNotification(n)) n.read_at = new Date().toISOString();
-                    });
-                    this.renderNavbar(this.activePage);
-                    this.renderNotifications();
-                } catch (e) {
-                    console.error('Notification update failed');
-                }
-            }
-        },
-        'toggle-dropdown'(target, event) {
-            const value = this.actionValue(target, 'value');
-            const type = this.actionValue(target, 'type');
-            event.stopPropagation();
-            const dropdown = document.getElementById(`drop-${value || type}`);
-            if (!dropdown) return;
-            const isActive = dropdown.classList.contains('active');
-            this.closeAllPanels();
-            if (!isActive) dropdown.classList.add('active');
-        },
-        'queue-chat'() {
-            const input = document.getElementById('chat-input');
-            const value = input?.value.trim() || '';
-            if (!value) return;
-            this.state.chatPendingMessage = value;
-            document.getElementById('chat-confirm-popup')?.classList.add('active');
-        },
-        async 'confirm-chat'() {
-            const body = this.state.chatPendingMessage.trim();
-            if (!body) {
-                this.state.chatPendingMessage = '';
-                document.getElementById('chat-confirm-popup')?.classList.remove('active');
-                return;
-            }
-            try {
-                const data = await this.apiPost('/api/chat/messages', { body });
-                if (!data.success) {
-                    this.showStatus(data.error || 'Message could not be sent.', 'error');
-                    return;
-                }
-                const input = document.getElementById('chat-input');
-                if (input) input.value = '';
-                this.state.chatPendingMessage = '';
-                document.getElementById('chat-confirm-popup')?.classList.remove('active');
-                const counter = document.getElementById('chat-char-count');
-                this.setText(counter, '0 / 500');
-                await this.fetchChatMessages(false);
-            } catch (e) {
-                this.showStatus('Message could not be sent.', 'error');
-            }
-        },
-        'cancel-chat-confirm'() {
-            this.state.chatPendingMessage = '';
-            document.getElementById('chat-confirm-popup')?.classList.remove('active');
-        },
-        async 'set-tag'(target) {
-            const value = this.actionValue(target, 'value');
-            const id = this.actionValue(target, 'id');
-            const tag = value || id;
-            this.state.activeTag = tag;
-            this.trackAnalytics('category_select', { category: tag });
-            this.updateGalleryUrl({ push: true });
-        },
-        'set-comment-sort'(target) {
-            const value = this.actionValue(target, 'value');
-            this.state.commentSort = value;
-            this.fetchComments(this.lastWatchedId);
-        },
-        'set-profile-view'(target) {
-            const value = this.actionValue(target, 'value');
-            this.state.profileView = value;
-            this.writeStorage(this.storageKeys.profileView, value);
-            this.trackAnalytics('profile_view_toggle', { metadata: { view: value } });
-            this.render(this.activePage, this.currentProfile);
-        },
-        async 'save-video'(target) {
-            const id = this.actionValue(target, 'id');
-            if (!this.state.me) {
-                this.showStatus('Please login to save videos!', 'error');
-                return;
-            }
-            try {
-                this.trackAnalytics('video_save', { target_type: 'video', target_id: id });
-                const data = await this.apiPost('/api/save', { video_id: id });
-                if (data.status === 'saved') this.showStatus('Saved to profile!');
-                else if (data.status === 'unsaved') this.showStatus('Removed from profile.');
-                else this.showStatus(data.error || 'Save failed.', 'error');
-            } catch (e) { this.showStatus('Save failed.', 'error'); }
-        },
-        async 'watch-later'(target) {
-            const id = this.actionValue(target, 'id');
-            if (!this.state.me) {
-                this.showStatus('Please login first.', 'error');
-                return;
-            }
-            try {
-                this.trackAnalytics('watch_later_toggle', { target_type: 'video', target_id: id });
-                const data = await this.apiPost('/api/watch_later', { video_id: id });
-                this.showStatus(data.status === 'added' ? 'Added to Watch Later.' : 'Removed from Watch Later.');
-            } catch (e) { this.showStatus('Action failed.', 'error'); }
-        },
-        async 'follow-profile'(target) {
-            const id = this.actionValue(target, 'id');
-            if (!this.state.me) {
-                this.showStatus('Please login to follow!', 'error');
-                return;
-            }
-            try {
-                const data = await this.apiPost('/api/follow', { user_id: id });
-                if (data.status === 'followed') this.showStatus('Followed.');
-                else this.showStatus('Unfollowed.');
-                if (this.activePage === 'user') this.route();
-            } catch (e) { this.showStatus('Action failed.', 'error'); }
-        },
-        async 'vote-video'(target) {
-            const value = this.actionValue(target, 'value');
-            if (!this.state.me) {
-                this.showStatus('Please login to vote!', 'error');
-                return;
-            }
-            try {
-                this.trackAnalytics('video_vote', { target_type: 'video', target_id: this.lastWatchedId, metadata: { vote_type: value } });
-                await this.apiPost('/api/vote', { target_id: this.lastWatchedId, target_type: 'video', type: value });
-                this.route();
-            } catch (e) { this.showStatus('Vote failed.', 'error'); }
-        },
-        async 'vote-comment'(target) {
-            const id = this.actionValue(target, 'id');
-            const value = this.actionValue(target, 'value');
-            if (!this.state.me) {
-                this.showStatus('Please login to vote!', 'error');
-                return;
-            }
-            try {
-                this.trackAnalytics('comment_vote', { target_type: 'comment', target_id: id, metadata: { vote_type: value } });
-                await this.apiPost('/api/vote', { target_id: id, target_type: 'comment', type: value });
-                await this.fetchComments(this.lastWatchedId);
-            } catch (e) { this.showStatus('Vote failed.', 'error'); }
-        },
-        async 'add-comment'(target) {
-            const id = this.actionValue(target, 'id');
-            const parentId = id || null;
-            if (this.currentWatch && Number(this.currentWatch.disable_comments) === 1) {
-                this.showStatus('Comments are disabled for this video.', 'error');
-                return;
-            }
-            const input = document.getElementById(parentId ? `reply-text-${parentId}` : 'comment-text');
-            if (!input || !input.value.trim()) return;
-            if (!this.state.me) {
-                this.showStatus('Please login to comment!', 'error');
-                return;
-            }
-            try {
-                this.trackAnalytics(parentId ? 'reply_submit' : 'comment_submit', {
-                    target_type: parentId ? 'comment' : 'video',
-                    target_id: parentId || this.lastWatchedId,
-                    metadata: { length: input.value.trim().length }
-                });
-                const data = await this.apiPost('/api/comment', { video_id: this.lastWatchedId, body: input.value.trim(), parent_id: parentId });
-                if (data.success) {
-                    input.value = '';
-                    this.state.replyParentId = null;
-                    if (this.currentWatch) {
-                        this.currentWatch.comments_count = Number(this.currentWatch.comments_count || 0) + 1;
-                        const counter = document.getElementById('comments-count-label');
-                    this.setText(counter, `Comments (${this.currentWatch.comments_count})`);
-                    }
-                    await this.fetchComments(this.lastWatchedId);
-                    this.showStatus(parentId ? 'Reply added.' : 'Comment added.');
-                } else {
-                    this.showStatus(data.error || 'Comment failed.', 'error');
-                }
-            } catch (e) { this.showStatus('Comment failed.', 'error'); }
-        },
-        'begin-reply'(target) {
-            const id = this.actionValue(target, 'id');
-            this.state.replyParentId = id;
-            this.fetchComments(this.lastWatchedId);
-        },
-        'cancel-reply'() {
-            this.state.replyParentId = null;
-            this.fetchComments(this.lastWatchedId);
-        },
-        async login() {
-            const user = document.getElementById('login-user')?.value.trim();
-            const pass = document.getElementById('login-pass')?.value.trim();
-            if (!user || !pass) {
-                this.showStatus('Please fill all fields.', 'error');
-                return;
-            }
-            try {
-                const data = await this.apiPost('/api/login', { user, pass });
-                if (data.csrf) this.state.csrfToken = data.csrf;
-                if (data.success) {
-                    this.showStatus('Login successful.');
-                    await this.checkAuth();
-                    await this.fetchSettings();
-                    await this.fetchNotifications();
-                    this.startChatPolling();
-                    this.navigateTo('/gallery');
-                } else {
-                    this.showStatus(data.error || 'Login failed.', 'error');
-                }
-            } catch (e) { this.showStatus('Server error.', 'error'); }
-        },
-        async register() {
-            const user = document.getElementById('reg-user')?.value.trim();
-            const email = document.getElementById('reg-email')?.value.trim();
-            const pass = document.getElementById('reg-pass')?.value.trim();
-            const pass2 = document.getElementById('reg-pass2')?.value.trim();
-            if (!user || !email || !pass) {
-                this.showStatus('Please fill all fields.', 'error');
-                return;
-            }
-            if (pass !== pass2) {
-                this.showStatus('Passwords do not match.', 'error');
-                return;
-            }
-            try {
-                const data = await this.apiPost('/api/register', { user, email, pass });
-                if (data.success) {
-                    this.showStatus('Register successful! You can login now.');
-                    window.location.hash = '#login';
-                } else {
-                    this.showStatus(data.error || 'Register failed.', 'error');
-                }
-            } catch (e) { this.showStatus('Server error.', 'error'); }
-        },
-        async logout() {
-            try {
-                await this.apiPost('/api/logout');
-                this.state.me = null;
-                this.state.settings = null;
-                this.state.notifications = [];
-                this.state.csrfToken = '';
-                this.state.chatMessages = [];
-                this.state.chatLastFetchedAt = '';
-                this.updateChatUnreadCount(0);
-                if (this.state.chatPollInterval) clearInterval(this.state.chatPollInterval);
-                this.state.chatPollInterval = null;
-                this.state.chatOpen = false;
-                document.getElementById('chat-modal')?.classList.remove('active');
-                this.state.chatPendingMessage = '';
-                document.getElementById('chat-confirm-popup')?.classList.remove('active');
-                this.navigateTo('/auth');
-                this.showStatus('Logged out.', 'error');
-            } catch (e) { console.error("Logout failed"); }
-        },
-        async 'save-profile'() {
-            const payload = {
-                display_name: document.getElementById('edit-display-name')?.value.trim() || '',
-                bio: document.getElementById('edit-bio')?.value.trim() || '',
-                avatar_url: document.getElementById('edit-avatar-url')?.value.trim() || '',
-                cover_url: document.getElementById('edit-cover-url')?.value.trim() || '',
-            };
-            try {
-                const data = await this.apiPost('/api/update_profile', payload);
-                if (data.success) {
-                    document.getElementById('edit-modal')?.classList.remove('active');
-                    this.showStatus('Profile updated.');
-                    await this.checkAuth();
-                    this.route();
-                } else {
-                    this.showStatus(data.error || 'Update failed.', 'error');
-                }
-            } catch (e) { this.showStatus('Server error.', 'error'); }
-        },
-        'toggle-edit-profile'(target) {
-            const state = this.actionValue(target, 'state', 'toggle');
-            const modal = document.getElementById('edit-modal');
-            if (state === 'close' || (state === 'toggle' && modal?.classList.contains('active'))) {
-                modal?.classList.remove('active');
-                return;
-            }
-            const display = document.getElementById('edit-display-name');
-            const bio = document.getElementById('edit-bio');
-            const avatar = document.getElementById('edit-avatar-url');
-            const cover = document.getElementById('edit-cover-url');
-            if (display) display.value = this.currentProfile?.display_name || this.state.me?.display_name || this.state.me?.username || '';
-            if (bio) bio.value = this.currentProfile?.bio || this.state.me?.bio || '';
-            if (avatar) avatar.value = this.currentProfile?.avatar_url || this.state.me?.avatar_url || '';
-            if (cover) cover.value = this.currentProfile?.cover_url || this.state.me?.cover_url || '';
-            if (modal) modal.classList.add('active');
-        },
-        'toggle-captcha'() {
-            const checkbox = document.getElementById('captcha-checkbox');
-            const icon = document.getElementById('captcha-check-icon');
-            const btn = document.getElementById('btn-enter-age');
-            const container = document.getElementById('captcha-trigger');
-            this.state.isCaptchaVerified = !this.state.isCaptchaVerified;
-            if (this.state.isCaptchaVerified) {
-                container.classList.add('captcha-active');
-                icon.classList.remove('hidden');
-                btn.classList.remove('age-btn-disabled');
-                btn.classList.add('age-btn-active');
-                btn.disabled = false;
-            } else {
-                container.classList.remove('captcha-active');
-                icon.classList.add('hidden');
-                btn.classList.add('age-btn-disabled');
-                btn.classList.remove('age-btn-active');
-                btn.disabled = true;
-            }
-        },
-        'toggle-age'() {
-            const overlay = document.getElementById('age-verification-overlay');
-            overlay.style.opacity = '0';
-            overlay.style.transition = 'opacity 0.5s ease';
-            document.body.style.overflow = 'auto';
-            setTimeout(() => {
-                overlay.classList.remove('active');
-                overlay.style.opacity = '1';
-                if (this.lastWatchedId) this.startPrerollAd();
-            }, 500);
-        },
-        'toggle-preroll'() {
-            if (this.state.adInterval) clearInterval(this.state.adInterval);
-            this.state.adInterval = null;
-            document.getElementById('preroll')?.classList.remove('active');
-            this.showStatus('Playing video...');
-        },
-        'toggle-popunder'(target, event) {
-            if (event) event.stopPropagation();
-            const state = this.actionValue(target, 'state', 'toggle');
-            const popunder = document.getElementById('popunder');
-            if (state === 'open') popunder?.classList.add('active');
-            else if (state === 'close') popunder?.classList.remove('active');
-            else popunder?.classList.toggle('active');
-        },
-        async 'mark-notifications-read'() {
-            if (!this.state.me) return;
-            try {
-                await this.apiPost('/api/read_notifications');
-                this.state.notifications.forEach(n => {
-                    if (this.isUnreadNotification(n)) n.read_at = new Date().toISOString();
-                });
-                this.renderNavbar(this.activePage);
-                this.renderNotifications();
-                this.showStatus('Notifications marked as read.');
-            } catch (e) {
-                this.showStatus('Notification update failed.', 'error');
-            }
-        },
-        async 'share-video'(target) {
-            const id = this.actionValue(target, 'id');
-            const url = `${window.location.origin}/video/${id}`;
-            try {
-                this.trackAnalytics('video_share', { target_type: 'video', target_id: id });
-                if (navigator.share) {
-                    await navigator.share({ title: 'LimeVideo', url });
-                } else {
-                    await navigator.clipboard.writeText(url);
-                    this.showStatus('Video link copied.');
-                }
-            } catch (e) {
-                this.showStatus('Share cancelled.', 'error');
-            }
-        },
-        'share-profile'(target) {
-            const id = this.actionValue(target, 'id');
-            const url = `${window.location.origin}/profile/${id}`;
-            navigator.clipboard?.writeText(url);
-            this.trackAnalytics('profile_share', { target_type: 'user', target_id: id });
-            this.showStatus('Profile link copied.');
-        },
-        async 'toggle-autoplay'() {
-            this.state.autoplay = !this.state.autoplay;
-            await this.persistPreference('autoplay', this.state.autoplay ? 1 : 0);
-            const toggle = document.getElementById('autoplay-toggle');
-            const knob = document.getElementById('autoplay-knob');
-            if (toggle && knob) {
-                toggle.className = `w-9 h-5 rounded-full relative transition-colors ${this.state.autoplay ? 'bg-[#00ff41]' : 'bg-white/10'}`;
-                knob.className = `absolute top-1 w-3 h-3 rounded-full transition-all ${this.state.autoplay ? 'right-1 bg-black' : 'left-1 bg-gray-500'}`;
-            }
-            this.showStatus(this.state.autoplay ? 'Autoplay enabled.' : 'Autoplay disabled.');
-        },
-        'load-more-comments'(target) {
-            const id = this.actionValue(target, 'id');
-            this.fetchComments(id, true);
-        },
-    },
-
-    changeActions: {
-        'setting-toggle'(target) {
-            const field = this.actionValue(target, 'field');
-            if (field === 'autoplay') this.state.autoplay = target.checked;
-            this.persistPreference(field, target.checked ? 1 : 0);
-            this.showStatus('Settings updated.');
-        },
-        'report-reason'() {
-            const reason = document.getElementById('report-reason')?.value || '';
-            const details = document.getElementById('report-details')?.value.trim() || '';
-            const submitBtn = document.getElementById('report-submit-btn');
-            if (submitBtn) submitBtn.disabled = !(reason && details.length >= 10) || this.state.reportSubmitting;
-        },
-        async 'search-sort'(target) {
-            const sort = target.value;
-            this.state.searchSort = sort;
-            this.trackAnalytics('search_sort', { metadata: { sort } });
-            this.updateGalleryUrl({ push: false });
-        },
-    },
-
-    inputActions: {
-        'report-details'() {
-            const textarea = document.getElementById('report-details');
-            const counter = document.getElementById('report-char-count');
-            const warning = document.getElementById('report-warning');
-            const length = textarea?.value.trim().length || 0;
-            this.setText(counter, `${length} / 500`);
-            if (warning) warning.style.opacity = length > 0 && length < 10 ? '1' : '0';
-            this.changeActions['report-reason'].call(this);
-        },
-        'chat-input'() {
-            const input = document.getElementById('chat-input');
-            const counter = document.getElementById('chat-char-count');
-            this.setText(counter, `${input?.value.length || 0} / 500`);
-        },
-        'search-input'(target) {
-            this.state.searchQuery = target.value;
-            clearTimeout(this.searchTimer);
-            this.searchTimer = setTimeout(() => this.updateGalleryUrl({ push: false }), 400);
-        },
-    },
-
-    keyActions: {
-        'chat-input'(target, event) {
-            const popup = document.getElementById('chat-confirm-popup');
-            const confirming = popup?.classList.contains('active');
-            if (confirming) {
-                if (event.key === 'Enter' || event.key.toLowerCase() === 'e') {
-                    event.preventDefault();
-                    this.actions['confirm-chat'].call(this);
-                }
-                if (event.key === 'Escape' || event.key.toLowerCase() === 'h') {
-                    event.preventDefault();
-                    this.actions['cancel-chat-confirm'].call(this);
-                }
-                return;
-            }
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                this.actions['queue-chat'].call(this);
-            }
-        },
-    },
-
-    submitActions: {
-        'perform-search'(target, event) {
-            event.preventDefault();
-            this.updateGalleryUrl({ push: true });
-        },
-        async 'submit-upload'(target, event) {
-            event.preventDefault();
-            await this.submitUploadForm();
-        },
-    },
-
-    readStorage(key, fallback = null) {
-        try {
-            const value = localStorage.getItem(key);
-            return value === null ? fallback : value;
-        } catch (e) {
-            return fallback;
+    async "submit-report"() {
+      if (this.state.reportSubmitting) return;
+      const reason = document.getElementById("report-reason")?.value || "";
+      const details =
+        document.getElementById("report-details")?.value.trim() || "";
+      if (!reason || details.length < 10) {
+        const submitBtn = document.getElementById("report-submit-btn");
+        if (submitBtn) submitBtn.disabled = true;
+        return;
+      }
+      const submitBtn = document.getElementById("report-submit-btn");
+      try {
+        this.state.reportSubmitting = true;
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          this.setTemplateHtml(
+            submitBtn,
+            '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Submitting...',
+          );
         }
-    },
-
-    writeStorage(key, value) {
-        try {
-            localStorage.setItem(key, String(value));
-        } catch (e) {
-            // Storage can be unavailable in private mode; state should still work in memory.
-        }
-    },
-
-    loadClientPreferences() {
-        const autoplay = this.readStorage(this.storageKeys.guestAutoplay);
-        const profileView = this.readStorage(this.storageKeys.profileView);
-        if (autoplay !== null) this.state.autoplay = autoplay === '1';
-        if (profileView === 'grid' || profileView === 'list') this.state.profileView = profileView;
-    },
-
-    async init() {
-        this.setupGlobalLoader();
-        this.loadClientPreferences();
-        await this.checkAuth();
-        await this.fetchTags();
-        await this.fetchAds();
-        this.renderStaticTemplates();
-        if (this.state.me) await this.fetchSettings();
-        if (this.state.me) await this.fetchNotifications();
-        if (this.state.me) this.startChatPolling();
-        
-        window.addEventListener('popstate', () => this.route());
-        window.addEventListener('hashchange', () => this.route());
-        this.setupAnalytics();
-        this.setupActionDelegation();
-        this.route();
-        
-        this.setupInfiniteScroll();
-        window.addEventListener('click', (e) => {
-            if (!e.target.closest('.nav-link') && !e.target.closest('.nav-dropdown') && !e.target.closest('#notification-panel')) {
-                this.closeAllPanels();
-            }
+        this.trackAnalytics("report_submit", {
+          target_type: this.state.reportTargetType,
+          target_id: this.state.reportTargetId,
+          metadata: { reason, details_length: details.length },
         });
-        window.addEventListener('click', () => this.triggerPopunder(), { passive: true });
-        window.addEventListener('keydown', (event) => {
-            if (event.key !== 'Escape') return;
-            if (this.state.chatOpen) {
-                this.state.chatOpen = false;
-                document.getElementById('chat-modal')?.classList.remove('active');
-                this.state.chatPendingMessage = '';
-                document.getElementById('chat-confirm-popup')?.classList.remove('active');
-            }
-            if (!this.state.reportSubmitting) {
-                document.getElementById('report-modal')?.classList.remove('active');
-            }
-            if (!this.state.uploadSubmitting) {
-                document.getElementById('upload-modal')?.classList.remove('active');
-                document.body.style.overflow = 'auto';
-            }
+        const data = await this.apiPost("/api/report", {
+          target_type: this.state.reportTargetType,
+          target_id: this.state.reportTargetId,
+          reason,
+          details,
         });
-    },
-
-    setupGlobalLoader() {
-        const loader = document.getElementById('globalLoader');
-        const timeoutMsg = document.getElementById('loadingTimeoutMessage');
-        if (!loader) return;
-        const timeoutTimer = setTimeout(() => {
-            if (timeoutMsg) timeoutMsg.style.opacity = '1';
-        }, 5000);
-        const hideLoader = () => {
-            setTimeout(() => {
-                clearTimeout(timeoutTimer);
-                loader.classList.add('loader-hidden');
-            }, 350);
-        };
-        if (document.readyState === 'complete') hideLoader();
-        else window.addEventListener('load', hideLoader, { once: true });
-    },
-
-    setupActionDelegation() {
-        document.addEventListener('click', (event) => this.handleActionClick(event));
-        document.addEventListener('change', (event) => this.handleActionChange(event));
-        document.addEventListener('input', (event) => this.handleActionInput(event));
-        document.addEventListener('keydown', (event) => this.handleActionKeydown(event));
-        document.addEventListener('submit', (event) => this.handleActionSubmit(event));
-    },
-
-    actionTarget(event) {
-        return event.target?.closest?.('[data-action]') || null;
-    },
-
-    actionValue(target, key, fallback = '') {
-        return target?.dataset?.[key] ?? fallback;
-    },
-
-    actionBool(target, key, fallback = false) {
-        const value = target?.dataset?.[key];
-        if (value === undefined) return fallback;
-        return value === '1' || value === 'true' || value === '';
-    },
-
-    dispatchAction(event, handlers, options = {}) {
-        const target = this.actionTarget(event);
-        if (!target) return;
-        if (this.actionBool(target, 'self', false) && event.target !== target) return;
-
-        const action = this.actionValue(target, 'action');
-        const stop = this.actionBool(target, 'stop', false);
-        const prevent = this.actionBool(target, 'prevent', Boolean(options.prevent));
-        if (prevent) event.preventDefault();
-        if (stop) event.stopPropagation();
-
-        const handler = handlers[action];
-        if (handler) handler.call(this, target, event);
-    },
-
-    handleActionClick(event) {
-        this.dispatchAction(event, this.actions, { prevent: true });
-    },
-
-    handleActionChange(event) {
-        this.dispatchAction(event, this.changeActions);
-    },
-
-    handleActionInput(event) {
-        this.dispatchAction(event, this.inputActions);
-    },
-
-    handleActionKeydown(event) {
-        this.dispatchAction(event, this.keyActions);
-    },
-
-    handleActionSubmit(event) {
-        this.dispatchAction(event, this.submitActions, { prevent: true });
-    },
-
-    updateChatUnreadCount(count = this.state.chatUnreadCount) {
-        this.state.chatUnreadCount = Math.max(0, Number(count) || 0);
-        const badge = document.getElementById('chat-unread-badge');
-        if (!badge) return;
-        this.setText(badge, this.state.chatUnreadCount > 99 ? '99+' : String(this.state.chatUnreadCount));
-        badge.hidden = this.state.chatUnreadCount === 0;
-    },
-
-    renderChatMessages() {
-        const list = document.getElementById('chat-messages');
-        if (!list) return;
-        if (!this.state.chatMessages.length) {
-            this.setTemplateHtml(list, this.renderTemplate('partial-chat-empty'));
-            return;
-        }
-        const meId = this.state.me?.id || 'demo_me';
-        this.setTemplateHtml(list, this.state.chatMessages.map(message => this.renderTemplate('partial-chat-message', {
-            message,
-            isOwn: message.user_id === meId
-        })).join(''));
-        list.scrollTop = list.scrollHeight;
-    },
-
-    async fetchChatMessages(append = true) {
-        if (!this.state.me) return;
-        try {
-            const after = append && this.state.chatLastFetchedAt ? `?after=${encodeURIComponent(this.state.chatLastFetchedAt)}` : '';
-            const messages = await this.apiGet(`/api/chat/messages${after}`);
-            if (!Array.isArray(messages)) return;
-            if (!append) {
-                this.state.chatMessages = messages;
-            } else if (messages.length) {
-                const known = new Set(this.state.chatMessages.map(message => message.id));
-                const fresh = messages.filter(message => !known.has(message.id));
-                this.state.chatMessages = [...this.state.chatMessages, ...fresh].slice(-100);
-                const incomingCount = fresh.filter(message => message.user_id !== this.state.me.id).length;
-                if (!this.state.chatOpen && incomingCount > 0) {
-                    this.updateChatUnreadCount(this.state.chatUnreadCount + incomingCount);
-                }
-            }
-            const last = this.state.chatMessages[this.state.chatMessages.length - 1];
-            this.state.chatLastFetchedAt = last?.created_at || this.state.chatLastFetchedAt;
-            if (this.state.chatOpen) this.renderChatMessages();
-        } catch (e) {
-            console.error('Chat fetch failed');
-        }
-    },
-
-    startChatPolling() {
-        if (this.state.chatPollInterval) return;
-        this.fetchChatMessages(false);
-        this.state.chatPollInterval = setInterval(() => this.fetchChatMessages(true), 10000);
-    },
-
-    routeConfig(
-        path = window.location.pathname,
-        search = window.location.search,
-        hash = window.location.hash.replace('#', '') || null
-    ) {
-        const routes = [
-            { re: /^\/(gallery)?$/, page: 'gallery', load: () => this.loadGallery() },
-            { re: /^\/video\/([^\/]+)$/, page: 'watch', load: (m) => this.loadWatch(m[1]) },
-            { re: /^\/profile\/([^\/]+)$/, page: 'user', load: (m) => this.loadProfile(m[1], hash) },
-            { re: /^\/settings$/, page: 'settings', load: () => ({}) },
-            { re: /^\/auth$/, page: 'auth', load: () => ({}) }
-        ];
-        const match = routes.find(r => r.re.test(path)) || routes[0];
-        return { route: match, params: path.match(match.re), path, search, fullPath: `${path}${search}${window.location.hash || ''}` };
-    },
-
-    syncGalleryStateFromUrl(search = window.location.search) {
-        const params = new URLSearchParams(search);
-        this.state.searchQuery = params.get('q') || '';
-        this.state.activeTag = params.get('cat') || 'all';
-        this.state.searchSort = params.get('sort') || 'newest';
-    },
-
-    galleryPathFromState() {
-        const params = new URLSearchParams();
-        const query = this.state.searchQuery.trim();
-        const tag = this.state.activeTag || 'all';
-        const sort = this.state.searchSort || 'newest';
-        if (query) params.set('q', query);
-        if (tag !== 'all') params.set('cat', tag);
-        if (sort !== 'newest') params.set('sort', sort);
-        const queryString = params.toString();
-        return queryString ? `/gallery?${queryString}` : '/gallery';
-    },
-
-    updateGalleryUrl({ push = false } = {}) {
-        const path = this.galleryPathFromState();
-        if (`${window.location.pathname}${window.location.search}` !== path) {
-            if (push) history.pushState({}, '', path);
-            else history.replaceState({}, '', path);
-        }
-        this.route();
-    },
-
-    beforeRouteLeave(nextPage, nextPath) {
-        this.flushVideoAnalytics('route_change');
-        this.flushPageAnalytics('route_change');
-        this.cleanupRouteEffects(nextPage, nextPath);
-    },
-
-    cleanupRouteEffects(nextPage = '', nextPath = '') {
-        this.closeAllPanels();
-        this.state.replyParentId = null;
-        document.body.style.overflow = 'auto';
-
-        if (this.state.adInterval) clearInterval(this.state.adInterval);
-        this.state.adInterval = null;
-        document.getElementById('preroll')?.classList.remove('active');
-        document.getElementById('popunder')?.classList.remove('active');
-        document.getElementById('age-verification-overlay')?.classList.remove('active');
-        document.getElementById('edit-modal')?.classList.remove('active');
-        if (!this.state.uploadSubmitting) document.getElementById('upload-modal')?.classList.remove('active');
-        if (!this.state.reportSubmitting) document.getElementById('report-modal')?.classList.remove('active');
-
-        if (nextPage !== 'watch') {
-            this.currentWatch = null;
-            this.lastWatchedId = null;
-        }
-    },
-
-    async loadRouteData(route, params) {
-        return route.load ? await route.load(params) : {};
-    },
-
-    renderRoute(page, data) {
-        this.render(page, data);
-    },
-
-    afterRouteRender(page, data, path) {
-        window.scrollTo(0, 0);
-        this.updateScrollProgress();
-        this.trackPageView(page, path);
-    },
-
-    async route() {
-        const token = ++this.state.routeToken;
-        const { route, params, path, search, fullPath } = this.routeConfig();
-        if (route.page === 'gallery') this.syncGalleryStateFromUrl(search);
-
-        this.beforeRouteLeave(route.page, path);
-        this.activePage = route.page;
-        this.renderNavbar(this.activePage);
-        this.renderLoading(this.activePage);
-        const data = await this.loadRouteData(route, params);
-        if (token !== this.state.routeToken) return;
-
-        this.renderRoute(this.activePage, data);
-        this.afterRouteRender(this.activePage, data, fullPath);
-    },
-
-    async checkAuth() {
-        try {
-            const data = await this.apiGet('/api/me');
-            this.state.csrfToken = data?.csrf || '';
-            if (data && data.id && !data.error) {
-                const { csrf, ...user } = data;
-                this.state.me = user;
-            } else {
-                this.state.me = null;
-            }
-        } catch (e) { console.error("Auth check failed"); }
-    },
-
-    apiHeaders(extra = {}) {
-        return {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': this.state.csrfToken || '',
-            ...extra
-        };
-    },
-
-    navigateTo(path, push = true) {
-        if (!path) return;
-        if (push) history.pushState({}, '', path);
-        this.route();
-    },
-
-    async apiRequest(url, options = {}) {
-        const {
-            method = 'GET',
-            body = null,
-            headers = {},
-            keepalive = false,
-            raw = false
-        } = options;
-        const request = {
-            method,
-            headers: this.apiHeaders(headers),
-            keepalive
-        };
-        if (body !== null) request.body = typeof body === 'string' ? body : JSON.stringify(body);
-
-        const response = await fetch(url, request);
-        const text = await response.text();
-        let data = null;
-        if (text) {
-            try {
-                data = JSON.parse(text);
-            } catch (error) {
-                data = text;
-            }
-        }
-
-        if (!response.ok) {
-            const message = data?.error || data?.message || response.statusText || 'Request failed';
-            const error = new Error(message);
-            error.status = response.status;
-            error.data = data;
-            throw error;
-        }
-
-        return raw ? { data, response } : data;
-    },
-
-    apiGet(url, options = {}) {
-        return this.apiRequest(url, { ...options, method: 'GET' });
-    },
-
-    apiPost(url, body = {}, options = {}) {
-        return this.apiRequest(url, { ...options, method: 'POST', body });
-    },
-
-    jsString(value = '') {
-        return String(value ?? '')
-            .replace(/\\/g, '\\\\')
-            .replace(/'/g, "\\'")
-            .replace(/\r?\n/g, ' ')
-            .slice(0, 180);
-    },
-
-    escapeHtml(value = '') {
-        return String(value ?? '').replace(/[&<>"']/g, char => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        }[char]));
-    },
-
-    safeAttr(value = '') {
-        return this.escapeHtml(value).replace(/`/g, '&#096;');
-    },
-
-    safeUrl(value = '') {
-        const url = String(value ?? '').trim();
-        if (!url) return '';
-        if (/^(https?:)?\/\//i.test(url) || url.startsWith('/') || url.startsWith('#')) return this.safeAttr(url);
-        return '';
-    },
-
-    safeStyleUrl(value = '') {
-        const url = this.safeUrl(value);
-        if (!url) return '';
-        return `url('${url.replace(/'/g, '%27')}')`;
-    },
-
-    isTemplateHtmlKey(key = '') {
-        return /Html$/.test(key) || [
-            'items',
-            'cards',
-            'categoryPills',
-            'searchPanel',
-            'contentHtml',
-            'feedHtml',
-            'tagsHtml',
-            'leaderboardHtml',
-            'rowsHtml',
-            'playlistHtml',
-            'suggestionsHtml',
-            'formHtml',
-            'tabHtml',
-            'actionsHtml',
-            'avatarHtml',
-            'thumbnailHtml',
-            'viewToggleHtml',
-            'replyLineHtml',
-            'replyButtonHtml',
-            'replyBoxHtml',
-            'repliesHtml',
-            'activeOverlayHtml',
-            'commentFormHtml',
-            'labelHtml',
-            'coverInlineStyle',
-            'url',
-            'posterUrl',
-            'className'
-        ].includes(key);
-    },
-
-    templateContext(context = {}, rawKeys = new Set(), seen = new WeakMap()) {
-        if (!context || typeof context !== 'object') return context;
-        if (seen.has(context)) return seen.get(context);
-        const proxy = new Proxy(context, {
-            get: (target, key) => {
-                if (typeof key !== 'string') return target[key];
-                const value = target[key];
-                if (value == null) return value;
-                if (rawKeys.has(key) || this.isTemplateHtmlKey(key)) return value;
-                if (typeof value === 'string') return this.escapeHtml(value);
-                if (typeof value === 'object') return this.templateContext(value, new Set(), seen);
-                return value;
-            }
-        });
-        seen.set(context, proxy);
-        return proxy;
-    },
-
-    renderStaticTemplates() {
-        [
-            ['modal-age-verification-host', 'modal-age-verification'],
-            ['modal-preroll-host', 'modal-preroll'],
-            ['modal-popunder-host', 'modal-popunder'],
-            ['modal-edit-profile-host', 'modal-edit-profile'],
-            ['modal-upload-host', 'modal-upload'],
-            ['modal-report-host', 'modal-report'],
-            ['modal-chat-host', 'modal-chat'],
-        ].forEach(([hostId, templateName]) => {
-            const host = document.getElementById(hostId);
-            if (host && !host.dataset.rendered) {
-                const context = templateName === 'modal-upload' ? { tagsHtml: this.renderUploadTags() } : {};
-                this.setTemplateHtml(host, this.renderTemplate(templateName, context));
-                host.dataset.rendered = '1';
-            }
-        });
-    },
-
-    template(name) {
-        if (this.state.templateCache.has(name)) return this.state.templateCache.get(name);
-        const source = document.getElementById(`tpl-${name}`)?.innerHTML || '';
-        if (source) this.state.templateCache.set(name, source);
-        return source;
-    },
-
-    renderTemplate(name, context = {}) {
-        const source = this.template(name);
-        if (!source) return '';
-        try {
-            const safeContext = this.templateContext(context);
-            return Function('ctx', 'app', `with (ctx) { return \`${source}\`; }`)(safeContext, this).trim();
-        } catch (error) {
-            console.error(`Template render failed: ${name}`, error);
-            return '';
-        }
-    },
-
-    domTarget(target) {
-        if (!target) return null;
-        return typeof target === 'string' ? document.getElementById(target) : target;
-    },
-
-    setText(target, value = '') {
-        const element = this.domTarget(target);
-        if (!element) return;
-        element.textContent = value == null ? '' : String(value);
-    },
-
-    setTemplateHtml(target, html = '') {
-        const element = this.domTarget(target);
-        if (!element) return;
-        element.innerHTML = html == null ? '' : String(html);
-    },
-
-    appendTemplateHtml(target, html = '') {
-        const element = this.domTarget(target);
-        if (!element || !html) return;
-        element.insertAdjacentHTML('beforeend', String(html));
-    },
-
-    setElementLoading(button, isLoading, loadingHtml, idleHtml) {
-        if (!button) return;
-        button.disabled = Boolean(isLoading);
-        this.setTemplateHtml(button, isLoading ? loadingHtml : idleHtml);
-        button.style.opacity = isLoading ? '0.7' : '1';
-    },
-
-    setupAnalytics() {
-        this.state.analyticsSessionId = this.getAnalyticsSessionId();
-        window.addEventListener('beforeunload', () => {
-            this.flushVideoAnalytics('unload');
-            this.flushPageAnalytics('unload');
-        });
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                this.flushVideoAnalytics('hidden');
-                this.flushPageAnalytics('hidden');
-            } else if (this.state.currentRoute) {
-                this.state.currentPageStartedAt = Date.now();
-            }
-        });
-        document.addEventListener('click', (event) => this.trackClick(event), { passive: true });
-    },
-
-    getAnalyticsSessionId() {
-        const key = 'limevideo_analytics_session';
-        let sessionId = sessionStorage.getItem(key);
-        if (!sessionId) {
-            sessionId = window.crypto?.randomUUID ? window.crypto.randomUUID() : `sess_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-            sessionStorage.setItem(key, sessionId);
-        }
-        return sessionId;
-    },
-
-    analyticsBasePayload(eventType, extra = {}) {
-        return {
-            event_type: eventType,
-            session_id: this.state.analyticsSessionId,
-            page: this.activePage || '',
-            route: window.location.pathname + window.location.hash,
-            viewport: `${window.innerWidth}x${window.innerHeight}`,
-            referrer: document.referrer || '',
-            scroll_depth: this.getScrollDepth(),
-            ...extra
-        };
-    },
-
-    trackAnalytics(eventType, extra = {}, immediate = false) {
-        if (!this.state.analyticsSessionId) return;
-        const payload = JSON.stringify(this.analyticsBasePayload(eventType, extra));
-        const blob = new Blob([payload], { type: 'application/json' });
-        if (immediate && navigator.sendBeacon && navigator.sendBeacon('/api/analytics', blob)) return;
-        fetch('/api/analytics', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: payload,
-            keepalive: immediate
-        }).catch(() => {});
-    },
-
-    trackPageView(page, route) {
-        this.state.currentRoute = route;
-        this.state.currentPageStartedAt = Date.now();
-        this.state.currentPageMaxScroll = 0;
-        this.trackAnalytics('page_view', { page, route });
-    },
-
-    flushPageAnalytics(reason = 'flush') {
-        if (!this.state.currentRoute || !this.state.currentPageStartedAt) return;
-        const duration = Date.now() - this.state.currentPageStartedAt;
-        if (duration < 500) return;
-        this.trackAnalytics('page_duration', {
-            page: this.activePage || '',
-            route: this.state.currentRoute,
-            duration_ms: duration,
-            scroll_depth: this.state.currentPageMaxScroll,
-            metadata: { reason }
-        }, true);
-        this.state.currentPageStartedAt = Date.now();
-    },
-
-    getScrollDepth() {
-        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-        const depth = maxScroll > 0 ? Math.round((window.scrollY / maxScroll) * 100) : 0;
-        const bounded = Math.min(100, Math.max(0, depth));
-        this.state.currentPageMaxScroll = Math.max(this.state.currentPageMaxScroll || 0, bounded);
-        return bounded;
-    },
-
-    trackClick(event) {
-        const target = event.target.closest('button, a, .lime-card, .category-pill, .nav-link, .dropdown-item, .watch-playlist-item, .suggestion-card, .native-ad-card, .ad-banner-leaderboard');
-        if (!target) return;
-        const text = (target.textContent || target.getAttribute('aria-label') || target.className || '').replace(/\s+/g, ' ').trim().slice(0, 120);
-        this.trackAnalytics('interaction', {
-            target_type: target.tagName.toLowerCase(),
-            source: target.classList.contains('native-ad-card') || target.classList.contains('ad-banner-leaderboard') ? 'ad' : 'ui',
-            metadata: {
-                text,
-                classes: typeof target.className === 'string' ? target.className.slice(0, 180) : '',
-                action: target.getAttribute('data-action') || ''
-            }
-        });
-    },
-
-
-    async fetchTags() {
-        try {
-            const data = await this.apiGet('/api/tags');
-            const tags = Array.isArray(data) ? data.map(tag => (
-                typeof tag === 'string' ? { name: tag, slug: tag } : tag
-            )).filter(tag => tag && tag.slug) : [];
-            this.state.tags = [{ name: 'All', slug: 'all' }, ...tags];
-        } catch (e) { console.error("Tags fetch failed"); }
-    },
-
-    async fetchNotifications() {
-        try {
-            this.state.notifications = await this.apiGet('/api/notifications');
-            this.renderNavbar();
-        } catch (e) { console.error("Notifications fetch failed"); }
-    },
-
-    async fetchSettings() {
-        try {
-            const data = await this.apiGet('/api/settings');
-            if (!data.error) {
-                this.state.settings = data;
-                this.state.autoplay = Number(data.autoplay) === 1;
-            }
-        } catch (e) { console.error("Settings fetch failed"); }
-    },
-
-    async fetchAds() {
-        try {
-            this.state.ads = await this.apiGet('/api/ads');
-            this.syncStaticAds();
-        } catch (e) { this.state.ads = {}; }
-    },
-
-    syncStaticAds() {
-        const pop = this.state.ads.popunder;
-        if (pop) {
-            const modal = document.getElementById('popunder');
-            if (modal) {
-                const title = modal.querySelector('.pop-title');
-                const body = modal.querySelector('.pop-body');
-                const cta = modal.querySelector('.pop-cta');
-                this.setText(title, pop.label || 'Special Offer');
-                this.setText(body, pop.body || pop.title || '');
-                this.setText(cta, pop.cta_label || 'Check Now');
-            }
-        }
-        const pre = this.state.ads.preroll;
-        if (pre) {
-            const title = document.getElementById('preroll-title');
-            this.setText(title, pre.title || 'Sponsored Video');
-        }
-    },
-
-    async loadGallery() {
-        try {
-            const videos = await this.apiGet(`/api/search?q=${encodeURIComponent(this.state.searchQuery)}&cat=${encodeURIComponent(this.state.activeTag)}`);
-            this.state.videos = Array.isArray(videos) ? videos : [];
-            this.applySearchSort();
-            if (this.state.searchQuery || this.state.activeTag !== 'all') {
-                this.trackAnalytics('search', {
-                    search_query: this.state.searchQuery,
-                    category: this.state.activeTag,
-                    metadata: { results_count: this.state.videos.length, sort: this.state.searchSort }
-                });
-            }
-            return this.state.videos;
-        } catch (e) { return []; }
-    },
-
-    async loadProfile(id, tab = null) {
-        try {
-            const url = `/api/profile?id=${id}${tab ? `&tab=${tab}` : ''}`;
-            const data = await this.apiGet(url);
-            this.currentProfile = data;
-            return data;
-        } catch (e) { 
-            this.showStatus(e.message || 'Profile could not be loaded.', 'error');
-            this.navigateTo('/gallery');
-            return {};
-        }
-    },
-
-    async loadWatch(videoId) {
-        try {
-            const data = await this.apiGet(`/api/video?id=${videoId}`);
-            
-            this.lastWatchedId = videoId;
-            this.currentWatch = data;
-            this.trackAnalytics('video_detail_view', {
-                target_type: 'video',
-                target_id: videoId,
-                metadata: { title: data.title || '', storage_type: data.storage_type || '' }
-            });
-            if (this.state.videos.length === 0) {
-                await this.loadGallery();
-            }
-            return data;
-        } catch (e) {
-            this.showStatus(e.message || 'Video could not be loaded.', 'error');
-            this.navigateTo('/gallery');
-            return {}; 
-        }
-    },
-    
-    // We update render to call these side-effecty things after DOM is ready
-    afterRender(page, data) {
-        this.syncTemplateControls();
-        if (page === 'watch') {
-            this.fetchComments(data.id);
-            this.setupVideoAnalytics(data.id);
-            if (data.is_sensitive) {
-                document.getElementById('age-verification-overlay').classList.add('active');
-                document.body.style.overflow = 'hidden';
-            } else {
-                this.startPrerollAd();
-            }
-        }
-    },
-
-    syncTemplateControls() {
-        const searchSort = document.getElementById('search-sort-select');
-        if (searchSort) searchSort.value = this.state.searchSort;
-        document.querySelectorAll('[data-setting-field]').forEach(input => {
-            input.checked = input.dataset.checked === '1';
-        });
-    },
-
-    setupVideoAnalytics(videoId) {
-        const player = document.getElementById('main-player');
-        if (!player || !videoId) return;
-        this.state.activeVideoId = videoId;
-        this.state.videoWatchStartedAt = 0;
-        if (this.state.videoWatchInterval) clearInterval(this.state.videoWatchInterval);
-
-        const trackState = (eventType) => {
-            this.trackAnalytics(eventType, {
-                target_type: 'video',
-                target_id: videoId,
-                video_current_time: Number(player.currentTime || 0).toFixed(3),
-                video_duration: Number(player.duration || 0).toFixed(3),
-                metadata: { paused: player.paused, muted: player.muted, volume: player.volume }
-            });
-        };
-
-        player.addEventListener('play', () => {
-            this.state.videoWatchStartedAt = Date.now();
-            trackState('video_play');
-        });
-        player.addEventListener('pause', () => {
-            this.flushVideoAnalytics('pause');
-            trackState('video_pause');
-        });
-        player.addEventListener('ended', () => {
-            this.flushVideoAnalytics('ended');
-            trackState('video_complete');
-        });
-        player.addEventListener('seeked', () => trackState('video_seek'));
-
-        this.state.videoWatchInterval = setInterval(() => {
-            if (!player.paused && !player.ended) this.flushVideoAnalytics('heartbeat');
-        }, 10000);
-    },
-
-    flushVideoAnalytics(reason = 'flush') {
-        if (!this.state.activeVideoId) return;
-        if (!this.state.videoWatchStartedAt) {
-            if (reason === 'route_change' || reason === 'unload') {
-                if (this.state.videoWatchInterval) clearInterval(this.state.videoWatchInterval);
-                this.state.videoWatchInterval = null;
-                this.state.activeVideoId = null;
-            }
-            return;
-        }
-        const player = document.getElementById('main-player');
-        const watchedMs = Date.now() - this.state.videoWatchStartedAt;
-        if (watchedMs < 1000) return;
-        this.trackAnalytics('video_watch', {
-            target_type: 'video',
-            target_id: this.state.activeVideoId,
-            watch_time_ms: watchedMs,
-            video_current_time: player ? Number(player.currentTime || 0).toFixed(3) : null,
-            video_duration: player ? Number(player.duration || 0).toFixed(3) : null,
-            metadata: { reason }
-        }, reason === 'unload' || reason === 'hidden' || reason === 'route_change');
-        this.state.videoWatchStartedAt = Date.now();
-        if (reason === 'route_change' || reason === 'unload') {
-            if (this.state.videoWatchInterval) clearInterval(this.state.videoWatchInterval);
-            this.state.videoWatchInterval = null;
-            this.state.activeVideoId = null;
-            this.state.videoWatchStartedAt = 0;
-        }
-    },
-
-    async fetchComments(videoId, append = false) {
-        try {
-            const container = document.getElementById('comments-list');
-            if (!container) return;
-
-            const before = append ? container.dataset.last : '';
-            const comments = await this.apiGet(`/api/comments?video_id=${videoId}&before=${encodeURIComponent(before)}&sort=${this.state.commentSort}`);
-            const html = comments.map(c => this.renderComment(c)).join('');
-
-            if (append) {
-                this.appendTemplateHtml(container, html);
-            } else {
-                delete container.dataset.last;
-                this.setTemplateHtml(container, html || this.renderTemplate('partial-comments-empty'));
-            }
-
-            if (comments.length > 0) {
-                container.dataset.last = comments[comments.length - 1].created_at;
-            }
-            
-            const moreBtn = document.getElementById('load-more-comments');
-            if (moreBtn) moreBtn.style.display = comments.length >= 10 ? 'block' : 'none';
-        } catch (e) { console.error("Comments fetch failed"); }
-    },
-
-    renderComment(c, isReply = false) {
-        const replies = c.replies || [];
-        return this.renderTemplate('partial-comment', {
-            c,
-            isReply,
-            replyLineHtml: isReply ? this.renderTemplate('partial-comment-reply-line') : '',
-            replyButtonHtml: isReply ? '' : this.renderTemplate('partial-comment-reply-button', { c }),
-            repliesHtml: replies.length ? this.renderTemplate('partial-comment-replies', {
-                items: replies.map(r => this.renderComment(r, true)).join('')
-            }) : '',
-            replyBoxHtml: this.state.replyParentId === c.id ? this.renderTemplate('partial-comment-reply-box', { c }) : ''
-        });
-    },
-
-    applySearchSort() {
-        const videos = this.state.videos;
-        if (!Array.isArray(videos)) return;
-        const toNumber = (value) => Number(value || 0);
-        if (this.state.searchSort === 'popular') {
-            videos.sort((a, b) => toNumber(b.views) - toNumber(a.views));
-        } else if (this.state.searchSort === 'duration') {
-            videos.sort((a, b) => toNumber(b.duration) - toNumber(a.duration));
+        if (data.success) {
+          this.state.reportSubmitting = false;
+          document.getElementById("report-modal")?.classList.remove("active");
+          this.showStatus("Report submitted.");
         } else {
-            videos.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+          this.showStatus(data.error || "Report failed.", "error");
         }
-    },
-
-    showStatus(message, type = 'success') {
-        const toast = document.getElementById('status-toast');
-        const icon = document.getElementById('status-icon');
-        const msgSpan = document.getElementById('status-message');
-        toast.className = `status-toast active ${type}`;
-        this.setText(msgSpan, message);
-        icon.className = type === 'success' ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation';
-        clearTimeout(this.toastTimer);
-        this.toastTimer = setTimeout(() => toast.classList.remove('active'), 3000);
-    },
-
-    formatDuration(value) {
-        if (typeof value === 'string' && value.includes(':')) return value;
-        const total = Number(value) || 0;
-        const minutes = Math.floor(total / 60);
-        const seconds = total % 60;
-        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    },
-
-    thumbnailUrl(video = {}) {
-        return this.safeUrl(video.thumbnail_url || video.thumbnail_path || '');
-    },
-
-    renderThumbnail(video = {}, className = '') {
-        const url = this.thumbnailUrl(video);
-        return url ? this.renderTemplate('partial-thumbnail-img', { url, className }) : '';
-    },
-
-    async persistPreference(field, value) {
-        if (field === 'autoplay') {
-            this.writeStorage(this.storageKeys.guestAutoplay, Number(value) ? '1' : '0');
+      } catch (e) {
+        this.showStatus("Report failed.", "error");
+      } finally {
+        this.state.reportSubmitting = false;
+        if (submitBtn) {
+          this.setText(submitBtn, "Submit Report");
+          submitBtn.disabled =
+            !(reason && details.length >= 10) || this.state.reportSubmitting;
         }
-        if (this.state.me) await this.saveSettings({ [field]: value });
+      }
     },
-
-    async saveSettings(patch = {}) {
-        if (!this.state.me) return;
-        const current = this.state.settings || {};
-        const next = { ...current, ...patch };
-        try {
-            await this.apiPost('/api/settings', next);
-            this.state.settings = next;
-        } catch (e) { console.error("Settings save failed"); }
+    "toggle-chat"(target, event) {
+      const state = this.actionValue(target, "state", "toggle");
+      if (event) event.stopPropagation();
+      if (state === "close" || (state === "toggle" && this.state.chatOpen)) {
+        this.state.chatOpen = false;
+        document.getElementById("chat-modal")?.classList.remove("active");
+        this.state.chatPendingMessage = "";
+        document
+          .getElementById("chat-confirm-popup")
+          ?.classList.remove("active");
+        return;
+      }
+      if (!this.state.me) {
+        this.navigateTo("/auth");
+        return;
+      }
+      this.state.chatOpen = true;
+      this.updateChatUnreadCount(0);
+      const modal = document.getElementById("chat-modal");
+      if (modal) modal.classList.add("active");
+      this.fetchChatMessages(false);
+      setTimeout(() => document.getElementById("chat-input")?.focus(), 80);
     },
-
-    renderNavbar(page) {
-        const nav = document.getElementById('navbar-dynamic');
-        if (!nav) return;
-        const unreadCount = this.state.notifications.filter(i => this.isUnreadNotification(i)).length;
-        if (!this.state.me) {
-            this.setTemplateHtml(nav, this.renderTemplate('partial-navbar-guest', { page }));
-            return;
-        }
-        this.setTemplateHtml(nav, this.renderTemplate('partial-navbar-user', {
-            page,
-            unreadCount,
-            me: this.state.me,
-            notificationDotHtml: unreadCount > 0 ? this.renderTemplate('partial-notification-dot') : '',
-            chatUnreadCount: this.state.chatUnreadCount,
-            chatBadgeLabel: this.state.chatUnreadCount > 99 ? '99+' : this.state.chatUnreadCount,
-            chatBadgeHidden: this.state.chatUnreadCount === 0 ? 'hidden' : ''
-        }));
-        this.updateChatUnreadCount();
-    },
-
-    isUnreadNotification(notification) {
-        return !notification.read_at;
-    },
-
-    renderNotifications() {
-        const list = document.getElementById('notification-list');
-        if (!list) return;
-        if (this.state.notifications.length === 0) {
-            this.setTemplateHtml(list, this.renderTemplate('partial-notifications-empty'));
-            return;
-        }
-        this.setTemplateHtml(list, this.state.notifications.map(n => this.renderTemplate('partial-notification-item', { n })).join(''));
-    },
-
-    notificationIcon(type) {
-        if (type === 'FOLLOW') return 'fa-solid fa-user-plus';
-        if (type === 'NEW_COMMENT' || type === 'COMMENT_REPLY') return 'fa-solid fa-comment';
-        if (type === 'NEW_VIDEO') return 'fa-solid fa-play';
-        return 'fa-solid fa-bell';
-    },
-
-    closeAllDropdowns() { document.querySelectorAll('.nav-dropdown').forEach(d => d.classList.remove('active')); },
-    closeAllPanels() {
-        this.closeAllDropdowns();
-        const p = document.getElementById('notification-panel');
-        if (p) p.classList.remove('active');
-    },
-
-    startPrerollAd() {
-        if (this.state.settings && Number(this.state.settings.show_preroll_ads) !== 1) return;
-        const overlay = document.getElementById('preroll');
-        const timerText = document.getElementById('ad-timer');
-        const skipBtn = document.getElementById('skip-btn');
-        if (!overlay || !timerText || !skipBtn) return;
-        this.state.adTimer = 5;
-        this.setText(timerText, 'Video will start in 5 seconds...');
-        skipBtn.style.display = 'none';
-        overlay.classList.add('active');
-        if (this.state.adInterval) clearInterval(this.state.adInterval);
-        this.state.adInterval = setInterval(() => {
-            this.state.adTimer -= 1;
-            if (this.state.adTimer > 0) {
-                this.setText(timerText, `You can skip ad in ${this.state.adTimer} seconds...`);
-                return;
-            }
-            clearInterval(this.state.adInterval);
-            this.state.adInterval = null;
-            this.setText(timerText, 'Ad ready to skip.');
-            skipBtn.style.display = 'block';
-        }, 1000);
-    },
-
-    triggerPopunder() {
-        if (this.state.popunderTriggered) return;
-        if (this.state.settings && Number(this.state.settings.show_popunder_ads) !== 1) return;
-        const popunder = document.getElementById('popunder');
-        if (!popunder) return;
-        this.state.popunderTriggered = true;
-        setTimeout(() => popunder.classList.add('active'), 500);
-    },
-
-    renderVideoCard(v) {
-        return this.renderTemplate('partial-video-card', {
-            v,
-            thumbnailHtml: this.renderThumbnail(v, 'video-thumb-img')
-        });
-    },
-
-    renderNativeAdCard() {
-        const ad = this.state.ads.feed_native || {};
-        return this.renderTemplate('partial-native-ad-card', { ad });
-    },
-
-    renderLeaderboardAd() {
-        const ad = this.state.ads.leaderboard;
-        if (!ad) return '';
-        return this.renderTemplate('partial-leaderboard-ad', { ad });
-    },
-
-    renderSearchPanel(videos = []) {
-        const activeTag = this.state.tags.find(tag => tag.slug === this.state.activeTag);
-        const title = this.state.activeTag === 'all' ? 'Discover' : (activeTag?.name || this.state.activeTag);
-        const resultLabel = `${videos.length} result${videos.length === 1 ? '' : 's'} found`;
-        const categoryPills = this.state.tags.map(c => this.renderTemplate('partial-category-pill', {
-            c,
-            labelHtml: c.slug === 'all' ? this.renderTemplate('partial-category-all-label') : this.escapeHtml(c.name)
-        })).join('');
-        return this.renderTemplate('partial-search-panel', { title, resultLabel, categoryPills });
-    },
-
-    renderGalleryFeed(videos) {
-        return videos.map((video, index) => `${index === 4 ? this.renderNativeAdCard() : ''}${this.renderVideoCard(video)}`).join('');
-    },
-
-    renderUploadTags() {
-        return this.state.tags
-            .filter(tag => tag && tag.slug && tag.slug !== 'all')
-            .map(tag => this.renderTemplate('partial-upload-tag-pill', { tag }))
-            .join('');
-    },
-
-    resetUploadForm() {
-        const form = document.getElementById('upload-form');
-        if (form && !this.state.uploadSubmitting) form.reset();
-        this.state.uploadSource = 'external';
-        this.state.uploadSelectedTags = [];
-        this.actions['set-upload-source'].call(this, { dataset: { value: 'external' } });
-        document.querySelectorAll('.upload-tag-pill.selected').forEach(tag => tag.classList.remove('selected'));
-        this.setElementLoading(
-            document.getElementById('upload-submit-btn'),
-            false,
-            '',
-            '<i class="fa-solid fa-cloud-arrow-up"></i><span>Publish Video</span>'
-        );
-    },
-
-    async submitUploadForm() {
+    "toggle-upload"(target) {
+      const modal = document.getElementById("upload-modal");
+      const state = this.actionValue(target, "state", "toggle");
+      const shouldClose =
+        state === "close" ||
+        (state === "toggle" && modal?.classList.contains("active"));
+      if (shouldClose) {
         if (this.state.uploadSubmitting) return;
-        if (!this.state.me) {
-            this.navigateTo('/auth');
-            return;
-        }
-        if (this.state.uploadSource === 'local') {
-            this.showStatus('Local upload is not active yet. Use External Source.', 'error');
-            return;
-        }
-
-        const title = document.getElementById('upload-title')?.value.trim() || '';
-        const description = document.getElementById('upload-description')?.value.trim() || '';
-        const playbackUrl = document.getElementById('upload-playback-url')?.value.trim() || '';
-        const thumbnailUrl = document.getElementById('upload-thumbnail-url')?.value.trim() || '';
-        const duration = Number(document.getElementById('upload-duration')?.value || 0);
-        const status = document.querySelector('input[name="upload-visibility"]:checked')?.value || 'public';
-        const isSensitive = document.getElementById('upload-sensitive')?.checked ? 1 : 0;
-        const disableComments = document.getElementById('upload-disable-comments')?.checked ? 1 : 0;
-        const submitBtn = document.getElementById('upload-submit-btn');
-
-        if (!title || !playbackUrl) {
-            this.showStatus('Title and playback URL are required.', 'error');
-            return;
-        }
-
+        modal?.classList.remove("active");
+        document.body.style.overflow = "auto";
+        return;
+      }
+      if (!this.state.me) {
+        this.navigateTo("/auth");
+        return;
+      }
+      this.resetUploadForm();
+      modal?.classList.add("active");
+      document.body.style.overflow = "hidden";
+      setTimeout(() => document.getElementById("upload-title")?.focus(), 80);
+    },
+    "set-upload-source"(target) {
+      const source = this.actionValue(target, "value", "external");
+      this.state.uploadSource = source === "local" ? "local" : "external";
+      document.querySelectorAll(".upload-segment-btn").forEach((button) => {
+        button.classList.toggle(
+          "active",
+          this.actionValue(button, "value") === this.state.uploadSource,
+        );
+      });
+      document
+        .getElementById("upload-local-source")
+        ?.classList.toggle("hidden", this.state.uploadSource !== "local");
+      document
+        .getElementById("upload-external-source")
+        ?.classList.toggle("hidden", this.state.uploadSource !== "external");
+    },
+    "toggle-upload-tag"(target) {
+      const tag = this.actionValue(target, "value");
+      if (!tag) return;
+      if (this.state.uploadSelectedTags.includes(tag)) {
+        this.state.uploadSelectedTags = this.state.uploadSelectedTags.filter(
+          (item) => item !== tag,
+        );
+        target.classList.remove("selected");
+        return;
+      }
+      this.state.uploadSelectedTags = [
+        ...this.state.uploadSelectedTags,
+        tag,
+      ].slice(0, 8);
+      target.classList.add("selected");
+    },
+    async "toggle-notifications"(target, event) {
+      event.stopPropagation();
+      const panel = document.getElementById("notification-panel");
+      if (!panel) return;
+      panel.classList.toggle("active");
+      if (panel.classList.contains("active")) {
+        this.renderNotifications();
+        if (!this.state.me) return;
         try {
-            this.state.uploadSubmitting = true;
-            this.setElementLoading(
-                submitBtn,
-                true,
-                '<i class="fa-solid fa-circle-notch fa-spin"></i><span>Publishing...</span>',
-                ''
-            );
-            const data = await this.apiPost('/api/external_video', {
-                provider: 'manual_external',
-                title,
-                description,
-                playback_url: playbackUrl,
-                thumbnail_url: thumbnailUrl,
-                duration,
-                status,
-                is_sensitive: isSensitive,
-                disable_comments: disableComments,
-                tags: this.state.uploadSelectedTags
-            });
-            if (!data.success) {
-                this.showStatus(data.error || 'Video could not be published.', 'error');
-                return;
-            }
-            document.getElementById('upload-modal')?.classList.remove('active');
-            document.body.style.overflow = 'auto';
-            this.showStatus('Video published.');
-            this.navigateTo(`/video/${data.id}`);
+          await this.apiPost("/api/read_notifications");
+          this.state.notifications.forEach((n) => {
+            if (this.isUnreadNotification(n))
+              n.read_at = new Date().toISOString();
+          });
+          this.renderNavbar(this.activePage);
+          this.renderNotifications();
         } catch (e) {
-            this.showStatus(e.message || 'Video could not be published.', 'error');
-        } finally {
-            this.state.uploadSubmitting = false;
-            this.setElementLoading(
-                submitBtn,
-                false,
-                '',
-                '<i class="fa-solid fa-cloud-arrow-up"></i><span>Publish Video</span>'
+          console.error("Notification update failed");
+        }
+      }
+    },
+    "toggle-dropdown"(target, event) {
+      const value = this.actionValue(target, "value");
+      const type = this.actionValue(target, "type");
+      event.stopPropagation();
+      const dropdown = document.getElementById(`drop-${value || type}`);
+      if (!dropdown) return;
+      const isActive = dropdown.classList.contains("active");
+      this.closeAllPanels();
+      if (!isActive) dropdown.classList.add("active");
+    },
+    "queue-chat"() {
+      const input = document.getElementById("chat-input");
+      const value = input?.value.trim() || "";
+      if (!value) return;
+      this.state.chatPendingMessage = value;
+      document.getElementById("chat-confirm-popup")?.classList.add("active");
+    },
+    async "confirm-chat"() {
+      const body = this.state.chatPendingMessage.trim();
+      if (!body) {
+        this.state.chatPendingMessage = "";
+        document
+          .getElementById("chat-confirm-popup")
+          ?.classList.remove("active");
+        return;
+      }
+      try {
+        const data = await this.apiPost("/api/chat/messages", { body });
+        if (!data.success) {
+          this.showStatus(data.error || "Message could not be sent.", "error");
+          return;
+        }
+        const input = document.getElementById("chat-input");
+        if (input) input.value = "";
+        this.state.chatPendingMessage = "";
+        document
+          .getElementById("chat-confirm-popup")
+          ?.classList.remove("active");
+        const counter = document.getElementById("chat-char-count");
+        this.setText(counter, "0 / 500");
+        await this.fetchChatMessages(false);
+      } catch (e) {
+        this.showStatus("Message could not be sent.", "error");
+      }
+    },
+    "cancel-chat-confirm"() {
+      this.state.chatPendingMessage = "";
+      document.getElementById("chat-confirm-popup")?.classList.remove("active");
+    },
+    async "set-tag"(target) {
+      const value = this.actionValue(target, "value");
+      const id = this.actionValue(target, "id");
+      const tag = value || id;
+      this.state.activeTag = tag;
+      this.trackAnalytics("category_select", { category: tag });
+      this.updateGalleryUrl({ push: true });
+    },
+    "set-comment-sort"(target) {
+      const value = this.actionValue(target, "value");
+      this.state.commentSort = value;
+      this.fetchComments(this.lastWatchedId);
+    },
+    "set-profile-view"(target) {
+      const value = this.actionValue(target, "value");
+      this.state.profileView = value;
+      this.writeStorage(this.storageKeys.profileView, value);
+      this.trackAnalytics("profile_view_toggle", { metadata: { view: value } });
+      this.render(this.activePage, this.currentProfile);
+    },
+    async "save-video"(target) {
+      const id = this.actionValue(target, "id");
+      if (!this.state.me) {
+        this.showStatus("Please login to save videos!", "error");
+        return;
+      }
+      try {
+        this.trackAnalytics("video_save", {
+          target_type: "video",
+          target_id: id,
+        });
+        const data = await this.apiPost("/api/save", { video_id: id });
+        if (data.status === "saved") this.showStatus("Saved to profile!");
+        else if (data.status === "unsaved")
+          this.showStatus("Removed from profile.");
+        else this.showStatus(data.error || "Save failed.", "error");
+      } catch (e) {
+        this.showStatus("Save failed.", "error");
+      }
+    },
+    async "watch-later"(target) {
+      const id = this.actionValue(target, "id");
+      if (!this.state.me) {
+        this.showStatus("Please login first.", "error");
+        return;
+      }
+      try {
+        this.trackAnalytics("watch_later_toggle", {
+          target_type: "video",
+          target_id: id,
+        });
+        const data = await this.apiPost("/api/watch_later", { video_id: id });
+        this.showStatus(
+          data.status === "added"
+            ? "Added to Watch Later."
+            : "Removed from Watch Later.",
+        );
+      } catch (e) {
+        this.showStatus("Action failed.", "error");
+      }
+    },
+    async "follow-profile"(target) {
+      const id = this.actionValue(target, "id");
+      if (!this.state.me) {
+        this.showStatus("Please login to follow!", "error");
+        return;
+      }
+      try {
+        const data = await this.apiPost("/api/follow", { user_id: id });
+        if (data.status === "followed") this.showStatus("Followed.");
+        else this.showStatus("Unfollowed.");
+        if (this.activePage === "user") this.route();
+      } catch (e) {
+        this.showStatus("Action failed.", "error");
+      }
+    },
+    async "vote-video"(target) {
+      const value = this.actionValue(target, "value");
+      if (!this.state.me) {
+        this.showStatus("Please login to vote!", "error");
+        return;
+      }
+      try {
+        this.trackAnalytics("video_vote", {
+          target_type: "video",
+          target_id: this.lastWatchedId,
+          metadata: { vote_type: value },
+        });
+        await this.apiPost("/api/vote", {
+          target_id: this.lastWatchedId,
+          target_type: "video",
+          type: value,
+        });
+        this.route();
+      } catch (e) {
+        this.showStatus("Vote failed.", "error");
+      }
+    },
+    async "vote-comment"(target) {
+      const id = this.actionValue(target, "id");
+      const value = this.actionValue(target, "value");
+      if (!this.state.me) {
+        this.showStatus("Please login to vote!", "error");
+        return;
+      }
+      try {
+        this.trackAnalytics("comment_vote", {
+          target_type: "comment",
+          target_id: id,
+          metadata: { vote_type: value },
+        });
+        await this.apiPost("/api/vote", {
+          target_id: id,
+          target_type: "comment",
+          type: value,
+        });
+        await this.fetchComments(this.lastWatchedId);
+      } catch (e) {
+        this.showStatus("Vote failed.", "error");
+      }
+    },
+    async "add-comment"(target) {
+      const id = this.actionValue(target, "id");
+      const parentId = id || null;
+      if (
+        this.currentWatch &&
+        Number(this.currentWatch.disable_comments) === 1
+      ) {
+        this.showStatus("Comments are disabled for this video.", "error");
+        return;
+      }
+      const input = document.getElementById(
+        parentId ? `reply-text-${parentId}` : "comment-text",
+      );
+      if (!input || !input.value.trim()) return;
+      if (!this.state.me) {
+        this.showStatus("Please login to comment!", "error");
+        return;
+      }
+      try {
+        this.trackAnalytics(parentId ? "reply_submit" : "comment_submit", {
+          target_type: parentId ? "comment" : "video",
+          target_id: parentId || this.lastWatchedId,
+          metadata: { length: input.value.trim().length },
+        });
+        const data = await this.apiPost("/api/comment", {
+          video_id: this.lastWatchedId,
+          body: input.value.trim(),
+          parent_id: parentId,
+        });
+        if (data.success) {
+          input.value = "";
+          this.state.replyParentId = null;
+          if (this.currentWatch) {
+            this.currentWatch.comments_count =
+              Number(this.currentWatch.comments_count || 0) + 1;
+            const counter = document.getElementById("comments-count-label");
+            this.setText(
+              counter,
+              `Comments (${this.currentWatch.comments_count})`,
             );
+          }
+          await this.fetchComments(this.lastWatchedId);
+          this.showStatus(parentId ? "Reply added." : "Comment added.");
+        } else {
+          this.showStatus(data.error || "Comment failed.", "error");
         }
+      } catch (e) {
+        this.showStatus("Comment failed.", "error");
+      }
     },
-
-    renderProfileVideoGrid(videos = []) {
-        if (!videos.length) {
-            return this.renderTemplate('partial-empty-card', { message: 'No videos here yet.' });
+    "begin-reply"(target) {
+      const id = this.actionValue(target, "id");
+      this.state.replyParentId = id;
+      this.fetchComments(this.lastWatchedId);
+    },
+    "cancel-reply"() {
+      this.state.replyParentId = null;
+      this.fetchComments(this.lastWatchedId);
+    },
+    async login() {
+      const user = document.getElementById("login-user")?.value.trim();
+      const pass = document.getElementById("login-pass")?.value.trim();
+      if (!user || !pass) {
+        this.showStatus("Please fill all fields.", "error");
+        return;
+      }
+      try {
+        const data = await this.apiPost("/api/login", { user, pass });
+        if (data.csrf) this.state.csrfToken = data.csrf;
+        if (data.success) {
+          this.showStatus("Login successful.");
+          await this.checkAuth();
+          await this.fetchSettings();
+          await this.fetchNotifications();
+          this.startChatPolling();
+          this.navigateTo("/gallery");
+        } else {
+          this.showStatus(data.error || "Login failed.", "error");
         }
-        if (this.state.profileView === 'list') {
-            return this.renderTemplate('partial-profile-video-list', {
-                items: videos.map(v => this.renderTemplate('partial-profile-video-list-item', {
-                    v,
-                    thumbnailHtml: this.renderThumbnail(v, 'video-thumb-img')
-                })).join('')
-            });
+      } catch (e) {
+        this.showStatus("Server error.", "error");
+      }
+    },
+    async register() {
+      const user = document.getElementById("reg-user")?.value.trim();
+      const email = document.getElementById("reg-email")?.value.trim();
+      const pass = document.getElementById("reg-pass")?.value.trim();
+      const pass2 = document.getElementById("reg-pass2")?.value.trim();
+      if (!user || !email || !pass) {
+        this.showStatus("Please fill all fields.", "error");
+        return;
+      }
+      if (pass !== pass2) {
+        this.showStatus("Passwords do not match.", "error");
+        return;
+      }
+      try {
+        const data = await this.apiPost("/api/register", { user, email, pass });
+        if (data.success) {
+          this.showStatus("Register successful! You can login now.");
+          window.location.hash = "#login";
+        } else {
+          this.showStatus(data.error || "Register failed.", "error");
         }
-        return this.renderTemplate('partial-profile-video-grid', {
-            items: videos.map(v => this.renderTemplate('partial-profile-video-grid-item', {
-                v,
-                thumbnailHtml: this.renderThumbnail(v, 'video-thumb-img')
-            })).join('')
+      } catch (e) {
+        this.showStatus("Server error.", "error");
+      }
+    },
+    async logout() {
+      try {
+        await this.apiPost("/api/logout");
+        this.state.me = null;
+        this.state.settings = null;
+        this.state.notifications = [];
+        this.state.csrfToken = "";
+        this.state.chatMessages = [];
+        this.state.chatLastFetchedAt = "";
+        this.updateChatUnreadCount(0);
+        if (this.state.chatPollInterval)
+          clearInterval(this.state.chatPollInterval);
+        this.state.chatPollInterval = null;
+        this.state.chatOpen = false;
+        document.getElementById("chat-modal")?.classList.remove("active");
+        this.state.chatPendingMessage = "";
+        document
+          .getElementById("chat-confirm-popup")
+          ?.classList.remove("active");
+        this.navigateTo("/auth");
+        this.showStatus("Logged out.", "error");
+      } catch (e) {
+        console.error("Logout failed");
+      }
+    },
+    async "save-profile"() {
+      const payload = {
+        display_name:
+          document.getElementById("edit-display-name")?.value.trim() || "",
+        bio: document.getElementById("edit-bio")?.value.trim() || "",
+        avatar_url:
+          document.getElementById("edit-avatar-url")?.value.trim() || "",
+        cover_url:
+          document.getElementById("edit-cover-url")?.value.trim() || "",
+      };
+      try {
+        const data = await this.apiPost("/api/update_profile", payload);
+        if (data.success) {
+          document.getElementById("edit-modal")?.classList.remove("active");
+          this.showStatus("Profile updated.");
+          await this.checkAuth();
+          this.route();
+        } else {
+          this.showStatus(data.error || "Update failed.", "error");
+        }
+      } catch (e) {
+        this.showStatus("Server error.", "error");
+      }
+    },
+    "toggle-edit-profile"(target) {
+      const state = this.actionValue(target, "state", "toggle");
+      const modal = document.getElementById("edit-modal");
+      if (
+        state === "close" ||
+        (state === "toggle" && modal?.classList.contains("active"))
+      ) {
+        modal?.classList.remove("active");
+        return;
+      }
+      const display = document.getElementById("edit-display-name");
+      const bio = document.getElementById("edit-bio");
+      const avatar = document.getElementById("edit-avatar-url");
+      const cover = document.getElementById("edit-cover-url");
+      if (display)
+        display.value =
+          this.currentProfile?.display_name ||
+          this.state.me?.display_name ||
+          this.state.me?.username ||
+          "";
+      if (bio) bio.value = this.currentProfile?.bio || this.state.me?.bio || "";
+      if (avatar)
+        avatar.value =
+          this.currentProfile?.avatar_url || this.state.me?.avatar_url || "";
+      if (cover)
+        cover.value =
+          this.currentProfile?.cover_url || this.state.me?.cover_url || "";
+      if (modal) modal.classList.add("active");
+    },
+    "toggle-captcha"() {
+      const checkbox = document.getElementById("captcha-checkbox");
+      const icon = document.getElementById("captcha-check-icon");
+      const btn = document.getElementById("btn-enter-age");
+      const container = document.getElementById("captcha-trigger");
+      this.state.isCaptchaVerified = !this.state.isCaptchaVerified;
+      if (this.state.isCaptchaVerified) {
+        container.classList.add("captcha-active");
+        icon.classList.remove("hidden");
+        btn.classList.remove("age-btn-disabled");
+        btn.classList.add("age-btn-active");
+        btn.disabled = false;
+      } else {
+        container.classList.remove("captcha-active");
+        icon.classList.add("hidden");
+        btn.classList.add("age-btn-disabled");
+        btn.classList.remove("age-btn-active");
+        btn.disabled = true;
+      }
+    },
+    "toggle-age"() {
+      const overlay = document.getElementById("age-verification-overlay");
+      overlay.style.opacity = "0";
+      overlay.style.transition = "opacity 0.5s ease";
+      document.body.style.overflow = "auto";
+      setTimeout(() => {
+        overlay.classList.remove("active");
+        overlay.style.opacity = "1";
+        if (this.lastWatchedId) this.startPrerollAd();
+      }, 500);
+    },
+    "toggle-preroll"() {
+      if (this.state.adInterval) clearInterval(this.state.adInterval);
+      this.state.adInterval = null;
+      document.getElementById("preroll")?.classList.remove("active");
+      this.showStatus("Playing video...");
+    },
+    "toggle-popunder"(target, event) {
+      if (event) event.stopPropagation();
+      const state = this.actionValue(target, "state", "toggle");
+      const popunder = document.getElementById("popunder");
+      if (state === "open") popunder?.classList.add("active");
+      else if (state === "close") popunder?.classList.remove("active");
+      else popunder?.classList.toggle("active");
+    },
+    async "mark-notifications-read"() {
+      if (!this.state.me) return;
+      try {
+        await this.apiPost("/api/read_notifications");
+        this.state.notifications.forEach((n) => {
+          if (this.isUnreadNotification(n))
+            n.read_at = new Date().toISOString();
         });
+        this.renderNavbar(this.activePage);
+        this.renderNotifications();
+        this.showStatus("Notifications marked as read.");
+      } catch (e) {
+        this.showStatus("Notification update failed.", "error");
+      }
     },
-
-    renderProfileComments(comments = []) {
-        if (!comments.length) {
-            return this.renderTemplate('partial-empty-card', { message: 'No comments yet.' });
-        }
-        return this.renderTemplate('partial-profile-comments', {
-            items: comments.map(c => this.renderTemplate('partial-profile-comment-item', { c })).join('')
+    async "share-video"(target) {
+      const id = this.actionValue(target, "id");
+      const url = `${window.location.origin}/video/${id}`;
+      try {
+        this.trackAnalytics("video_share", {
+          target_type: "video",
+          target_id: id,
         });
-    },
-
-    renderProfileUsers(users = []) {
-        if (!users.length) {
-            return this.renderTemplate('partial-empty-card', { message: 'No users here yet.' });
+        if (navigator.share) {
+          await navigator.share({ title: "LimeVideo", url });
+        } else {
+          await navigator.clipboard.writeText(url);
+          this.showStatus("Video link copied.");
         }
-        return this.renderTemplate('partial-profile-users', {
-            items: users.map(u => this.renderTemplate('partial-profile-user-item', {
-                u,
-                avatarHtml: app.renderTemplate(u.avatar_url ? 'partial-avatar-img' : 'partial-avatar-user-icon', { url: app.safeUrl(u.avatar_url) })
-            })).join('')
-        });
+      } catch (e) {
+        this.showStatus("Share cancelled.", "error");
+      }
     },
-
-    settingRow(label, field, description) {
-        const value = this.state.settings ? Number(this.state.settings[field]) === 1 : true;
-        return this.renderTemplate('partial-setting-row', { label, field, description, value });
+    "share-profile"(target) {
+      const id = this.actionValue(target, "id");
+      const url = `${window.location.origin}/profile/${id}`;
+      navigator.clipboard?.writeText(url);
+      this.trackAnalytics("profile_share", {
+        target_type: "user",
+        target_id: id,
+      });
+      this.showStatus("Profile link copied.");
     },
+    async "toggle-autoplay"() {
+      this.state.autoplay = !this.state.autoplay;
+      await this.persistPreference("autoplay", this.state.autoplay ? 1 : 0);
+      const toggle = document.getElementById("autoplay-toggle");
+      const knob = document.getElementById("autoplay-knob");
+      if (toggle && knob) {
+        toggle.className = `w-9 h-5 rounded-full relative transition-colors ${this.state.autoplay ? "bg-[#00ff41]" : "bg-white/10"}`;
+        knob.className = `absolute top-1 w-3 h-3 rounded-full transition-all ${this.state.autoplay ? "right-1 bg-black" : "left-1 bg-gray-500"}`;
+      }
+      this.showStatus(
+        this.state.autoplay ? "Autoplay enabled." : "Autoplay disabled.",
+      );
+    },
+    "load-more-comments"(target) {
+      const id = this.actionValue(target, "id");
+      this.fetchComments(id, true);
+    },
+  },
 
-    renderProfileTab(u, activeTab) {
-        if (activeTab === '#saved') return this.renderProfileVideoGrid(u.saved || []);
-        if (activeTab === '#liked') return this.renderProfileVideoGrid(u.liked || []);
-        if (activeTab === '#comments') return this.renderProfileComments(u.comments || []);
-        if (activeTab === '#followers') return this.renderProfileUsers(u.followers || []);
-        if (activeTab === '#following') return this.renderProfileUsers(u.following || []);
-        if (activeTab === '#about') {
-            return this.renderTemplate('partial-profile-about', { u });
+  changeActions: {
+    "setting-toggle"(target) {
+      const field = this.actionValue(target, "field");
+      if (field === "autoplay") this.state.autoplay = target.checked;
+      this.persistPreference(field, target.checked ? 1 : 0);
+      this.showStatus("Settings updated.");
+    },
+    "report-reason"() {
+      const reason = document.getElementById("report-reason")?.value || "";
+      const details =
+        document.getElementById("report-details")?.value.trim() || "";
+      const submitBtn = document.getElementById("report-submit-btn");
+      if (submitBtn)
+        submitBtn.disabled =
+          !(reason && details.length >= 10) || this.state.reportSubmitting;
+    },
+    async "search-sort"(target) {
+      const sort = target.value;
+      this.state.searchSort = sort;
+      this.trackAnalytics("search_sort", { metadata: { sort } });
+      this.updateGalleryUrl({ push: false });
+    },
+  },
+
+  inputActions: {
+    "report-details"() {
+      const textarea = document.getElementById("report-details");
+      const counter = document.getElementById("report-char-count");
+      const warning = document.getElementById("report-warning");
+      const length = textarea?.value.trim().length || 0;
+      this.setText(counter, `${length} / 500`);
+      if (warning)
+        warning.style.opacity = length > 0 && length < 10 ? "1" : "0";
+      this.changeActions["report-reason"].call(this);
+    },
+    "chat-input"() {
+      const input = document.getElementById("chat-input");
+      const counter = document.getElementById("chat-char-count");
+      this.setText(counter, `${input?.value.length || 0} / 500`);
+    },
+    "search-input"(target) {
+      this.state.searchQuery = target.value;
+      clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(
+        () => this.updateGalleryUrl({ push: false }),
+        400,
+      );
+    },
+  },
+
+  keyActions: {
+    "chat-input"(target, event) {
+      const popup = document.getElementById("chat-confirm-popup");
+      const confirming = popup?.classList.contains("active");
+      if (confirming) {
+        if (event.key === "Enter" || event.key.toLowerCase() === "e") {
+          event.preventDefault();
+          this.actions["confirm-chat"].call(this);
         }
-        return this.renderProfileVideoGrid(u.videos || []);
-    },
-
-    renderWatchPlaylist(currentVideo = {}) {
-        const videos = this.state.videos.length ? this.state.videos : [currentVideo];
-        const currentIndex = Math.max(0, videos.findIndex(video => video.id === currentVideo.id));
-        return this.renderTemplate('partial-watch-playlist', {
-            currentVideo,
-            currentIndex,
-            total: videos.length,
-            items: videos.slice(0, 8).map(video => this.renderTemplate('partial-watch-playlist-item', {
-                video,
-                currentVideo,
-                thumbnailHtml: this.renderThumbnail(video, 'video-thumb-img'),
-                activeOverlayHtml: video.id === currentVideo.id ? this.renderTemplate('partial-watch-playlist-active-overlay') : ''
-            })).join('')
-        });
-    },
-
-    render(page, data) {
-        const root = document.getElementById('app-root');
-        if (!root) return;
-        switch (page) {
-            case 'auth': this.setTemplateHtml(root, this.pages.auth()); break;
-            case 'gallery': this.setTemplateHtml(root, this.pages.gallery(data)); break;
-            case 'watch': this.setTemplateHtml(root, this.pages.watch(data)); break;
-            case 'user': this.setTemplateHtml(root, this.pages.user(data)); break;
-            case 'settings': this.setTemplateHtml(root, this.pages.settings()); break;
+        if (event.key === "Escape" || event.key.toLowerCase() === "h") {
+          event.preventDefault();
+          this.actions["cancel-chat-confirm"].call(this);
         }
-        this.afterRender(page, data);
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        this.actions["queue-chat"].call(this);
+      }
     },
+  },
 
-    renderLoading(page) {
-        const root = document.getElementById('app-root');
-        if (!root) return;
-
-        const cardCount = page === 'gallery' ? 6 : 3;
-        this.setTemplateHtml(root, this.renderTemplate('partial-route-loading', {
-            page,
-            cards: Array.from({ length: cardCount }).map(() => this.renderTemplate('partial-skeleton-card')).join('')
-        }));
+  submitActions: {
+    "perform-search"(target, event) {
+      event.preventDefault();
+      this.updateGalleryUrl({ push: true });
     },
-
-    pages: {
-        auth: () => {
-            const activeTab = window.location.hash || '#login';
-            return app.renderTemplate('page-auth', {
-                activeTab,
-                formHtml: app.renderTemplate(activeTab === '#login' ? 'partial-auth-login-form' : 'partial-auth-register-form', { activeTab })
-            });
-        },
-
-        gallery: (videos = []) => app.renderTemplate('page-gallery', {
-            videos,
-            searchPanel: app.renderSearchPanel(videos),
-            contentHtml: videos.length === 0
-                ? app.renderTemplate('partial-gallery-empty')
-                : app.renderTemplate('partial-gallery-results', { feedHtml: app.renderGalleryFeed(videos), leaderboardHtml: app.renderLeaderboardAd() })
-        }),
-
-        settings: () => !app.state.me ? app.renderTemplate('page-settings-guest') : app.renderTemplate('page-settings', {
-            rowsHtml: [
-                app.settingRow('Autoplay', 'autoplay', 'Controls the watch page autoplay preference.'),
-                app.settingRow('Preroll Ads', 'show_preroll_ads', 'Show or hide the intro sponsor layer.'),
-                app.settingRow('Pop Offer', 'show_popunder_ads', 'Show or hide the small offer popup.'),
-                app.settingRow('Comment Notifications', 'notify_comments', 'Keep comment and reply notifications enabled.'),
-                app.settingRow('Follow Notifications', 'notify_follows', 'Keep follower notifications enabled.')
-            ].join('')
-        }),
-
-        watch: (v = {}) => {
-            const avatarHtml = app.renderTemplate(v.avatar_url ? 'partial-avatar-img' : 'partial-avatar-shield-icon', { url: app.safeUrl(v.avatar_url) });
-            const suggestionsHtml = app.state.videos
-                .filter(vi => vi.id !== v.id)
-                .slice(0, 4)
-                .map(vi => app.renderTemplate('partial-watch-suggestion-item', {
-                    vi,
-                    thumbnailHtml: app.renderThumbnail(vi, 'video-thumb-img')
-                }))
-                .join('');
-            return app.renderTemplate('page-watch', {
-                v,
-                avatarHtml,
-                posterUrl: app.thumbnailUrl(v),
-                commentFormHtml: Number(v.disable_comments) === 1
-                    ? app.renderTemplate('partial-comments-disabled')
-                    : app.renderTemplate('partial-comment-form'),
-                playlistHtml: app.renderWatchPlaylist(v),
-                suggestionsHtml,
-                sidebarAd: app.state.ads.watch_sidebar || {}
-            });
-        },
-
-        user: (u = {}) => {
-            const isOwn = (app.state.me && app.state.me.id === u.id);
-            const activeTab = window.location.hash || '#videos';
-            const displayName = u.display_name || u.username || 'Loading...';
-            const coverUrl = app.safeStyleUrl(u.cover_url);
-            const coverInlineStyle = coverUrl ? `background-image: linear-gradient(135deg, rgba(5,5,5,.35), rgba(19,19,19,.85)), ${coverUrl}; background-size: cover; background-position: center;` : '';
-            const avatarHtml = app.renderTemplate(u.avatar_url ? 'partial-avatar-img' : 'partial-avatar-profile-icon', { url: app.safeUrl(u.avatar_url) });
-            return app.renderTemplate('page-user', {
-                u,
-                isOwn,
-                activeTab,
-                displayName,
-                coverInlineStyle,
-                avatarHtml,
-                actionsHtml: app.renderTemplate(isOwn ? 'partial-profile-own-actions' : 'partial-profile-visitor-actions', { u }),
-                viewToggleHtml: ['#videos', '#saved', '#liked'].includes(activeTab) ? app.renderTemplate('partial-profile-view-toggle') : '',
-                tabHtml: app.renderProfileTab(u, activeTab)
-            });
-        }
+    async "submit-upload"(target, event) {
+      event.preventDefault();
+      await this.submitUploadForm();
     },
+  },
 
-    setupInfiniteScroll() {
-        window.addEventListener('scroll', () => this.updateScrollProgress(), { passive: true });
-        window.addEventListener('resize', () => this.updateScrollProgress());
-    },
-
-    updateScrollProgress() {
-        const loader = document.getElementById('scroll-loader');
-        if (!loader) return;
-
-        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-        const progress = maxScroll > 0 ? Math.min(100, (window.scrollY / maxScroll) * 100) : 0;
-        loader.style.width = `${progress}%`;
+  readStorage(key, fallback = null) {
+    try {
+      const value = localStorage.getItem(key);
+      return value === null ? fallback : value;
+    } catch (e) {
+      return fallback;
     }
+  },
+
+  writeStorage(key, value) {
+    try {
+      localStorage.setItem(key, String(value));
+    } catch (e) {
+      // Storage can be unavailable in private mode; state should still work in memory.
+    }
+  },
+
+  loadClientPreferences() {
+    const autoplay = this.readStorage(this.storageKeys.guestAutoplay);
+    const profileView = this.readStorage(this.storageKeys.profileView);
+    if (autoplay !== null) this.state.autoplay = autoplay === "1";
+    if (profileView === "grid" || profileView === "list")
+      this.state.profileView = profileView;
+  },
+
+  async init() {
+    this.setupGlobalLoader();
+    this.loadClientPreferences();
+    await this.checkAuth();
+    await this.fetchTags();
+    await this.fetchAds();
+    this.renderStaticTemplates();
+    if (this.state.me) await this.fetchSettings();
+    if (this.state.me) await this.fetchNotifications();
+    if (this.state.me) this.startChatPolling();
+
+    window.addEventListener("popstate", () => this.route());
+    window.addEventListener("hashchange", () => this.route());
+    this.setupAnalytics();
+    this.setupActionDelegation();
+    this.route();
+
+    this.setupInfiniteScroll();
+    window.addEventListener("click", (e) => {
+      if (
+        !e.target.closest(".nav-link") &&
+        !e.target.closest(".nav-dropdown") &&
+        !e.target.closest("#notification-panel")
+      ) {
+        this.closeAllPanels();
+      }
+    });
+    window.addEventListener("click", () => this.triggerPopunder(), {
+      passive: true,
+    });
+    window.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      if (this.state.chatOpen) {
+        this.state.chatOpen = false;
+        document.getElementById("chat-modal")?.classList.remove("active");
+        this.state.chatPendingMessage = "";
+        document
+          .getElementById("chat-confirm-popup")
+          ?.classList.remove("active");
+      }
+      if (!this.state.reportSubmitting) {
+        document.getElementById("report-modal")?.classList.remove("active");
+      }
+      if (!this.state.uploadSubmitting) {
+        document.getElementById("upload-modal")?.classList.remove("active");
+        document.body.style.overflow = "auto";
+      }
+    });
+  },
+
+  setupGlobalLoader() {
+    const loader = document.getElementById("globalLoader");
+    const timeoutMsg = document.getElementById("loadingTimeoutMessage");
+    if (!loader) return;
+    const timeoutTimer = setTimeout(() => {
+      if (timeoutMsg) timeoutMsg.style.opacity = "1";
+    }, 5000);
+    const hideLoader = () => {
+      setTimeout(() => {
+        clearTimeout(timeoutTimer);
+        loader.classList.add("loader-hidden");
+      }, 350);
+    };
+    if (document.readyState === "complete") hideLoader();
+    else window.addEventListener("load", hideLoader, { once: true });
+  },
+
+  setupActionDelegation() {
+    document.addEventListener("click", (event) =>
+      this.handleActionClick(event),
+    );
+    document.addEventListener("change", (event) =>
+      this.handleActionChange(event),
+    );
+    document.addEventListener("input", (event) =>
+      this.handleActionInput(event),
+    );
+    document.addEventListener("keydown", (event) =>
+      this.handleActionKeydown(event),
+    );
+    document.addEventListener("submit", (event) =>
+      this.handleActionSubmit(event),
+    );
+  },
+
+  actionTarget(event) {
+    return event.target?.closest?.("[data-action]") || null;
+  },
+
+  actionValue(target, key, fallback = "") {
+    return target?.dataset?.[key] ?? fallback;
+  },
+
+  actionBool(target, key, fallback = false) {
+    const value = target?.dataset?.[key];
+    if (value === undefined) return fallback;
+    return value === "1" || value === "true" || value === "";
+  },
+
+  dispatchAction(event, handlers, options = {}) {
+    const target = this.actionTarget(event);
+    if (!target) return;
+    if (this.actionBool(target, "self", false) && event.target !== target)
+      return;
+
+    const action = this.actionValue(target, "action");
+    const stop = this.actionBool(target, "stop", false);
+    const prevent = this.actionBool(
+      target,
+      "prevent",
+      Boolean(options.prevent),
+    );
+    if (prevent) event.preventDefault();
+    if (stop) event.stopPropagation();
+
+    const handler = handlers[action];
+    if (handler) handler.call(this, target, event);
+  },
+
+  handleActionClick(event) {
+    this.dispatchAction(event, this.actions, { prevent: true });
+  },
+
+  handleActionChange(event) {
+    this.dispatchAction(event, this.changeActions);
+  },
+
+  handleActionInput(event) {
+    this.dispatchAction(event, this.inputActions);
+  },
+
+  handleActionKeydown(event) {
+    this.dispatchAction(event, this.keyActions);
+  },
+
+  handleActionSubmit(event) {
+    this.dispatchAction(event, this.submitActions, { prevent: true });
+  },
+
+  updateChatUnreadCount(count = this.state.chatUnreadCount) {
+    this.state.chatUnreadCount = Math.max(0, Number(count) || 0);
+    const badge = document.getElementById("chat-unread-badge");
+    if (!badge) return;
+    this.setText(
+      badge,
+      this.state.chatUnreadCount > 99
+        ? "99+"
+        : String(this.state.chatUnreadCount),
+    );
+    badge.hidden = this.state.chatUnreadCount === 0;
+  },
+
+  renderChatMessages() {
+    const list = document.getElementById("chat-messages");
+    if (!list) return;
+    if (!this.state.chatMessages.length) {
+      this.setTemplateHtml(list, this.renderTemplate("partial-chat-empty"));
+      return;
+    }
+    const meId = this.state.me?.id || "demo_me";
+    this.setTemplateHtml(
+      list,
+      this.state.chatMessages
+        .map((message) =>
+          this.renderTemplate("partial-chat-message", {
+            message,
+            isOwn: message.user_id === meId,
+          }),
+        )
+        .join(""),
+    );
+    list.scrollTop = list.scrollHeight;
+  },
+
+  async fetchChatMessages(append = true) {
+    if (!this.state.me) return;
+    try {
+      const after =
+        append && this.state.chatLastFetchedAt
+          ? `?after=${encodeURIComponent(this.state.chatLastFetchedAt)}`
+          : "";
+      const messages = await this.apiGet(`/api/chat/messages${after}`);
+      if (!Array.isArray(messages)) return;
+      if (!append) {
+        this.state.chatMessages = messages;
+      } else if (messages.length) {
+        const known = new Set(
+          this.state.chatMessages.map((message) => message.id),
+        );
+        const fresh = messages.filter((message) => !known.has(message.id));
+        this.state.chatMessages = [...this.state.chatMessages, ...fresh].slice(
+          -100,
+        );
+        const incomingCount = fresh.filter(
+          (message) => message.user_id !== this.state.me.id,
+        ).length;
+        if (!this.state.chatOpen && incomingCount > 0) {
+          this.updateChatUnreadCount(
+            this.state.chatUnreadCount + incomingCount,
+          );
+        }
+      }
+      const last = this.state.chatMessages[this.state.chatMessages.length - 1];
+      this.state.chatLastFetchedAt =
+        last?.created_at || this.state.chatLastFetchedAt;
+      if (this.state.chatOpen) this.renderChatMessages();
+    } catch (e) {
+      console.error("Chat fetch failed");
+    }
+  },
+
+  startChatPolling() {
+    if (this.state.chatPollInterval) return;
+    this.fetchChatMessages(false);
+    this.state.chatPollInterval = setInterval(
+      () => this.fetchChatMessages(true),
+      10000,
+    );
+  },
+
+  routeConfig(
+    path = window.location.pathname,
+    search = window.location.search,
+    hash = window.location.hash.replace("#", "") || null,
+  ) {
+    const routes = [
+      { re: /^\/(gallery)?$/, page: "gallery", load: () => this.loadGallery() },
+      {
+        re: /^\/video\/([^\/]+)$/,
+        page: "watch",
+        load: (m) => this.loadWatch(m[1]),
+      },
+      {
+        re: /^\/profile\/([^\/]+)$/,
+        page: "user",
+        load: (m) => this.loadProfile(m[1], hash),
+      },
+      { re: /^\/settings$/, page: "settings", load: () => ({}) },
+      { re: /^\/auth$/, page: "auth", load: () => ({}) },
+    ];
+    const match = routes.find((r) => r.re.test(path)) || routes[0];
+    return {
+      route: match,
+      params: path.match(match.re),
+      path,
+      search,
+      fullPath: `${path}${search}${window.location.hash || ""}`,
+    };
+  },
+
+  syncGalleryStateFromUrl(search = window.location.search) {
+    const params = new URLSearchParams(search);
+    this.state.searchQuery = params.get("q") || "";
+    this.state.activeTag = params.get("cat") || "all";
+    this.state.searchSort = params.get("sort") || "newest";
+  },
+
+  galleryPathFromState() {
+    const params = new URLSearchParams();
+    const query = this.state.searchQuery.trim();
+    const tag = this.state.activeTag || "all";
+    const sort = this.state.searchSort || "newest";
+    if (query) params.set("q", query);
+    if (tag !== "all") params.set("cat", tag);
+    if (sort !== "newest") params.set("sort", sort);
+    const queryString = params.toString();
+    return queryString ? `/gallery?${queryString}` : "/gallery";
+  },
+
+  updateGalleryUrl({ push = false } = {}) {
+    const path = this.galleryPathFromState();
+    if (`${window.location.pathname}${window.location.search}` !== path) {
+      if (push) history.pushState({}, "", path);
+      else history.replaceState({}, "", path);
+    }
+    this.route();
+  },
+
+  beforeRouteLeave(nextPage, nextPath) {
+    this.flushVideoAnalytics("route_change");
+    this.flushPageAnalytics("route_change");
+    this.cleanupRouteEffects(nextPage, nextPath);
+  },
+
+  cleanupRouteEffects(nextPage = "", nextPath = "") {
+    this.closeAllPanels();
+    this.state.replyParentId = null;
+    document.body.style.overflow = "auto";
+
+    if (this.state.adInterval) clearInterval(this.state.adInterval);
+    this.state.adInterval = null;
+    document.getElementById("preroll")?.classList.remove("active");
+    document.getElementById("popunder")?.classList.remove("active");
+    document
+      .getElementById("age-verification-overlay")
+      ?.classList.remove("active");
+    document.getElementById("edit-modal")?.classList.remove("active");
+    if (!this.state.uploadSubmitting)
+      document.getElementById("upload-modal")?.classList.remove("active");
+    if (!this.state.reportSubmitting)
+      document.getElementById("report-modal")?.classList.remove("active");
+
+    if (nextPage !== "watch") {
+      this.currentWatch = null;
+      this.lastWatchedId = null;
+    }
+  },
+
+  async loadRouteData(route, params) {
+    return route.load ? await route.load(params) : {};
+  },
+
+  renderRoute(page, data) {
+    this.render(page, data);
+  },
+
+  afterRouteRender(page, data, path) {
+    window.scrollTo(0, 0);
+    this.updateScrollProgress();
+    this.trackPageView(page, path);
+  },
+
+  async route() {
+    const token = ++this.state.routeToken;
+    const { route, params, path, search, fullPath } = this.routeConfig();
+    if (route.page === "gallery") this.syncGalleryStateFromUrl(search);
+
+    this.beforeRouteLeave(route.page, path);
+    this.activePage = route.page;
+    this.renderNavbar(this.activePage);
+    this.renderLoading(this.activePage);
+    const data = await this.loadRouteData(route, params);
+    if (token !== this.state.routeToken) return;
+
+    this.renderRoute(this.activePage, data);
+    this.afterRouteRender(this.activePage, data, fullPath);
+  },
+
+  async checkAuth() {
+    try {
+      const data = await this.apiGet("/api/me");
+      this.state.csrfToken = data?.csrf || "";
+      if (data && data.id && !data.error) {
+        const { csrf, ...user } = data;
+        this.state.me = user;
+      } else {
+        this.state.me = null;
+      }
+    } catch (e) {
+      console.error("Auth check failed");
+    }
+  },
+
+  apiHeaders(extra = {}) {
+    return {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": this.state.csrfToken || "",
+      ...extra,
+    };
+  },
+
+  navigateTo(path, push = true) {
+    if (!path) return;
+    if (push) history.pushState({}, "", path);
+    this.route();
+  },
+
+  async apiRequest(url, options = {}) {
+    const {
+      method = "GET",
+      body = null,
+      headers = {},
+      keepalive = false,
+      raw = false,
+    } = options;
+    const request = {
+      method,
+      headers: this.apiHeaders(headers),
+      keepalive,
+    };
+    if (body !== null)
+      request.body = typeof body === "string" ? body : JSON.stringify(body);
+
+    const response = await fetch(url, request);
+    const text = await response.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (error) {
+        data = text;
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        data?.error || data?.message || response.statusText || "Request failed";
+      const error = new Error(message);
+      error.status = response.status;
+      error.data = data;
+      throw error;
+    }
+
+    return raw ? { data, response } : data;
+  },
+
+  apiGet(url, options = {}) {
+    return this.apiRequest(url, { ...options, method: "GET" });
+  },
+
+  apiPost(url, body = {}, options = {}) {
+    return this.apiRequest(url, { ...options, method: "POST", body });
+  },
+
+  jsString(value = "") {
+    return String(value ?? "")
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'")
+      .replace(/\r?\n/g, " ")
+      .slice(0, 180);
+  },
+
+  escapeHtml(value = "") {
+    return String(value ?? "").replace(
+      /[&<>"']/g,
+      (char) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;",
+        })[char],
+    );
+  },
+
+  safeAttr(value = "") {
+    return this.escapeHtml(value).replace(/`/g, "&#096;");
+  },
+
+  safeUrl(value = "") {
+    const url = String(value ?? "").trim();
+    if (!url) return "";
+    if (
+      /^(https?:)?\/\//i.test(url) ||
+      url.startsWith("/") ||
+      url.startsWith("#")
+    )
+      return this.safeAttr(url);
+    return "";
+  },
+
+  safeStyleUrl(value = "") {
+    const url = this.safeUrl(value);
+    if (!url) return "";
+    return `url('${url.replace(/'/g, "%27")}')`;
+  },
+
+  isTemplateHtmlKey(key = "") {
+    return (
+      /Html$/.test(key) ||
+      [
+        "items",
+        "cards",
+        "categoryPills",
+        "searchPanel",
+        "contentHtml",
+        "feedHtml",
+        "tagsHtml",
+        "leaderboardHtml",
+        "rowsHtml",
+        "playlistHtml",
+        "suggestionsHtml",
+        "formHtml",
+        "tabHtml",
+        "actionsHtml",
+        "avatarHtml",
+        "thumbnailHtml",
+        "viewToggleHtml",
+        "replyLineHtml",
+        "replyButtonHtml",
+        "replyBoxHtml",
+        "repliesHtml",
+        "activeOverlayHtml",
+        "commentFormHtml",
+        "labelHtml",
+        "coverInlineStyle",
+        "url",
+        "posterUrl",
+        "className",
+      ].includes(key)
+    );
+  },
+
+  templateContext(context = {}, rawKeys = new Set(), seen = new WeakMap()) {
+    if (!context || typeof context !== "object") return context;
+    if (seen.has(context)) return seen.get(context);
+    const proxy = new Proxy(context, {
+      get: (target, key) => {
+        if (typeof key !== "string") return target[key];
+        const value = target[key];
+        if (value == null) return value;
+        if (rawKeys.has(key) || this.isTemplateHtmlKey(key)) return value;
+        if (typeof value === "string") return this.escapeHtml(value);
+        if (typeof value === "object")
+          return this.templateContext(value, new Set(), seen);
+        return value;
+      },
+    });
+    seen.set(context, proxy);
+    return proxy;
+  },
+
+  renderStaticTemplates() {
+    [
+      ["modal-age-verification-host", "modal-age-verification"],
+      ["modal-preroll-host", "modal-preroll"],
+      ["modal-popunder-host", "modal-popunder"],
+      ["modal-edit-profile-host", "modal-edit-profile"],
+      ["modal-upload-host", "modal-upload"],
+      ["modal-report-host", "modal-report"],
+      ["modal-chat-host", "modal-chat"],
+    ].forEach(([hostId, templateName]) => {
+      const host = document.getElementById(hostId);
+      if (host && !host.dataset.rendered) {
+        const context =
+          templateName === "modal-upload"
+            ? { tagsHtml: this.renderUploadTags() }
+            : {};
+        this.setTemplateHtml(host, this.renderTemplate(templateName, context));
+        host.dataset.rendered = "1";
+      }
+    });
+  },
+
+  template(name) {
+    if (this.state.templateCache.has(name))
+      return this.state.templateCache.get(name);
+    const source = document.getElementById(`tpl-${name}`)?.innerHTML || "";
+    if (source) this.state.templateCache.set(name, source);
+    return source;
+  },
+
+  renderTemplate(name, context = {}) {
+    const source = this.template(name);
+    if (!source) return "";
+    try {
+      const safeContext = this.templateContext(context);
+      return Function(
+        "ctx",
+        "app",
+        `with (ctx) { return \`${source}\`; }`,
+      )(safeContext, this).trim();
+    } catch (error) {
+      console.error(`Template render failed: ${name}`, error);
+      return "";
+    }
+  },
+
+  domTarget(target) {
+    if (!target) return null;
+    return typeof target === "string"
+      ? document.getElementById(target)
+      : target;
+  },
+
+  setText(target, value = "") {
+    const element = this.domTarget(target);
+    if (!element) return;
+    element.textContent = value == null ? "" : String(value);
+  },
+
+  setTemplateHtml(target, html = "") {
+    const element = this.domTarget(target);
+    if (!element) return;
+    element.innerHTML = html == null ? "" : String(html);
+  },
+
+  appendTemplateHtml(target, html = "") {
+    const element = this.domTarget(target);
+    if (!element || !html) return;
+    element.insertAdjacentHTML("beforeend", String(html));
+  },
+
+  setElementLoading(button, isLoading, loadingHtml, idleHtml) {
+    if (!button) return;
+    button.disabled = Boolean(isLoading);
+    this.setTemplateHtml(button, isLoading ? loadingHtml : idleHtml);
+    button.style.opacity = isLoading ? "0.7" : "1";
+  },
+
+  setupAnalytics() {
+    this.state.analyticsSessionId = this.getAnalyticsSessionId();
+    window.addEventListener("beforeunload", () => {
+      this.flushVideoAnalytics("unload");
+      this.flushPageAnalytics("unload");
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        this.flushVideoAnalytics("hidden");
+        this.flushPageAnalytics("hidden");
+      } else if (this.state.currentRoute) {
+        this.state.currentPageStartedAt = Date.now();
+      }
+    });
+    document.addEventListener("click", (event) => this.trackClick(event), {
+      passive: true,
+    });
+  },
+
+  getAnalyticsSessionId() {
+    const key = "limevideo_analytics_session";
+    let sessionId = sessionStorage.getItem(key);
+    if (!sessionId) {
+      sessionId = window.crypto?.randomUUID
+        ? window.crypto.randomUUID()
+        : `sess_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      sessionStorage.setItem(key, sessionId);
+    }
+    return sessionId;
+  },
+
+  analyticsBasePayload(eventType, extra = {}) {
+    return {
+      event_type: eventType,
+      session_id: this.state.analyticsSessionId,
+      page: this.activePage || "",
+      route: window.location.pathname + window.location.hash,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      referrer: document.referrer || "",
+      scroll_depth: this.getScrollDepth(),
+      ...extra,
+    };
+  },
+
+  trackAnalytics(eventType, extra = {}, immediate = false) {
+    if (!this.state.analyticsSessionId) return;
+    const payload = JSON.stringify(this.analyticsBasePayload(eventType, extra));
+    const blob = new Blob([payload], { type: "application/json" });
+    if (
+      immediate &&
+      navigator.sendBeacon &&
+      navigator.sendBeacon("/api/analytics", blob)
+    )
+      return;
+    fetch("/api/analytics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+      keepalive: immediate,
+    }).catch(() => {});
+  },
+
+  trackPageView(page, route) {
+    this.state.currentRoute = route;
+    this.state.currentPageStartedAt = Date.now();
+    this.state.currentPageMaxScroll = 0;
+    this.trackAnalytics("page_view", { page, route });
+  },
+
+  flushPageAnalytics(reason = "flush") {
+    if (!this.state.currentRoute || !this.state.currentPageStartedAt) return;
+    const duration = Date.now() - this.state.currentPageStartedAt;
+    if (duration < 500) return;
+    this.trackAnalytics(
+      "page_duration",
+      {
+        page: this.activePage || "",
+        route: this.state.currentRoute,
+        duration_ms: duration,
+        scroll_depth: this.state.currentPageMaxScroll,
+        metadata: { reason },
+      },
+      true,
+    );
+    this.state.currentPageStartedAt = Date.now();
+  },
+
+  getScrollDepth() {
+    const maxScroll =
+      document.documentElement.scrollHeight - window.innerHeight;
+    const depth =
+      maxScroll > 0 ? Math.round((window.scrollY / maxScroll) * 100) : 0;
+    const bounded = Math.min(100, Math.max(0, depth));
+    this.state.currentPageMaxScroll = Math.max(
+      this.state.currentPageMaxScroll || 0,
+      bounded,
+    );
+    return bounded;
+  },
+
+  trackClick(event) {
+    const target = event.target.closest(
+      "button, a, .lime-card, .category-pill, .nav-link, .dropdown-item, .watch-playlist-item, .suggestion-card, .native-ad-card, .ad-banner-leaderboard",
+    );
+    if (!target) return;
+    const text = (
+      target.textContent ||
+      target.getAttribute("aria-label") ||
+      target.className ||
+      ""
+    )
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120);
+    this.trackAnalytics("interaction", {
+      target_type: target.tagName.toLowerCase(),
+      source:
+        target.classList.contains("native-ad-card") ||
+        target.classList.contains("ad-banner-leaderboard")
+          ? "ad"
+          : "ui",
+      metadata: {
+        text,
+        classes:
+          typeof target.className === "string"
+            ? target.className.slice(0, 180)
+            : "",
+        action: target.getAttribute("data-action") || "",
+      },
+    });
+  },
+
+  async fetchTags() {
+    try {
+      const data = await this.apiGet("/api/tags");
+      const tags = Array.isArray(data)
+        ? data
+            .map((tag) =>
+              typeof tag === "string" ? { name: tag, slug: tag } : tag,
+            )
+            .filter((tag) => tag && tag.slug)
+        : [];
+      this.state.tags = [{ name: "All", slug: "all" }, ...tags];
+    } catch (e) {
+      console.error("Tags fetch failed");
+    }
+  },
+
+  async fetchNotifications() {
+    try {
+      this.state.notifications = await this.apiGet("/api/notifications");
+      this.renderNavbar();
+    } catch (e) {
+      console.error("Notifications fetch failed");
+    }
+  },
+
+  async fetchSettings() {
+    try {
+      const data = await this.apiGet("/api/settings");
+      if (!data.error) {
+        this.state.settings = data;
+        this.state.autoplay = Number(data.autoplay) === 1;
+      }
+    } catch (e) {
+      console.error("Settings fetch failed");
+    }
+  },
+
+  async fetchAds() {
+    try {
+      this.state.ads = await this.apiGet("/api/ads");
+      this.syncStaticAds();
+    } catch (e) {
+      this.state.ads = {};
+    }
+  },
+
+  syncStaticAds() {
+    const pop = this.state.ads.popunder;
+    if (pop) {
+      const modal = document.getElementById("popunder");
+      if (modal) {
+        const title = modal.querySelector(".pop-title");
+        const body = modal.querySelector(".pop-body");
+        const cta = modal.querySelector(".pop-cta");
+        this.setText(title, pop.label || "Special Offer");
+        this.setText(body, pop.body || pop.title || "");
+        this.setText(cta, pop.cta_label || "Check Now");
+      }
+    }
+    const pre = this.state.ads.preroll;
+    if (pre) {
+      const title = document.getElementById("preroll-title");
+      this.setText(title, pre.title || "Sponsored Video");
+    }
+  },
+
+  async loadGallery() {
+    try {
+      const videos = await this.apiGet(
+        `/api/search?q=${encodeURIComponent(this.state.searchQuery)}&cat=${encodeURIComponent(this.state.activeTag)}`,
+      );
+      this.state.videos = Array.isArray(videos) ? videos : [];
+      this.applySearchSort();
+      if (this.state.searchQuery || this.state.activeTag !== "all") {
+        this.trackAnalytics("search", {
+          search_query: this.state.searchQuery,
+          category: this.state.activeTag,
+          metadata: {
+            results_count: this.state.videos.length,
+            sort: this.state.searchSort,
+          },
+        });
+      }
+      return this.state.videos;
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async loadProfile(id, tab = null) {
+    try {
+      const url = `/api/profile?id=${id}${tab ? `&tab=${tab}` : ""}`;
+      const data = await this.apiGet(url);
+      this.currentProfile = data;
+      return data;
+    } catch (e) {
+      this.showStatus(e.message || "Profile could not be loaded.", "error");
+      this.navigateTo("/gallery");
+      return {};
+    }
+  },
+
+  async loadWatch(videoId) {
+    try {
+      const data = await this.apiGet(`/api/video?id=${videoId}`);
+
+      this.lastWatchedId = videoId;
+      this.currentWatch = data;
+      this.trackAnalytics("video_detail_view", {
+        target_type: "video",
+        target_id: videoId,
+        metadata: {
+          title: data.title || "",
+          storage_type: data.storage_type || "",
+        },
+      });
+      if (this.state.videos.length === 0) {
+        await this.loadGallery();
+      }
+      return data;
+    } catch (e) {
+      this.showStatus(e.message || "Video could not be loaded.", "error");
+      this.navigateTo("/gallery");
+      return {};
+    }
+  },
+
+  // We update render to call these side-effecty things after DOM is ready
+  afterRender(page, data) {
+    this.syncTemplateControls();
+    if (page === "watch") {
+      this.fetchComments(data.id);
+      this.setupVideoAnalytics(data.id);
+      if (data.is_sensitive) {
+        document
+          .getElementById("age-verification-overlay")
+          .classList.add("active");
+        document.body.style.overflow = "hidden";
+      } else {
+        this.startPrerollAd();
+      }
+    }
+  },
+
+  syncTemplateControls() {
+    const searchSort = document.getElementById("search-sort-select");
+    if (searchSort) searchSort.value = this.state.searchSort;
+    document.querySelectorAll("[data-setting-field]").forEach((input) => {
+      input.checked = input.dataset.checked === "1";
+    });
+  },
+
+  setupVideoAnalytics(videoId) {
+    const player = document.getElementById("main-player");
+    if (!player || !videoId) return;
+    this.state.activeVideoId = videoId;
+    this.state.videoWatchStartedAt = 0;
+    if (this.state.videoWatchInterval)
+      clearInterval(this.state.videoWatchInterval);
+
+    const trackState = (eventType) => {
+      this.trackAnalytics(eventType, {
+        target_type: "video",
+        target_id: videoId,
+        video_current_time: Number(player.currentTime || 0).toFixed(3),
+        video_duration: Number(player.duration || 0).toFixed(3),
+        metadata: {
+          paused: player.paused,
+          muted: player.muted,
+          volume: player.volume,
+        },
+      });
+    };
+
+    player.addEventListener("play", () => {
+      this.state.videoWatchStartedAt = Date.now();
+      trackState("video_play");
+    });
+    player.addEventListener("pause", () => {
+      this.flushVideoAnalytics("pause");
+      trackState("video_pause");
+    });
+    player.addEventListener("ended", () => {
+      this.flushVideoAnalytics("ended");
+      trackState("video_complete");
+    });
+    player.addEventListener("seeked", () => trackState("video_seek"));
+
+    this.state.videoWatchInterval = setInterval(() => {
+      if (!player.paused && !player.ended)
+        this.flushVideoAnalytics("heartbeat");
+    }, 10000);
+  },
+
+  flushVideoAnalytics(reason = "flush") {
+    if (!this.state.activeVideoId) return;
+    if (!this.state.videoWatchStartedAt) {
+      if (reason === "route_change" || reason === "unload") {
+        if (this.state.videoWatchInterval)
+          clearInterval(this.state.videoWatchInterval);
+        this.state.videoWatchInterval = null;
+        this.state.activeVideoId = null;
+      }
+      return;
+    }
+    const player = document.getElementById("main-player");
+    const watchedMs = Date.now() - this.state.videoWatchStartedAt;
+    if (watchedMs < 1000) return;
+    this.trackAnalytics(
+      "video_watch",
+      {
+        target_type: "video",
+        target_id: this.state.activeVideoId,
+        watch_time_ms: watchedMs,
+        video_current_time: player
+          ? Number(player.currentTime || 0).toFixed(3)
+          : null,
+        video_duration: player ? Number(player.duration || 0).toFixed(3) : null,
+        metadata: { reason },
+      },
+      reason === "unload" || reason === "hidden" || reason === "route_change",
+    );
+    this.state.videoWatchStartedAt = Date.now();
+    if (reason === "route_change" || reason === "unload") {
+      if (this.state.videoWatchInterval)
+        clearInterval(this.state.videoWatchInterval);
+      this.state.videoWatchInterval = null;
+      this.state.activeVideoId = null;
+      this.state.videoWatchStartedAt = 0;
+    }
+  },
+
+  async fetchComments(videoId, append = false) {
+    try {
+      const container = document.getElementById("comments-list");
+      if (!container) return;
+
+      const before = append ? container.dataset.last : "";
+      const comments = await this.apiGet(
+        `/api/comments?video_id=${videoId}&before=${encodeURIComponent(before)}&sort=${this.state.commentSort}`,
+      );
+      const html = comments.map((c) => this.renderComment(c)).join("");
+
+      if (append) {
+        this.appendTemplateHtml(container, html);
+      } else {
+        delete container.dataset.last;
+        this.setTemplateHtml(
+          container,
+          html || this.renderTemplate("partial-comments-empty"),
+        );
+      }
+
+      if (comments.length > 0) {
+        container.dataset.last = comments[comments.length - 1].created_at;
+      }
+
+      const moreBtn = document.getElementById("load-more-comments");
+      if (moreBtn)
+        moreBtn.style.display = comments.length >= 10 ? "block" : "none";
+    } catch (e) {
+      console.error("Comments fetch failed");
+    }
+  },
+
+  renderComment(c, isReply = false) {
+    const replies = c.replies || [];
+    return this.renderTemplate("partial-comment", {
+      c,
+      isReply,
+      replyLineHtml: isReply
+        ? this.renderTemplate("partial-comment-reply-line")
+        : "",
+      replyButtonHtml: isReply
+        ? ""
+        : this.renderTemplate("partial-comment-reply-button", { c }),
+      repliesHtml: replies.length
+        ? this.renderTemplate("partial-comment-replies", {
+            items: replies.map((r) => this.renderComment(r, true)).join(""),
+          })
+        : "",
+      replyBoxHtml:
+        this.state.replyParentId === c.id
+          ? this.renderTemplate("partial-comment-reply-box", { c })
+          : "",
+    });
+  },
+
+  applySearchSort() {
+    const videos = this.state.videos;
+    if (!Array.isArray(videos)) return;
+    const toNumber = (value) => Number(value || 0);
+    if (this.state.searchSort === "popular") {
+      videos.sort((a, b) => toNumber(b.views) - toNumber(a.views));
+    } else if (this.state.searchSort === "duration") {
+      videos.sort((a, b) => toNumber(b.duration) - toNumber(a.duration));
+    } else {
+      videos.sort((a, b) =>
+        String(b.created_at || "").localeCompare(String(a.created_at || "")),
+      );
+    }
+  },
+
+  showStatus(message, type = "success") {
+    const toast = document.getElementById("status-toast");
+    const icon = document.getElementById("status-icon");
+    const msgSpan = document.getElementById("status-message");
+    toast.className = `status-toast active ${type}`;
+    this.setText(msgSpan, message);
+    icon.className =
+      type === "success"
+        ? "fa-solid fa-circle-check"
+        : "fa-solid fa-triangle-exclamation";
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => toast.classList.remove("active"), 3000);
+  },
+
+  formatDuration(value) {
+    if (typeof value === "string" && value.includes(":")) return value;
+    const total = Number(value) || 0;
+    const minutes = Math.floor(total / 60);
+    const seconds = total % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  },
+
+  thumbnailUrl(video = {}) {
+    return this.safeUrl(video.thumbnail_url || video.thumbnail_path || "");
+  },
+
+  renderThumbnail(video = {}, className = "") {
+    const url = this.thumbnailUrl(video);
+    return url
+      ? this.renderTemplate("partial-thumbnail-img", { url, className })
+      : "";
+  },
+
+  async persistPreference(field, value) {
+    if (field === "autoplay") {
+      this.writeStorage(
+        this.storageKeys.guestAutoplay,
+        Number(value) ? "1" : "0",
+      );
+    }
+    if (this.state.me) await this.saveSettings({ [field]: value });
+  },
+
+  async saveSettings(patch = {}) {
+    if (!this.state.me) return;
+    const current = this.state.settings || {};
+    const next = { ...current, ...patch };
+    try {
+      await this.apiPost("/api/settings", next);
+      this.state.settings = next;
+    } catch (e) {
+      console.error("Settings save failed");
+    }
+  },
+
+  renderNavbar(page) {
+    const nav = document.getElementById("navbar-dynamic");
+    if (!nav) return;
+    const unreadCount = this.state.notifications.filter((i) =>
+      this.isUnreadNotification(i),
+    ).length;
+    if (!this.state.me) {
+      this.setTemplateHtml(
+        nav,
+        this.renderTemplate("partial-navbar-guest", { page }),
+      );
+      return;
+    }
+    this.setTemplateHtml(
+      nav,
+      this.renderTemplate("partial-navbar-user", {
+        page,
+        unreadCount,
+        me: this.state.me,
+        notificationDotHtml:
+          unreadCount > 0
+            ? this.renderTemplate("partial-notification-dot")
+            : "",
+        chatUnreadCount: this.state.chatUnreadCount,
+        chatBadgeLabel:
+          this.state.chatUnreadCount > 99 ? "99+" : this.state.chatUnreadCount,
+        chatBadgeHidden: this.state.chatUnreadCount === 0 ? "hidden" : "",
+      }),
+    );
+    this.updateChatUnreadCount();
+  },
+
+  isUnreadNotification(notification) {
+    return !notification.read_at;
+  },
+
+  renderNotifications() {
+    const list = document.getElementById("notification-list");
+    if (!list) return;
+    if (this.state.notifications.length === 0) {
+      this.setTemplateHtml(
+        list,
+        this.renderTemplate("partial-notifications-empty"),
+      );
+      return;
+    }
+    this.setTemplateHtml(
+      list,
+      this.state.notifications
+        .map((n) => this.renderTemplate("partial-notification-item", { n }))
+        .join(""),
+    );
+  },
+
+  notificationIcon(type) {
+    if (type === "FOLLOW") return "fa-solid fa-user-plus";
+    if (type === "NEW_COMMENT" || type === "COMMENT_REPLY")
+      return "fa-solid fa-comment";
+    if (type === "NEW_VIDEO") return "fa-solid fa-play";
+    return "fa-solid fa-bell";
+  },
+
+  closeAllDropdowns() {
+    document
+      .querySelectorAll(".nav-dropdown")
+      .forEach((d) => d.classList.remove("active"));
+  },
+  closeAllPanels() {
+    this.closeAllDropdowns();
+    const p = document.getElementById("notification-panel");
+    if (p) p.classList.remove("active");
+  },
+
+  startPrerollAd() {
+    if (
+      this.state.settings &&
+      Number(this.state.settings.show_preroll_ads) !== 1
+    )
+      return;
+    const overlay = document.getElementById("preroll");
+    const timerText = document.getElementById("ad-timer");
+    const skipBtn = document.getElementById("skip-btn");
+    if (!overlay || !timerText || !skipBtn) return;
+    this.state.adTimer = 5;
+    this.setText(timerText, "Video will start in 5 seconds...");
+    skipBtn.style.display = "none";
+    overlay.classList.add("active");
+    if (this.state.adInterval) clearInterval(this.state.adInterval);
+    this.state.adInterval = setInterval(() => {
+      this.state.adTimer -= 1;
+      if (this.state.adTimer > 0) {
+        this.setText(
+          timerText,
+          `You can skip ad in ${this.state.adTimer} seconds...`,
+        );
+        return;
+      }
+      clearInterval(this.state.adInterval);
+      this.state.adInterval = null;
+      this.setText(timerText, "Ad ready to skip.");
+      skipBtn.style.display = "block";
+    }, 1000);
+  },
+
+  triggerPopunder() {
+    if (this.state.popunderTriggered) return;
+    if (
+      this.state.settings &&
+      Number(this.state.settings.show_popunder_ads) !== 1
+    )
+      return;
+    const popunder = document.getElementById("popunder");
+    if (!popunder) return;
+    this.state.popunderTriggered = true;
+    setTimeout(() => popunder.classList.add("active"), 500);
+  },
+
+  renderVideoCard(v) {
+    return this.renderTemplate("partial-video-card", {
+      v,
+      thumbnailHtml: this.renderThumbnail(v, "video-thumb-img"),
+    });
+  },
+
+  renderNativeAdCard() {
+    const ad = this.state.ads.feed_native || {};
+    return this.renderTemplate("partial-native-ad-card", { ad });
+  },
+
+  renderLeaderboardAd() {
+    const ad = this.state.ads.leaderboard;
+    if (!ad) return "";
+    return this.renderTemplate("partial-leaderboard-ad", { ad });
+  },
+
+  renderSearchPanel(videos = []) {
+    const activeTag = this.state.tags.find(
+      (tag) => tag.slug === this.state.activeTag,
+    );
+    const title =
+      this.state.activeTag === "all"
+        ? "Discover"
+        : activeTag?.name || this.state.activeTag;
+    const resultLabel = `${videos.length} result${videos.length === 1 ? "" : "s"} found`;
+    const categoryPills = this.state.tags
+      .map((c) =>
+        this.renderTemplate("partial-category-pill", {
+          c,
+          labelHtml:
+            c.slug === "all"
+              ? this.renderTemplate("partial-category-all-label")
+              : this.escapeHtml(c.name),
+        }),
+      )
+      .join("");
+    return this.renderTemplate("partial-search-panel", {
+      title,
+      resultLabel,
+      categoryPills,
+    });
+  },
+
+  renderGalleryFeed(videos) {
+    return videos
+      .map(
+        (video, index) =>
+          `${index === 4 ? this.renderNativeAdCard() : ""}${this.renderVideoCard(video)}`,
+      )
+      .join("");
+  },
+
+  renderUploadTags() {
+    return this.state.tags
+      .filter((tag) => tag && tag.slug && tag.slug !== "all")
+      .map((tag) => this.renderTemplate("partial-upload-tag-pill", { tag }))
+      .join("");
+  },
+
+  resetUploadForm() {
+    const form = document.getElementById("upload-form");
+    if (form && !this.state.uploadSubmitting) form.reset();
+    this.state.uploadSource = "external";
+    this.state.uploadSelectedTags = [];
+    this.actions["set-upload-source"].call(this, {
+      dataset: { value: "external" },
+    });
+    document
+      .querySelectorAll(".upload-tag-pill.selected")
+      .forEach((tag) => tag.classList.remove("selected"));
+    this.setElementLoading(
+      document.getElementById("upload-submit-btn"),
+      false,
+      "",
+      '<i class="fa-solid fa-cloud-arrow-up"></i><span>Publish Video</span>',
+    );
+  },
+
+  async submitUploadForm() {
+    if (this.state.uploadSubmitting) return;
+    if (!this.state.me) {
+      this.navigateTo("/auth");
+      return;
+    }
+    if (this.state.uploadSource === "local") {
+      this.showStatus(
+        "Local upload is not active yet. Use External Source.",
+        "error",
+      );
+      return;
+    }
+
+    const title = document.getElementById("upload-title")?.value.trim() || "";
+    const description =
+      document.getElementById("upload-description")?.value.trim() || "";
+    const playbackUrl =
+      document.getElementById("upload-playback-url")?.value.trim() || "";
+    const thumbnailUrl =
+      document.getElementById("upload-thumbnail-url")?.value.trim() || "";
+    const duration = Number(
+      document.getElementById("upload-duration")?.value || 0,
+    );
+    const status =
+      document.querySelector('input[name="upload-visibility"]:checked')
+        ?.value || "public";
+    const isSensitive = document.getElementById("upload-sensitive")?.checked
+      ? 1
+      : 0;
+    const disableComments = document.getElementById("upload-disable-comments")
+      ?.checked
+      ? 1
+      : 0;
+    const submitBtn = document.getElementById("upload-submit-btn");
+
+    if (!title || !playbackUrl) {
+      this.showStatus("Title and playback URL are required.", "error");
+      return;
+    }
+
+    try {
+      this.state.uploadSubmitting = true;
+      this.setElementLoading(
+        submitBtn,
+        true,
+        '<i class="fa-solid fa-circle-notch fa-spin"></i><span>Publishing...</span>',
+        "",
+      );
+      const data = await this.apiPost("/api/external_video", {
+        provider: "manual_external",
+        title,
+        description,
+        playback_url: playbackUrl,
+        thumbnail_url: thumbnailUrl,
+        duration,
+        status,
+        is_sensitive: isSensitive,
+        disable_comments: disableComments,
+        tags: this.state.uploadSelectedTags,
+      });
+      if (!data.success) {
+        this.showStatus(data.error || "Video could not be published.", "error");
+        return;
+      }
+      document.getElementById("upload-modal")?.classList.remove("active");
+      document.body.style.overflow = "auto";
+      this.showStatus("Video published.");
+      this.navigateTo(`/video/${data.id}`);
+    } catch (e) {
+      this.showStatus(e.message || "Video could not be published.", "error");
+    } finally {
+      this.state.uploadSubmitting = false;
+      this.setElementLoading(
+        submitBtn,
+        false,
+        "",
+        '<i class="fa-solid fa-cloud-arrow-up"></i><span>Publish Video</span>',
+      );
+    }
+  },
+
+  renderProfileVideoGrid(videos = []) {
+    if (!videos.length) {
+      return this.renderTemplate("partial-empty-card", {
+        message: "No videos here yet.",
+      });
+    }
+    if (this.state.profileView === "list") {
+      return this.renderTemplate("partial-profile-video-list", {
+        items: videos
+          .map((v) =>
+            this.renderTemplate("partial-profile-video-list-item", {
+              v,
+              thumbnailHtml: this.renderThumbnail(v, "video-thumb-img"),
+            }),
+          )
+          .join(""),
+      });
+    }
+    return this.renderTemplate("partial-profile-video-grid", {
+      items: videos
+        .map((v) =>
+          this.renderTemplate("partial-profile-video-grid-item", {
+            v,
+            thumbnailHtml: this.renderThumbnail(v, "video-thumb-img"),
+          }),
+        )
+        .join(""),
+    });
+  },
+
+  renderProfileComments(comments = []) {
+    if (!comments.length) {
+      return this.renderTemplate("partial-empty-card", {
+        message: "No comments yet.",
+      });
+    }
+    return this.renderTemplate("partial-profile-comments", {
+      items: comments
+        .map((c) => this.renderTemplate("partial-profile-comment-item", { c }))
+        .join(""),
+    });
+  },
+
+  renderProfileUsers(users = []) {
+    if (!users.length) {
+      return this.renderTemplate("partial-empty-card", {
+        message: "No users here yet.",
+      });
+    }
+    return this.renderTemplate("partial-profile-users", {
+      items: users
+        .map((u) =>
+          this.renderTemplate("partial-profile-user-item", {
+            u,
+            avatarHtml: app.renderTemplate(
+              u.avatar_url ? "partial-avatar-img" : "partial-avatar-user-icon",
+              { url: app.safeUrl(u.avatar_url) },
+            ),
+          }),
+        )
+        .join(""),
+    });
+  },
+
+  settingRow(label, field, description) {
+    const value = this.state.settings
+      ? Number(this.state.settings[field]) === 1
+      : true;
+    return this.renderTemplate("partial-setting-row", {
+      label,
+      field,
+      description,
+      value,
+    });
+  },
+
+  renderProfileTab(u, activeTab) {
+    if (activeTab === "#saved")
+      return this.renderProfileVideoGrid(u.saved || []);
+    if (activeTab === "#liked")
+      return this.renderProfileVideoGrid(u.liked || []);
+    if (activeTab === "#comments")
+      return this.renderProfileComments(u.comments || []);
+    if (activeTab === "#followers")
+      return this.renderProfileUsers(u.followers || []);
+    if (activeTab === "#following")
+      return this.renderProfileUsers(u.following || []);
+    if (activeTab === "#about") {
+      return this.renderTemplate("partial-profile-about", { u });
+    }
+    return this.renderProfileVideoGrid(u.videos || []);
+  },
+
+  renderWatchPlaylist(currentVideo = {}) {
+    const videos = this.state.videos.length
+      ? this.state.videos
+      : [currentVideo];
+    const currentIndex = Math.max(
+      0,
+      videos.findIndex((video) => video.id === currentVideo.id),
+    );
+    return this.renderTemplate("partial-watch-playlist", {
+      currentVideo,
+      currentIndex,
+      total: videos.length,
+      items: videos
+        .slice(0, 8)
+        .map((video) =>
+          this.renderTemplate("partial-watch-playlist-item", {
+            video,
+            currentVideo,
+            thumbnailHtml: this.renderThumbnail(video, "video-thumb-img"),
+            activeOverlayHtml:
+              video.id === currentVideo.id
+                ? this.renderTemplate("partial-watch-playlist-active-overlay")
+                : "",
+          }),
+        )
+        .join(""),
+    });
+  },
+
+  render(page, data) {
+    const root = document.getElementById("app-root");
+    if (!root) return;
+    switch (page) {
+      case "auth":
+        this.setTemplateHtml(root, this.pages.auth());
+        break;
+      case "gallery":
+        this.setTemplateHtml(root, this.pages.gallery(data));
+        break;
+      case "watch":
+        this.setTemplateHtml(root, this.pages.watch(data));
+        break;
+      case "user":
+        this.setTemplateHtml(root, this.pages.user(data));
+        break;
+      case "settings":
+        this.setTemplateHtml(root, this.pages.settings());
+        break;
+    }
+    this.afterRender(page, data);
+  },
+
+  renderLoading(page) {
+    const root = document.getElementById("app-root");
+    if (!root) return;
+
+    const cardCount = page === "gallery" ? 6 : 3;
+    this.setTemplateHtml(
+      root,
+      this.renderTemplate("partial-route-loading", {
+        page,
+        cards: Array.from({ length: cardCount })
+          .map(() => this.renderTemplate("partial-skeleton-card"))
+          .join(""),
+      }),
+    );
+  },
+
+  pages: {
+    auth: () => {
+      const activeTab = window.location.hash || "#login";
+      return app.renderTemplate("page-auth", {
+        activeTab,
+        formHtml: app.renderTemplate(
+          activeTab === "#login"
+            ? "partial-auth-login-form"
+            : "partial-auth-register-form",
+          { activeTab },
+        ),
+      });
+    },
+
+    gallery: (videos = []) =>
+      app.renderTemplate("page-gallery", {
+        videos,
+        searchPanel: app.renderSearchPanel(videos),
+        contentHtml:
+          videos.length === 0
+            ? app.renderTemplate("partial-gallery-empty")
+            : app.renderTemplate("partial-gallery-results", {
+                feedHtml: app.renderGalleryFeed(videos),
+                leaderboardHtml: app.renderLeaderboardAd(),
+              }),
+      }),
+
+    settings: () =>
+      !app.state.me
+        ? app.renderTemplate("page-settings-guest")
+        : app.renderTemplate("page-settings", {
+            rowsHtml: [
+              app.settingRow(
+                "Autoplay",
+                "autoplay",
+                "Controls the watch page autoplay preference.",
+              ),
+              app.settingRow(
+                "Preroll Ads",
+                "show_preroll_ads",
+                "Show or hide the intro sponsor layer.",
+              ),
+              app.settingRow(
+                "Pop Offer",
+                "show_popunder_ads",
+                "Show or hide the small offer popup.",
+              ),
+              app.settingRow(
+                "Comment Notifications",
+                "notify_comments",
+                "Keep comment and reply notifications enabled.",
+              ),
+              app.settingRow(
+                "Follow Notifications",
+                "notify_follows",
+                "Keep follower notifications enabled.",
+              ),
+            ].join(""),
+          }),
+
+    watch: (v = {}) => {
+      const avatarHtml = app.renderTemplate(
+        v.avatar_url ? "partial-avatar-img" : "partial-avatar-shield-icon",
+        { url: app.safeUrl(v.avatar_url) },
+      );
+      const suggestionsHtml = app.state.videos
+        .filter((vi) => vi.id !== v.id)
+        .slice(0, 4)
+        .map((vi) =>
+          app.renderTemplate("partial-watch-suggestion-item", {
+            vi,
+            thumbnailHtml: app.renderThumbnail(vi, "video-thumb-img"),
+          }),
+        )
+        .join("");
+      return app.renderTemplate("page-watch", {
+        v,
+        avatarHtml,
+        posterUrl: app.thumbnailUrl(v),
+        commentFormHtml:
+          Number(v.disable_comments) === 1
+            ? app.renderTemplate("partial-comments-disabled")
+            : app.renderTemplate("partial-comment-form"),
+        playlistHtml: app.renderWatchPlaylist(v),
+        suggestionsHtml,
+        sidebarAd: app.state.ads.watch_sidebar || {},
+      });
+    },
+
+    user: (u = {}) => {
+      const isOwn = app.state.me && app.state.me.id === u.id;
+      const activeTab = window.location.hash || "#videos";
+      const displayName = u.display_name || u.username || "Loading...";
+      const coverUrl = app.safeStyleUrl(u.cover_url);
+      const coverInlineStyle = coverUrl
+        ? `background-image: linear-gradient(135deg, rgba(5,5,5,.35), rgba(19,19,19,.85)), ${coverUrl}; background-size: cover; background-position: center;`
+        : "";
+      const avatarHtml = app.renderTemplate(
+        u.avatar_url ? "partial-avatar-img" : "partial-avatar-profile-icon",
+        { url: app.safeUrl(u.avatar_url) },
+      );
+      return app.renderTemplate("page-user", {
+        u,
+        isOwn,
+        activeTab,
+        displayName,
+        coverInlineStyle,
+        avatarHtml,
+        actionsHtml: app.renderTemplate(
+          isOwn
+            ? "partial-profile-own-actions"
+            : "partial-profile-visitor-actions",
+          { u },
+        ),
+        viewToggleHtml: ["#videos", "#saved", "#liked"].includes(activeTab)
+          ? app.renderTemplate("partial-profile-view-toggle")
+          : "",
+        tabHtml: app.renderProfileTab(u, activeTab),
+      });
+    },
+  },
+
+  setupInfiniteScroll() {
+    window.addEventListener("scroll", () => this.updateScrollProgress(), {
+      passive: true,
+    });
+    window.addEventListener("resize", () => this.updateScrollProgress());
+  },
+
+  updateScrollProgress() {
+    const loader = document.getElementById("scroll-loader");
+    if (!loader) return;
+
+    const maxScroll =
+      document.documentElement.scrollHeight - window.innerHeight;
+    const progress =
+      maxScroll > 0 ? Math.min(100, (window.scrollY / maxScroll) * 100) : 0;
+    loader.style.width = `${progress}%`;
+  },
 };
 
 window.onload = () => app.init();
