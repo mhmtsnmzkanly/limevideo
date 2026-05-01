@@ -2,10 +2,11 @@
 declare(strict_types=1);
 
 /**
- * LIMEVIDEO PLATFORM - HEADLESS API ENGINE (v2.3)
- * -----------------------------------------
- * Veritabanı verileri ve istatistikler için akıllı önbellekleme sistemi eklendi.
- * Veri güncellendiğinde ilgili önbellek otomatik temizlenir.
+ * LimeVideo Monolith
+ * ------------------
+ * Tek dosyalı PHP API ve SPA shell giriş noktasıdır.
+ * API, kimlik doğrulama, cache, moderation, analytics, cron queue ve video
+ * oynatma meta verisini aynı monolit içinde yönetir.
  */
 
 final class LimeVideo
@@ -160,8 +161,9 @@ final class LimeVideo
     }
 
     /**
-     * Get configuration value by flat key
-     * Example: cfg("DB_HOST") instead of cfg("db.host")
+     * Düz config anahtarını okur.
+     * Input: $key config adı, $default bulunamazsa dönecek değer.
+     * Output: config değeri veya default değer.
      */
     public function cfg(string $key, mixed $default = null): mixed
     {
@@ -209,7 +211,7 @@ final class LimeVideo
             ltrim($path, "/");
     }
 
-    // --- GÜVENLİK & CACHE ARAÇLARI ---
+    // --- Security, rate limit and cache helpers ---
 
     public function checkRateLimit(string $key, int $limit, int $period): void
     {
@@ -235,7 +237,9 @@ final class LimeVideo
     }
 
     /**
-     * Cache Yönetimi: Veriyi dosyada saklar.
+     * Cache anahtarını dosya adına güvenli hale getirir.
+     * Input: raw cache key.
+     * Output: dosya adı içinde kullanılabilir kısa key.
      */
     private function cacheSafeKey(string $key): string
     {
@@ -494,7 +498,6 @@ final class LimeVideo
     public function errorResponse(\Throwable $exception, int $code = 500): void
     {
         if ((bool) $this->cfg("DEV_MODE")) {
-            // DEV MODE: Detaylı hata mesajı göster
             $data = [
                 "error" => $exception->getMessage(),
                 "code" => $code,
@@ -512,10 +515,9 @@ final class LimeVideo
                     }, $exception->getTrace()),
                     0,
                     5,
-                ), // İlk 5 frame
+                ),
             ];
         } else {
-            // PRODUCTION: Genel hata mesajı göster
             $data = [
                 "error" => match ($code) {
                     400 => "Bad Request",
@@ -574,8 +576,7 @@ final class LimeVideo
     public function fetch(string $name): mixed
     {
         return match ($name) {
-            // Kategoriler (tags tablosundan)
-            // Etiketler / Kategoriler (tags tablosundan)
+            // UI kategori/etiket seçicileri için aktif tag listesi.
             "tags" => $this->remember("portal_tags_v2", 3600, function () {
                 return $this->db()
                     ->query("SELECT name, slug FROM tags ORDER BY name ASC")
@@ -589,10 +590,12 @@ final class LimeVideo
         };
     }
 
-    // --- DATA & API API ---
+    // --- Read-side API helpers ---
 
     /**
-     * Önbellek destekli kullanıcı çekme
+     * Kullanıcı profil temel verisini cache destekli getirir.
+     * Input: $id kullanıcı id.
+     * Output: kullanıcı satırı veya null.
      */
     public function getUser(string $id): ?array
     {
@@ -621,12 +624,14 @@ final class LimeVideo
     }
 
     /**
-     * Önbellek destekli istatistikler
+     * Ana sayfa/global sayaçları cache destekli hesaplar.
+     * Input: yok.
+     * Output: kullanıcı, video ve izlenme sayıları.
      */
     public function getStats(): array
     {
         $cacheKey = "global_stats";
-        $stats = $this->cacheGet($cacheKey, 300); // 5 dk önbellek
+        $stats = $this->cacheGet($cacheKey, 300);
         if ($stats) {
             return $stats;
         }
@@ -698,7 +703,7 @@ final class LimeVideo
         };
     }
 
-    // --- MUTATION API (Önbelleği temizleyenler) ---
+    // --- Mutation helpers and cache invalidation ---
 
     private function notificationAllowed(string $userId, string $type): bool
     {
@@ -736,7 +741,7 @@ final class LimeVideo
             return;
         }
 
-        // SPAM KONTROLÜ: Son 24 saat içinde aynı aktörden aynı tipte bildirim var mı?
+        // Aynı aktörden gelen aynı tip bildirimleri kısa vadede tekilleştir.
         if ($actorId) {
             $stmt = $this->db()->prepare(
                 "SELECT 1 FROM notifications WHERE user_id = ? AND actor_user_id = ? AND type = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 DAY) LIMIT 1",
@@ -744,7 +749,7 @@ final class LimeVideo
             $stmt->execute([$userId, $actorId, $type]);
             if ($stmt->fetch()) {
                 return;
-            } // Zaten bildirim gitmiş, sessizce çık.
+            }
         }
 
         $stmt = $this->db()->prepare(
@@ -1328,7 +1333,7 @@ final class LimeVideo
         );
         $stmt->execute([$uid, $targetType, $targetId, $type]);
 
-        // İlgili önbellekleri temizle
+        // Oy değişimi yorum/profil türevlerini etkiler.
         if ($targetType === "comment" && $commentVideoId) {
             $this->cacheDeletePrefix("comments_" . $commentVideoId . "_");
         }
@@ -1378,9 +1383,8 @@ final class LimeVideo
         );
         $stmt->execute([$cid, $uid, $videoId, $parentId, strip_tags($body)]);
 
-        // BİLDİRİM MANTIĞI
+        // Yorum ve yanıt bildirimlerini ilgili kullanıcıya ilet.
         if ($parentId) {
-            // Yanıt: Üst yorumun sahibine bildir
             $pStmt = $this->db()->prepare(
                 "SELECT user_id FROM comments WHERE id = ? LIMIT 1",
             );
@@ -1399,7 +1403,6 @@ final class LimeVideo
                 );
             }
         } else {
-            // Yeni Yorum: Video sahibine bildir
             $vStmt = $this->db()->prepare(
                 "SELECT user_id, title FROM videos WHERE id = ? LIMIT 1",
             );
@@ -1418,7 +1421,7 @@ final class LimeVideo
             }
         }
 
-        // Önbellek temizle
+        // Yeni yorum sayısı ve profil yorum listeleri cache dışına alınır.
         $this->cacheDeletePrefix("comments_" . $videoId . "_");
         $this->cacheDeletePrefix("profile_");
         $this->jsonResponse(["success" => true, "id" => $cid]);
@@ -1524,7 +1527,9 @@ final class LimeVideo
     }
 
     /**
-     * Önbellek destekli yorum çekme (Zaman Bazlı Sayfalama)
+     * Video yorumlarını zaman bazlı sayfalama ve kısa TTL cache ile getirir.
+     * Input: video id, önceki sayfa tarihi, sıralama tipi.
+     * Output: JSON yorum listesi.
      */
     public function getComments(
         string $videoId,
@@ -1683,7 +1688,7 @@ final class LimeVideo
             array_merge($video, $dynamicStmt->fetch() ?: []),
         );
 
-        // Log VIEW action
+        // İzleme aksiyonunu activity log içinde takip et.
         $this->logActivity(
             "USER_ACTION",
             "VIEW_VIDEO",
@@ -2181,7 +2186,7 @@ final class LimeVideo
                 )
                 ->execute([$followerId, $targetUserId]);
 
-            // Bildirim Oluştur
+            // Takip edilen kullanıcıya takip bildirimi gönder.
             $this->createNotification(
                 $targetUserId,
                 "FOLLOW",
@@ -2884,7 +2889,7 @@ final class LimeVideo
                 "csrf" => $_SESSION["csrf_token"],
             ]);
         } else {
-            // LOGIN_FAILED Loglama
+            // Başarısız giriş denemesini audit için kaydet.
             $this->logActivity(
                 "LOGIN_ATTEMPT",
                 "LOGIN_FAILED",
@@ -2948,7 +2953,7 @@ final class LimeVideo
     }
 }
 
-// 3. API ROUTER
+// --- Runtime bootstrap and API router ---
 $App = new LimeVideo();
 ini_set("session.use_strict_mode", "1");
 session_set_cookie_params([
@@ -3104,12 +3109,14 @@ if (strpos($uri, "/api/") === 0) {
         };
     } catch (Throwable $e) {
         error_log("LimeVideo API error: " . $e->getMessage());
+        if ((bool) $App->cfg("DEV_MODE")) {
+            $App->errorResponse($e, 500);
+        }
         $App->jsonResponse(["error" => "Server error"], 500);
     }
 }
 
-// --- FRONTEND SHELL (PATH-BASED ROUTING) ---
-// API değilse, her zaman index.html shell'ini ver.
-// SPA kendi içinde URL'e göre hangi sayfayı render edeceğini seçecek.
+// --- SPA shell fallback ---
+// API dışındaki tüm path'ler index.html'e düşer; route kararını frontend verir.
 include "index.html";
 exit();
