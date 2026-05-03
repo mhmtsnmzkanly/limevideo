@@ -309,9 +309,12 @@ final class LimeVideo
             "data" => $data,
         ]);
 
-        if (file_put_contents($tmp, $payload, LOCK_EX) !== false) {
+        if (file_put_contents($tmp, $payload) !== false) {
             if (!@rename($tmp, $file)) {
                 @unlink($tmp);
+                if ((bool) $this->cfg("DEV_MODE")) {
+                    error_log("Cache rename failed: {$tmp} -> {$file}");
+                }
             }
         }
     }
@@ -321,25 +324,23 @@ final class LimeVideo
         $file = $this->cacheFile($key);
         if (!file_exists($file)) {
             $legacy = $this->tempDir . "/cache_" . sha1($key) . ".tmp";
-            $file = file_exists($legacy) ? $legacy : $file;
+            if (file_exists($legacy)) {
+                $file = $legacy;
+            } else {
+                return null;
+            }
         }
 
-        if (!file_exists($file)) {
+        $content = @file_get_contents($file);
+        if ($content === false) {
             return null;
         }
 
-        $handle = @fopen($file, "rb");
-        if (!$handle) {
+        $payload = @unserialize($content, ["allowed_classes" => false]);
+        if ($payload === false && $content !== serialize(false)) {
+            @unlink($file);
             return null;
         }
-
-        $payload = null;
-        if (flock($handle, LOCK_SH)) {
-            $content = stream_get_contents($handle);
-            flock($handle, LOCK_UN);
-            $payload = $content ? @unserialize($content, ["allowed_classes" => false]) : null;
-        }
-        fclose($handle);
 
         if (
             is_array($payload) &&
@@ -358,9 +359,7 @@ final class LimeVideo
             return $payload;
         }
 
-        if (file_exists($file)) {
-            @unlink($file);
-        }
+        @unlink($file);
         return null;
     }
 
