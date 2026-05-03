@@ -2867,6 +2867,7 @@ if (strpos($uri, "/api/") === 0) {
                 "domain" => (string) $App->cfg("SITE_DOMAIN"),
                 "https" => (bool) $App->cfg("SITE_HTTPS"),
                 "base_url" => (string) $App->cfg("SITE_BASE_URL"),
+                "dev_mode" => (bool) $App->cfg("DEV_MODE"),
             ]),
             "trending" => $App->getTrending(),
             "search" => $App->search(

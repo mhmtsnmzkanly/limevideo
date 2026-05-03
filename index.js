@@ -23,6 +23,13 @@ const app = {
     replyParentId: null,
     autoplay: true,
     settings: null,
+    siteConfig: {
+      domain: "",
+      https: false,
+      base_url: "",
+      dev_mode: AppConfig.dev_mode,
+    },
+    devMode: AppConfig.dev_mode,
     ads: {},
     csrfToken: "",
     commentSort: "new",
@@ -833,6 +840,7 @@ const app = {
   async init() {
     this.setupGlobalLoader();
     this.loadClientPreferences();
+    await this.fetchSiteConfig();
     await this.checkAuth();
     await this.fetchTags();
     await this.fetchAds();
@@ -1180,6 +1188,25 @@ const app = {
       }
     } catch (e) {
       console.error("Auth check failed");
+    }
+  },
+
+  async fetchSiteConfig() {
+    try {
+      const data = await this.apiGet("/api/site_config");
+      if (!data || data.error) return;
+
+      this.state.siteConfig = {
+        domain: String(data.domain || ""),
+        https: Boolean(data.https),
+        base_url: String(data.base_url || ""),
+        dev_mode: Boolean(data.dev_mode),
+      };
+      this.state.devMode = this.state.siteConfig.dev_mode;
+      AppConfig.dev_mode = this.state.devMode;
+    } catch (e) {
+      this.state.devMode = Boolean(AppConfig.dev_mode);
+      console.error("Site config fetch failed");
     }
   },
 
