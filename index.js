@@ -2,6 +2,57 @@ const AppConfig = {
   dev_mode: false, // Keep false in production; enable only during development.
 };
 
+function getByPath(source, path) {
+  return String(path)
+    .split(".")
+    .reduce((value, key) => (value == null ? undefined : value[key]), source);
+}
+
+function setByPath(source, path, nextValue) {
+  const keys = String(path).split(".");
+  const last = keys.pop();
+  const target = keys.reduce((value, key) => {
+    if (!value[key] || typeof value[key] !== "object") value[key] = {};
+    return value[key];
+  }, source);
+  const previousValue = target[last];
+  if (Object.is(previousValue, nextValue)) return { changed: false };
+  target[last] = nextValue;
+  return { changed: true, previousValue };
+}
+
+function createStore(initialState) {
+  const subscribers = new Map();
+  const notify = (path, nextValue, previousValue) => {
+    const keys = String(path).split(".");
+    const paths = keys.map((_, index) => keys.slice(0, index + 1).join("."));
+    paths.forEach((currentPath) => {
+      subscribers.get(currentPath)?.forEach((callback) => {
+        callback(getByPath(initialState, currentPath), previousValue, path);
+      });
+    });
+  };
+
+  return {
+    get(path = "") {
+      return path ? getByPath(initialState, path) : initialState;
+    },
+    set(path, nextValue) {
+      const result = setByPath(initialState, path, nextValue);
+      if (result.changed) notify(path, nextValue, result.previousValue);
+      return result.changed;
+    },
+    update(path, updater) {
+      return this.set(path, updater(this.get(path)));
+    },
+    subscribe(path, callback) {
+      if (!subscribers.has(path)) subscribers.set(path, new Set());
+      subscribers.get(path).add(callback);
+      return () => subscribers.get(path)?.delete(callback);
+    },
+  };
+}
+
 const app = {
   storageKeys: {
     guestAutoplay: "limevideo_pref_autoplay",
@@ -72,6 +123,41 @@ const app = {
     templateCache: new Map(),
     routeToken: 0,
     scrollRaf: null,
+  },
+
+  stateDomains: {
+    auth: {
+      me: "me",
+      csrfToken: "csrfToken",
+    },
+    route: {
+      current: "currentRoute",
+      token: "routeToken",
+      currentPageStartedAt: "currentPageStartedAt",
+      currentPageMaxScroll: "currentPageMaxScroll",
+    },
+    search: {
+      query: "searchQuery",
+      sort: "searchSort",
+      activeTag: "activeTag",
+      tags: "tags",
+      videos: "videos",
+      galleryCursor: "galleryCursor",
+      galleryHasMore: "galleryHasMore",
+      galleryLoadingMore: "galleryLoadingMore",
+      galleryLimit: "galleryLimit",
+    },
+    chat: {
+      open: "chatOpen",
+      unreadCount: "chatUnreadCount",
+      pendingMessage: "chatPendingMessage",
+      messages: "chatMessages",
+      lastFetchedAt: "chatLastFetchedAt",
+      pollInterval: "chatPollInterval",
+    },
+    notifications: {
+      items: "notifications",
+    },
   },
 
   reportIcons: {
@@ -843,6 +929,34 @@ const app = {
     }
   },
 
+  setupStateStore() {
+    if (this.store) return;
+
+    Object.entries(this.stateDomains).forEach(([domain, aliases]) => {
+      this.state[domain] = this.state[domain] || {};
+      Object.entries(aliases).forEach(([domainKey, legacyKey]) => {
+        if (this.state[domain][domainKey] === undefined) {
+          this.state[domain][domainKey] = this.state[legacyKey];
+        }
+      });
+    });
+
+    this.store = createStore(this.state);
+
+    Object.entries(this.stateDomains).forEach(([domain, aliases]) => {
+      Object.entries(aliases).forEach(([domainKey, legacyKey]) => {
+        if (Object.getOwnPropertyDescriptor(this.state, legacyKey)?.get) return;
+        delete this.state[legacyKey];
+        Object.defineProperty(this.state, legacyKey, {
+          configurable: true,
+          enumerable: true,
+          get: () => this.store.get(`${domain}.${domainKey}`),
+          set: (nextValue) => this.store.set(`${domain}.${domainKey}`, nextValue),
+        });
+      });
+    });
+  },
+
   loadClientPreferences() {
     const autoplay = this.readStorage(this.storageKeys.guestAutoplay);
     const profileView = this.readStorage(this.storageKeys.profileView);
@@ -852,6 +966,7 @@ const app = {
   },
 
   async init() {
+    this.setupStateStore();
     this.setupGlobalLoader();
     this.loadClientPreferences();
     await this.fetchSiteConfig();
