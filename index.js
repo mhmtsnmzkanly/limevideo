@@ -19,6 +19,10 @@ const app = {
     activeTag: "all",
     tags: ["all"],
     videos: [],
+    galleryCursor: "",
+    galleryHasMore: true,
+    galleryLoadingMore: false,
+    galleryLimit: 24,
     notifications: [],
     replyParentId: null,
     autoplay: true,
@@ -1882,11 +1886,15 @@ const app = {
 
   async loadGallery() {
     try {
-      const videos = await this.apiGet(
-        `/api/search?q=${encodeURIComponent(this.state.searchQuery)}&cat=${encodeURIComponent(this.state.activeTag)}`,
-      );
-      this.state.videos = Array.isArray(videos) ? videos : [];
-      this.applySearchSort();
+      const page = await this.fetchGalleryPage();
+      const videos = Array.isArray(page.items)
+        ? page.items
+        : Array.isArray(page)
+          ? page
+          : [];
+      this.state.videos = videos;
+      this.state.galleryCursor = page.next_cursor || "";
+      this.state.galleryHasMore = Boolean(page.has_more);
       if (this.state.searchQuery || this.state.activeTag !== "all") {
         this.trackAnalytics("search", {
           search_query: this.state.searchQuery,
@@ -1900,6 +1908,60 @@ const app = {
       return this.state.videos;
     } catch (e) {
       return [];
+    }
+  },
+
+  galleryQueryParams(extra = {}) {
+    const params = new URLSearchParams({
+      q: this.state.searchQuery,
+      cat: this.state.activeTag,
+      sort: this.state.searchSort,
+      limit: String(this.state.galleryLimit),
+      ...extra,
+    });
+    return params.toString();
+  },
+
+  async fetchGalleryPage(cursor = "") {
+    const extra = cursor ? { cursor } : {};
+    return this.apiGet(`/api/search?${this.galleryQueryParams(extra)}`);
+  },
+
+  async loadMoreGallery() {
+    if (
+      this.activePage !== "gallery" ||
+      this.state.galleryLoadingMore ||
+      !this.state.galleryHasMore ||
+      !this.state.galleryCursor
+    ) {
+      return;
+    }
+
+    const feed = document.getElementById("gallery-feed");
+    if (!feed) return;
+
+    try {
+      this.state.galleryLoadingMore = true;
+      this.updateGalleryMoreStatus();
+      const startIndex = this.state.videos.length;
+      const page = await this.fetchGalleryPage(this.state.galleryCursor);
+      const items = Array.isArray(page.items) ? page.items : [];
+      if (!items.length) {
+        this.state.galleryHasMore = false;
+        this.state.galleryCursor = "";
+        return;
+      }
+
+      this.state.videos = [...this.state.videos, ...items];
+      this.state.galleryCursor = page.next_cursor || "";
+      this.state.galleryHasMore = Boolean(page.has_more);
+      this.appendTemplateHtml(feed, this.renderGalleryFeed(items, startIndex));
+      this.updateGalleryResultLabel();
+    } catch (e) {
+      this.showStatus(e.message || "More videos could not be loaded.", "error");
+    } finally {
+      this.state.galleryLoadingMore = false;
+      this.updateGalleryMoreStatus();
     }
   },
 
@@ -1957,6 +2019,8 @@ const app = {
       } else {
         this.startPrerollAd();
       }
+    } else if (page === "gallery") {
+      this.updateGalleryMoreStatus();
     }
   },
 
@@ -2334,7 +2398,7 @@ const app = {
       this.state.activeTag === "all"
         ? "Discover"
         : activeTag?.name || this.state.activeTag;
-    const resultLabel = `${videos.length} result${videos.length === 1 ? "" : "s"} found`;
+    const resultLabel = this.galleryResultLabel(videos.length);
     const categoryPills = this.state.tags
       .map((c) =>
         this.renderTemplate("partial-category-pill", {
@@ -2353,11 +2417,42 @@ const app = {
     });
   },
 
-  renderGalleryFeed(videos) {
+  galleryResultLabel(count = this.state.videos.length) {
+    const suffix = this.state.galleryHasMore ? " loaded" : " total";
+    return `${count} result${count === 1 ? "" : "s"}${suffix}`;
+  },
+
+  updateGalleryResultLabel() {
+    this.setText("gallery-result-label", this.galleryResultLabel());
+  },
+
+  updateGalleryMoreStatus() {
+    const status = document.getElementById("gallery-more-status");
+    if (!status) return;
+    if (this.state.galleryLoadingMore) {
+      this.setTemplateHtml(
+        status,
+        this.renderTemplate("partial-gallery-loading-more"),
+      );
+      status.hidden = false;
+      return;
+    }
+    if (!this.state.galleryHasMore && this.state.videos.length > 0) {
+      this.setTemplateHtml(
+        status,
+        this.renderTemplate("partial-gallery-end"),
+      );
+      status.hidden = false;
+      return;
+    }
+    status.hidden = true;
+  },
+
+  renderGalleryFeed(videos, startIndex = 0) {
     return videos
       .map(
         (video, index) =>
-          `${index === 4 ? this.renderNativeAdCard() : ""}${this.renderVideoCard(video)}`,
+          `${startIndex + index === 4 ? this.renderNativeAdCard() : ""}${this.renderVideoCard(video)}`,
       )
       .join("");
   },
@@ -2778,6 +2873,14 @@ const app = {
     const progress =
       maxScroll > 0 ? Math.min(100, (window.scrollY / maxScroll) * 100) : 0;
     loader.style.width = `${progress}%`;
+
+    if (
+      this.activePage === "gallery" &&
+      window.scrollY + window.innerHeight >=
+        document.documentElement.scrollHeight - 700
+    ) {
+      this.loadMoreGallery();
+    }
   },
 };
 

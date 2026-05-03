@@ -2144,14 +2144,41 @@ final class LimeVideo
         }
     }
 
-    public function search(string $query, string $category = "all"): void
-    {
+    /**
+     * Loads a cursor-paginated discovery page.
+     * Input: search query, tag category, sort mode, opaque cursor and page size.
+     * Output: JSON object with items, next_cursor and has_more.
+     */
+    public function search(
+        string $query,
+        string $category = "all",
+        string $sort = "newest",
+        ?string $cursor = null,
+        int $limit = 24,
+    ): void {
         $chatVideoId = $this->chatVideoId();
+        $sort = in_array($sort, ["newest", "popular", "duration"], true)
+            ? $sort
+            : "newest";
+        $limit = min(48, max(1, $limit));
         $cacheKey =
-            "search_" . sha1($query . "|" . $category . "|" . $chatVideoId);
-        $videos = $this->cacheGet($cacheKey, 60);
-        if ($videos !== null) {
-            $this->jsonResponse($videos);
+            "search_" .
+            sha1(
+                $query .
+                    "|" .
+                    $category .
+                    "|" .
+                    $sort .
+                    "|" .
+                    (string) $cursor .
+                    "|" .
+                    $limit .
+                    "|" .
+                    $chatVideoId,
+            );
+        $cachedPage = $this->cacheGet($cacheKey, 60);
+        if ($cachedPage !== null) {
+            $this->jsonResponse($cachedPage);
         }
 
         $sql = "SELECT DISTINCT v.*, u.username,
@@ -2175,12 +2202,108 @@ final class LimeVideo
             $params[] = $category;
         }
 
-        $sql .= " ORDER BY v.created_at DESC LIMIT 50";
+        $cursorData = $this->decodeSearchCursor($cursor);
+        if ($cursorData && ($cursorData["sort"] ?? "") === $sort) {
+            if ($sort === "popular") {
+                $sql .=
+                    " AND (v.views_count < ? OR (v.views_count = ? AND (v.created_at < ? OR (v.created_at = ? AND v.id < ?))))";
+                array_push(
+                    $params,
+                    (int) $cursorData["value"],
+                    (int) $cursorData["value"],
+                    $cursorData["created_at"],
+                    $cursorData["created_at"],
+                    $cursorData["id"],
+                );
+            } elseif ($sort === "duration") {
+                $sql .=
+                    " AND (v.duration < ? OR (v.duration = ? AND (v.created_at < ? OR (v.created_at = ? AND v.id < ?))))";
+                array_push(
+                    $params,
+                    (int) $cursorData["value"],
+                    (int) $cursorData["value"],
+                    $cursorData["created_at"],
+                    $cursorData["created_at"],
+                    $cursorData["id"],
+                );
+            } else {
+                $sql .=
+                    " AND (v.created_at < ? OR (v.created_at = ? AND v.id < ?))";
+                array_push(
+                    $params,
+                    $cursorData["created_at"],
+                    $cursorData["created_at"],
+                    $cursorData["id"],
+                );
+            }
+        }
+
+        $orderBy = match ($sort) {
+            "popular" => "v.views_count DESC, v.created_at DESC, v.id DESC",
+            "duration" => "v.duration DESC, v.created_at DESC, v.id DESC",
+            default => "v.created_at DESC, v.id DESC",
+        };
+        $sql .= " ORDER BY {$orderBy} LIMIT " . ($limit + 1);
         $stmt = $this->db()->prepare($sql);
         $stmt->execute($params);
         $videos = $stmt->fetchAll();
-        $this->cacheSet($cacheKey, $videos, 60);
-        $this->jsonResponse($videos);
+        $hasMore = count($videos) > $limit;
+        $items = array_slice($videos, 0, $limit);
+        $last = $items ? $items[count($items) - 1] : null;
+        $page = [
+            "items" => $items,
+            "next_cursor" => $hasMore && $last
+                ? $this->encodeSearchCursor($last, $sort)
+                : null,
+            "has_more" => $hasMore,
+        ];
+        $this->cacheSet($cacheKey, $page, 60);
+        $this->jsonResponse($page);
+    }
+
+    /**
+     * Encodes the last discovery item into an opaque cursor.
+     * Input: last video row and active sort mode.
+     * Output: base64 JSON cursor for the next page.
+     */
+    private function encodeSearchCursor(array $video, string $sort): string
+    {
+        $value = match ($sort) {
+            "popular" => (int) ($video["views_count"] ?? 0),
+            "duration" => (int) ($video["duration"] ?? 0),
+            default => null,
+        };
+        return base64_encode(
+            json_encode([
+                "sort" => $sort,
+                "value" => $value,
+                "created_at" => $video["created_at"] ?? "",
+                "id" => $video["id"] ?? "",
+            ]),
+        );
+    }
+
+    /**
+     * Decodes a discovery cursor.
+     * Input: base64 JSON cursor or null.
+     * Output: cursor array when valid, otherwise null.
+     */
+    private function decodeSearchCursor(?string $cursor): ?array
+    {
+        if (!$cursor) {
+            return null;
+        }
+        $raw = base64_decode($cursor, true);
+        $data = $raw ? json_decode($raw, true) : null;
+        if (
+            !is_array($data) ||
+            empty($data["sort"]) ||
+            empty($data["created_at"]) ||
+            empty($data["id"])
+        ) {
+            return null;
+        }
+        return $data;
     }
 
     private function notificationUrl(array $notification): string
@@ -2961,6 +3084,13 @@ if (strpos($uri, "/api/") === 0) {
             "search" => $App->search(
                 $App->validate($_GET["q"] ?? "", "text", ["max" => 100]),
                 $App->validate($_GET["cat"] ?? "all", "text", ["max" => 50]),
+                $App->validate($_GET["sort"] ?? "newest", "enum", [
+                    "allowed" => ["newest", "popular", "duration"],
+                ]) ?? "newest",
+                $App->validate($_GET["cursor"] ?? null, "text", [
+                    "max" => 500,
+                ]),
+                (int) ($_GET["limit"] ?? 24),
             ),
             "video" => $App->getVideoDetail(
                 $App->validate($_GET["id"] ?? "", "id"),

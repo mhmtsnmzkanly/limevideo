@@ -531,7 +531,7 @@
                 <div class="space-y-3">
                     <p class="text-[10px] text-[#00ff41] font-black uppercase tracking-[0.3em]">Discovery Feed</p>
                     <h1 class="text-3xl md:text-4xl font-black tracking-tight">${title}</h1>
-                    <p class="text-xs text-gray-500 font-bold uppercase tracking-widest">${resultLabel}</p>
+                    <p id="gallery-result-label" class="text-xs text-gray-500 font-bold uppercase tracking-widest">${resultLabel}</p>
                 </div>
                 <div class="search-sort-control">
                     <i class="fa-solid fa-arrow-up-wide-short text-gray-500"></i>
@@ -835,10 +835,24 @@
 
     <!-- Template Engine: gallery result feed wrapper -->
     <template id="tpl-partial-gallery-results">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div id="gallery-feed" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             ${feedHtml}
         </div>
+        <div id="gallery-more-status" class="py-8 text-center" hidden></div>
         ${leaderboardHtml}
+    </template>
+
+    <!-- Template Engine: gallery infinite-scroll loading indicator -->
+    <template id="tpl-partial-gallery-loading-more">
+        <div class="inline-flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.22em] text-[#00ff41]">
+            <i class="fa-solid fa-circle-notch fa-spin"></i>
+            <span>Loading more videos</span>
+        </div>
+    </template>
+
+    <!-- Template Engine: gallery infinite-scroll end marker -->
+    <template id="tpl-partial-gallery-end">
+        <div class="text-[10px] font-black uppercase tracking-[0.22em] text-gray-600">End of discovery feed</div>
     </template>
 
     <!-- Template Engine: settings page when guest -->
