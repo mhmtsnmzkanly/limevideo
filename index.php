@@ -302,42 +302,63 @@ final class LimeVideo
 
     public function cacheSet(string $key, mixed $data, int $ttl = 3600): void
     {
-        file_put_contents(
-            $this->cacheFile($key),
-            serialize([
-                "expires_at" => time() + $ttl,
-                "data" => $data,
-            ]),
-            LOCK_EX,
-        );
+        $file = $this->cacheFile($key);
+        $tmp = $file . "." . bin2hex(random_bytes(8)) . ".tmp";
+        $payload = serialize([
+            "expires_at" => time() + $ttl,
+            "data" => $data,
+        ]);
+
+        if (file_put_contents($tmp, $payload, LOCK_EX) !== false) {
+            if (!@rename($tmp, $file)) {
+                @unlink($tmp);
+            }
+        }
     }
 
     public function cacheGet(string $key, int $ttl = 3600): mixed
     {
         $file = $this->cacheFile($key);
         if (!file_exists($file)) {
-            $file = file_exists($this->tempDir . "/cache_" . sha1($key) . ".tmp")
-                ? $this->tempDir . "/cache_" . sha1($key) . ".tmp"
-                : $file;
+            $legacy = $this->tempDir . "/cache_" . sha1($key) . ".tmp";
+            $file = file_exists($legacy) ? $legacy : $file;
         }
+
+        if (!file_exists($file)) {
+            return null;
+        }
+
+        $handle = @fopen($file, "rb");
+        if (!$handle) {
+            return null;
+        }
+
+        $payload = null;
+        if (flock($handle, LOCK_SH)) {
+            $content = stream_get_contents($handle);
+            flock($handle, LOCK_UN);
+            $payload = $content ? @unserialize($content, ["allowed_classes" => false]) : null;
+        }
+        fclose($handle);
+
+        if (
+            is_array($payload) &&
+            array_key_exists("expires_at", $payload) &&
+            array_key_exists("data", $payload)
+        ) {
+            if ((int) $payload["expires_at"] >= time()) {
+                return $payload["data"];
+            }
+            @unlink($file);
+            return null;
+        }
+
+        // Handle legacy un-wrapped cache entries if they haven't expired based on mtime
+        if ($payload !== null && time() - filemtime($file) < $ttl) {
+            return $payload;
+        }
+
         if (file_exists($file)) {
-            $payload = unserialize((string) file_get_contents($file), [
-                "allowed_classes" => false,
-            ]);
-            if (
-                is_array($payload) &&
-                array_key_exists("expires_at", $payload) &&
-                array_key_exists("data", $payload)
-            ) {
-                if ((int) $payload["expires_at"] >= time()) {
-                    return $payload["data"];
-                }
-                @unlink($file);
-                return null;
-            }
-            if (time() - filemtime($file) < $ttl) {
-                return $payload;
-            }
             @unlink($file);
         }
         return null;
