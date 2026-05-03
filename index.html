@@ -546,7 +546,7 @@
             <form id="searchForm" class="flex flex-col gap-5" data-action="perform-search">
                 <div class="search-container">
                     <i class="fa-solid fa-magnifying-glass text-gray-500 ml-2"></i>
-                    <input type="text" class="search-input" placeholder="Search videos, channels or content..." value="${app.safeAttr(app.state.searchQuery)}" data-action="search-input">
+                    <input type="text" class="search-input" placeholder="Search videos, channels or content..." value="${app.safeAttr(app.state.search.query)}" data-action="search-input">
                 </div>
                 <div class="flex flex-col gap-3">
                     <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Categories</p>
@@ -558,7 +558,7 @@
 
     <!-- Template Engine: one discovery category pill -->
     <template id="tpl-partial-category-pill">
-        <button type="button" class="category-pill ${app.state.activeTag === c.slug ? 'active' : ''}" data-action="set-tag" data-value="${app.safeAttr(c.slug)}">${labelHtml}</button>
+        <button type="button" class="category-pill ${app.state.search.activeTag === c.slug ? 'active' : ''}" data-action="set-tag" data-value="${app.safeAttr(c.slug)}">${labelHtml}</button>
     </template>
 
     <!-- Template Engine: all-category label with icon -->

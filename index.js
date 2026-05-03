@@ -132,9 +132,46 @@ const app = {
     reportTargetLabel: "",
     reportSubmitting: false,
     templateCache: new Map(),
+    templateExpressionCache: new Map(),
     routeToken: 0,
     scrollRaf: null,
   },
+
+  rawTemplateFragments: new Set([
+    "actionsHtml",
+    "activeOverlayHtml",
+    "avatarHtml",
+    "cards",
+    "categoryPills",
+    "commentFormHtml",
+    "contentHtml",
+    "feedHtml",
+    "formHtml",
+    "items",
+    "labelHtml",
+    "leaderboardHtml",
+    "notificationDotHtml",
+    "playerHtml",
+    "playlistHtml",
+    "replyBoxHtml",
+    "replyButtonHtml",
+    "repliesHtml",
+    "replyLineHtml",
+    "rowsHtml",
+    "searchPanel",
+    "suggestionsHtml",
+    "tabHtml",
+    "tagsHtml",
+    "thumbnailHtml",
+    "viewToggleHtml",
+  ]),
+
+  trustedTemplateHelpers: new Set([
+    "escapeHtml",
+    "safeAttr",
+    "safeStyleUrl",
+    "safeUrl",
+  ]),
 
   reportIcons: {
     video: "fa-solid fa-play-circle",
@@ -1611,59 +1648,73 @@ const app = {
     return `url('${url.replace(/'/g, "%27")}')`;
   },
 
-  isTemplateHtmlKey(key = "") {
-    return (
-      /Html$/.test(key) ||
-      [
-        "items",
-        "cards",
-        "categoryPills",
-        "searchPanel",
-        "contentHtml",
-        "feedHtml",
-        "tagsHtml",
-        "leaderboardHtml",
-        "rowsHtml",
-        "playlistHtml",
-        "suggestionsHtml",
-        "formHtml",
-        "tabHtml",
-        "actionsHtml",
-        "avatarHtml",
-        "thumbnailHtml",
-        "viewToggleHtml",
-        "replyLineHtml",
-        "replyButtonHtml",
-        "replyBoxHtml",
-        "repliesHtml",
-        "activeOverlayHtml",
-        "commentFormHtml",
-        "labelHtml",
-        "coverInlineStyle",
-        "url",
-        "posterUrl",
-        "className",
-      ].includes(key)
-    );
+  isTemplateRawFragment(expression = "") {
+    return this.rawTemplateFragments.has(String(expression).trim());
   },
 
-  templateContext(context = {}, rawKeys = new Set(), seen = new WeakMap()) {
-    if (!context || typeof context !== "object") return context;
-    if (seen.has(context)) return seen.get(context);
-    const proxy = new Proxy(context, {
-      get: (target, key) => {
-        if (typeof key !== "string") return target[key];
-        const value = target[key];
-        if (value == null) return value;
-        if (rawKeys.has(key) || this.isTemplateHtmlKey(key)) return value;
-        if (typeof value === "string") return this.escapeHtml(value);
-        if (typeof value === "object")
-          return this.templateContext(value, new Set(), seen);
-        return value;
-      },
-    });
-    seen.set(context, proxy);
-    return proxy;
+  isTrustedTemplateExpression(expression = "") {
+    const match = String(expression)
+      .trim()
+      .match(/^app\.([A-Za-z_$][\w$]*)\(/);
+    return Boolean(match && this.trustedTemplateHelpers.has(match[1]));
+  },
+
+  assertSafeTemplateExpression(name, expression = "") {
+    const source = String(expression).trim();
+    const blocked = [
+      "__proto__",
+      "constructor",
+      "document",
+      "eval",
+      "Function",
+      "globalThis",
+      "localStorage",
+      "prototype",
+      "sessionStorage",
+      "window",
+    ];
+    if (
+      /[;`{}]/.test(source) ||
+      /=>/.test(source) ||
+      /(^|[^=!<>])=([^=>]|$)/.test(source) ||
+      blocked.some((token) => new RegExp(`\\b${token}\\b`).test(source))
+    ) {
+      throw new Error(`Unsafe template expression in ${name}: ${source}`);
+    }
+  },
+
+  templateContextArgs(context = {}) {
+    const entries = Object.entries(context).filter(([key]) =>
+      /^[A-Za-z_$][\w$]*$/.test(key),
+    );
+    return {
+      keys: entries.map(([key]) => key),
+      values: entries.map(([, value]) => value),
+    };
+  },
+
+  evaluateTemplateExpression(name, expression, context = {}) {
+    this.assertSafeTemplateExpression(name, expression);
+    const { keys, values } = this.templateContextArgs(context);
+    const cacheKey = `${keys.join(",")}|${expression}`;
+    let evaluator = this.state.templateExpressionCache.get(cacheKey);
+    if (!evaluator) {
+      evaluator = Function(
+        ...keys,
+        "app",
+        `"use strict"; return (${expression});`,
+      );
+      this.state.templateExpressionCache.set(cacheKey, evaluator);
+    }
+    const value = evaluator(...values, this);
+    if (value == null) return "";
+    if (
+      this.isTemplateRawFragment(expression) ||
+      this.isTrustedTemplateExpression(expression)
+    ) {
+      return String(value);
+    }
+    return typeof value === "string" ? this.escapeHtml(value) : String(value);
   },
 
   renderStaticTemplates() {
@@ -1700,12 +1751,11 @@ const app = {
     const source = this.template(name);
     if (!source) return "";
     try {
-      const safeContext = this.templateContext(context);
-      return Function(
-        "ctx",
-        "app",
-        `with (ctx) { return \`${source}\`; }`,
-      )(safeContext, this).trim();
+      return source
+        .replace(/\$\{([^}]+)\}/g, (_match, expression) =>
+          this.evaluateTemplateExpression(name, expression, context),
+        )
+        .trim();
     } catch (error) {
       console.error(`Template render failed: ${name}`, error);
       return "";
