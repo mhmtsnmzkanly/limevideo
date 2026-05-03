@@ -38,14 +38,14 @@ final class LimeVideo
         "ANALYTICS_RAW_RETENTION_DAYS" => 90,
         "ANALYTICS_AUTO_ENQUEUE_MIN_INTERVAL" => 300,
         "SECURITY_CSRF_EXEMPT" => "login,register,provider_webhook,analytics",
-        "TURNSTILE_ENABLED" => false,
-        "TURNSTILE_SCRIPT_URL" =>
+        "CAPTCHA_ENABLED" => false,
+        "CAPTCHA_SCRIPT_URL" =>
             "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
-        "TURNSTILE_PUBLIC_KEY" => "",
-        "TURNSTILE_PRIVATE_KEY" => "",
-        "TURNSTILE_VERIFY_URL" =>
+        "CAPTCHA_PUBLIC_KEY" => "",
+        "CAPTCHA_PRIVATE_KEY" => "",
+        "CAPTCHA_VERIFY_URL" =>
             "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-        "TURNSTILE_FORM_FIELD_NAME" => "cf-turnstile-response",
+        "CAPTCHA_FORM_FIELD_NAME" => "captcha_token",
         "AD_SERVICE_KEYS" => "internal,vast,gam,custom_js",
         "AD_SERVICE_INTERNAL_DISPLAY_NAME" => "Internal Ad Placements",
         "AD_SERVICE_INTERNAL_SCRIPT_URL" => "",
@@ -121,14 +121,19 @@ final class LimeVideo
         "AD_PLACEMENT_LEADERBOARD_FREQUENCY" => 1,
     ];
     private ?PDO $pdo = null;
-    private string $tempDir;
+    private string $cacheDir;
 
     public function __construct()
     {
-        $this->config = array_replace(
-            $this->config,
-            parse_ini_file(__DIR__ . "/.ini", false, INI_SCANNER_TYPED) ?: [],
-        );
+        $configFile = __DIR__ . "/config.php";
+        if (is_file($configFile)) {
+            $override = require $configFile;
+            if (!is_array($override)) {
+                throw new RuntimeException("config.php must return an array.");
+            }
+            $this->config = array_replace_recursive($this->config, $override);
+        }
+
         $domain = preg_replace(
             "#^https?://#",
             "",
@@ -137,9 +142,9 @@ final class LimeVideo
         $scheme = (bool) $this->config["SITE_HTTPS"] ? "https" : "http";
         $this->config["SITE_BASE_URL"] = $scheme . "://" . $domain;
 
-        $this->tempDir = rtrim(sys_get_temp_dir(), "/") . "/limevideo";
-        if (!is_dir($this->tempDir)) {
-            mkdir($this->tempDir, 0775, true);
+        $this->cacheDir = __DIR__ . "/cache";
+        if (!is_dir($this->cacheDir)) {
+            mkdir($this->cacheDir, 0775, true);
         }
     }
 
@@ -151,6 +156,11 @@ final class LimeVideo
     public function cfg(string $key, mixed $default = null): mixed
     {
         return $this->config[$key] ?? $default;
+    }
+
+    public function cachePath(): string
+    {
+        return $this->cacheDir;
     }
 
     public function db(): PDO
@@ -200,7 +210,7 @@ final class LimeVideo
     {
         $ip = hash("sha256", $_SERVER["REMOTE_ADDR"] ?? "127.0.0.1");
         $file =
-            $this->tempDir . "/ratelimit_" . sha1($key . $ip) . ".tmp";
+            $this->cacheDir . "/ratelimit_" . sha1($key . $ip) . ".tmp";
         $data = file_exists($file)
             ? json_decode((string) file_get_contents($file), true)
             : null;
@@ -219,30 +229,34 @@ final class LimeVideo
         }
     }
 
-    public function turnstilePublicConfig(): array
+    public function captchaPublicConfig(): array
     {
         return [
-            "enabled" => (bool) $this->cfg("TURNSTILE_ENABLED"),
-            "script_url" => (string) $this->cfg("TURNSTILE_SCRIPT_URL"),
-            "public_key" => (string) $this->cfg("TURNSTILE_PUBLIC_KEY"),
-            "form_field_name" => (string) $this->cfg("TURNSTILE_FORM_FIELD_NAME"),
+            "enabled" => (bool) $this->cfg("CAPTCHA_ENABLED"),
+            "script_url" => (string) $this->cfg("CAPTCHA_SCRIPT_URL"),
+            "public_key" => (string) $this->cfg("CAPTCHA_PUBLIC_KEY"),
+            "form_field_name" => (string) $this->cfg("CAPTCHA_FORM_FIELD_NAME"),
         ];
     }
 
-    public function turnstileTokenFromInput(array $input): string
+    public function captchaTokenFromInput(array $input): string
     {
-        $field = (string) $this->cfg("TURNSTILE_FORM_FIELD_NAME");
-        return trim((string) ($input[$field] ?? $input["turnstile_token"] ?? ""));
+        $field = (string) $this->cfg("CAPTCHA_FORM_FIELD_NAME");
+        return trim(
+            (string) ($input[$field] ??
+                $input["captcha_token"] ??
+                ""),
+        );
     }
 
-    private function verifyTurnstile(string $token): void
+    private function verifyCaptcha(string $token): void
     {
-        if (!(bool) $this->cfg("TURNSTILE_ENABLED")) {
+        if (!(bool) $this->cfg("CAPTCHA_ENABLED")) {
             return;
         }
 
-        $secret = trim((string) $this->cfg("TURNSTILE_PRIVATE_KEY"));
-        $verifyUrl = trim((string) $this->cfg("TURNSTILE_VERIFY_URL"));
+        $secret = trim((string) $this->cfg("CAPTCHA_PRIVATE_KEY"));
+        $verifyUrl = trim((string) $this->cfg("CAPTCHA_VERIFY_URL"));
         if ($secret === "" || $verifyUrl === "") {
             $this->jsonResponse(["error" => "Captcha is not configured"], 503);
         }
@@ -273,7 +287,7 @@ final class LimeVideo
         if (!is_array($result) || empty($result["success"])) {
             $response = ["error" => "Captcha verification failed"];
             if ((bool) $this->cfg("DEV_MODE")) {
-                $response["turnstile_errors"] = $result["error-codes"] ?? [];
+                $response["captcha_errors"] = $result["error-codes"] ?? [];
             }
             $this->jsonResponse($response, 400);
         }
@@ -292,7 +306,7 @@ final class LimeVideo
 
     private function cacheFile(string $key): string
     {
-        return $this->tempDir .
+        return $this->cacheDir .
             "/cache_" .
             $this->cacheSafeKey($key) .
             "_" .
@@ -323,7 +337,7 @@ final class LimeVideo
     {
         $file = $this->cacheFile($key);
         if (!file_exists($file)) {
-            $legacy = $this->tempDir . "/cache_" . sha1($key) . ".tmp";
+            $legacy = $this->cacheDir . "/cache_" . sha1($key) . ".tmp";
             if (file_exists($legacy)) {
                 $file = $legacy;
             } else {
@@ -368,7 +382,7 @@ final class LimeVideo
         foreach (
             [
                 $this->cacheFile($key),
-                $this->tempDir . "/cache_" . sha1($key) . ".tmp",
+                $this->cacheDir . "/cache_" . sha1($key) . ".tmp",
             ]
             as $file
         ) {
@@ -382,7 +396,7 @@ final class LimeVideo
     {
         $safePrefix = $this->cacheSafeKey($prefix);
         foreach (
-            glob($this->tempDir . "/cache_" . $safePrefix . "*.tmp") ?: []
+            glob($this->cacheDir . "/cache_" . $safePrefix . "*.tmp") ?: []
             as $file
         ) {
             @unlink($file);
@@ -1093,8 +1107,8 @@ final class LimeVideo
 
     private function cronMarkerFile(string $name): string
     {
-        return $this->tempDir .
-            "/cron_" .
+        return $this->cacheDir .
+            "/jobs_" .
             preg_replace("/[^a-zA-Z0-9_]+/", "_", $name) .
             ".tmp";
     }
@@ -3043,7 +3057,7 @@ final class LimeVideo
     public function login(string $user, string $pass, string $captchaToken = ""): void
     {
         $this->checkRateLimit("login", 8, 300);
-        $this->verifyTurnstile($captchaToken);
+        $this->verifyCaptcha($captchaToken);
         $stmt = $this->db()->prepare(
             "SELECT * FROM users WHERE username = ? OR email = ? LIMIT 1",
         );
@@ -3110,7 +3124,7 @@ final class LimeVideo
         string $captchaToken = "",
     ): void {
         $this->checkRateLimit("register", 5, 600);
-        $this->verifyTurnstile($captchaToken);
+        $this->verifyCaptcha($captchaToken);
         $username = $this->validate($username ?? "", "text", ["max" => 50]);
         $email = $this->validate($email ?? "", "email");
 
@@ -3151,6 +3165,7 @@ final class LimeVideo
 // --- Runtime bootstrap and API router ---
 $App = new LimeVideo();
 ini_set("session.use_strict_mode", "1");
+session_save_path($App->cachePath());
 session_set_cookie_params([
     "lifetime" => 0,
     "path" => "/",
@@ -3200,7 +3215,7 @@ if (strpos($uri, "/api/") === 0) {
                 "https" => (bool) $App->cfg("SITE_HTTPS"),
                 "base_url" => (string) $App->cfg("SITE_BASE_URL"),
                 "dev_mode" => (bool) $App->cfg("DEV_MODE"),
-                "turnstile" => $App->turnstilePublicConfig(),
+                "captcha" => $App->captchaPublicConfig(),
             ]),
             "trending" => $App->getTrending(),
             "search" => $App->search(
@@ -3273,13 +3288,13 @@ if (strpos($uri, "/api/") === 0) {
             "login" => $App->login(
                 $input["user"] ?? "",
                 $input["pass"] ?? "",
-                $App->turnstileTokenFromInput($input),
+                $App->captchaTokenFromInput($input),
             ),
             "register" => $App->register(
                 $input["user"] ?? "",
                 $input["email"] ?? "",
                 $input["pass"] ?? "",
-                $App->turnstileTokenFromInput($input),
+                $App->captchaTokenFromInput($input),
             ),
             "logout" => (function () use ($App, $method) {
                 if ($method !== "POST") {

@@ -104,17 +104,17 @@ const app = {
       https: false,
       base_url: "",
       dev_mode: AppConfig.dev_mode,
-      turnstile: {
+      captcha: {
         enabled: false,
         script_url:
           "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
         public_key: "",
-        form_field_name: "cf-turnstile-response",
+        form_field_name: "captcha_token",
       },
     },
     devMode: AppConfig.dev_mode,
-    turnstileWidgets: {},
-    turnstileTokens: {},
+    captchaWidgets: {},
+    captchaTokens: {},
     ads: {},
     commentSort: "new",
     profileView: "grid",
@@ -638,7 +638,7 @@ const app = {
           this.showStatus(data.error || "Login failed.", "error");
         }
       } catch (e) {
-        this.resetTurnstileWidget("login");
+        this.resetCaptchaWidget("login");
         this.showStatus(this.getFriendlyErrorMessage(e, "auth"), "error");
       }
     },
@@ -670,7 +670,7 @@ const app = {
           this.showStatus(data.error || "Register failed.", "error");
         }
       } catch (e) {
-        this.resetTurnstileWidget("register");
+        this.resetCaptchaWidget("register");
         this.showStatus(this.getFriendlyErrorMessage(e, "auth"), "error");
       }
     },
@@ -990,7 +990,7 @@ const app = {
     await this.fetchTags();
     await this.fetchAds();
     this.renderStaticTemplates();
-    this.renderTurnstileWidgets();
+    this.renderCaptchaWidgets();
     if (this.state.auth.me) await this.fetchSettings();
     if (this.state.auth.me) await this.fetchNotifications();
     if (this.state.auth.me) this.startChatPolling();
@@ -1356,69 +1356,69 @@ const app = {
         https: Boolean(data.https),
         base_url: String(data.base_url || ""),
         dev_mode: Boolean(data.dev_mode),
-        turnstile: this.normalizeTurnstileConfig(data.turnstile),
+        captcha: this.normalizeCaptchaConfig(data.captcha),
       };
       this.state.devMode = this.state.siteConfig.dev_mode;
       AppConfig.dev_mode = this.state.devMode;
-      this.ensureTurnstileScript();
+      this.ensureCaptchaScript();
     } catch (e) {
       this.state.devMode = Boolean(AppConfig.dev_mode);
       console.error("Site config fetch failed");
     }
   },
 
-  normalizeTurnstileConfig(config = {}) {
+  normalizeCaptchaConfig(config = {}) {
     return {
       enabled: Boolean(config.enabled),
       script_url:
         String(config.script_url || "") ||
         "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
       public_key: String(config.public_key || ""),
-      form_field_name: String(config.form_field_name || "cf-turnstile-response"),
+      form_field_name: String(config.form_field_name || "captcha_token"),
     };
   },
 
-  turnstileConfig() {
-    return this.state.siteConfig?.turnstile || this.normalizeTurnstileConfig();
+  captchaConfig() {
+    return this.state.siteConfig?.captcha || this.normalizeCaptchaConfig();
   },
 
-  ensureTurnstileScript() {
-    const config = this.turnstileConfig();
+  ensureCaptchaScript() {
+    const config = this.captchaConfig();
     if (!config.enabled || !config.script_url) return;
 
-    let script = document.getElementById("turnstile-script");
+    let script = document.getElementById("captcha-script");
     if (script && script.getAttribute("src") === config.script_url) return;
     if (script) script.remove();
 
     script = document.createElement("script");
-    script.id = "turnstile-script";
+    script.id = "captcha-script";
     script.src = config.script_url;
     script.async = true;
     script.defer = true;
-    script.onload = () => window.limevideoTurnstileReady?.();
+    script.onload = () => window.limevideoCaptchaReady?.();
     document.head.appendChild(script);
   },
 
   captchaPayload(purpose) {
-    const config = this.turnstileConfig();
+    const config = this.captchaConfig();
     if (!config.enabled) return {};
-    return { [config.form_field_name]: this.state.turnstileTokens[purpose] || "" };
+    return { [config.form_field_name]: this.state.captchaTokens[purpose] || "" };
   },
 
   requireCaptcha(purpose) {
-    const config = this.turnstileConfig();
+    const config = this.captchaConfig();
     if (!config.enabled) return true;
-    if (this.state.turnstileTokens[purpose]) return true;
+    if (this.state.captchaTokens[purpose]) return true;
     this.showStatus("Please complete the captcha challenge.", "error");
     return false;
   },
 
-  resetTurnstileWidget(purpose) {
-    const widgetId = this.state.turnstileWidgets[purpose];
+  resetCaptchaWidget(purpose) {
+    const widgetId = this.state.captchaWidgets[purpose];
     if (window.turnstile && widgetId !== undefined) {
       window.turnstile.reset(widgetId);
     }
-    this.state.turnstileTokens[purpose] = "";
+    this.state.captchaTokens[purpose] = "";
   },
 
   syncAgeCaptchaState(verified = false) {
@@ -1429,9 +1429,9 @@ const app = {
     btn.classList.toggle("age-btn-active", verified);
   },
 
-  renderTurnstileWidgets() {
-    const config = this.turnstileConfig();
-    const containers = document.querySelectorAll("[data-turnstile-widget]");
+  renderCaptchaWidgets() {
+    const config = this.captchaConfig();
+    const containers = document.querySelectorAll("[data-captcha-widget]");
 
     if (!config.enabled || !config.public_key) {
       containers.forEach((container) => {
@@ -1454,20 +1454,20 @@ const app = {
         sitekey: config.public_key,
         theme: "dark",
         callback: (token) => {
-          this.state.turnstileTokens[purpose] = token;
+          this.state.captchaTokens[purpose] = token;
           if (purpose === "age") this.syncAgeCaptchaState(true);
         },
         "expired-callback": () => {
-          this.state.turnstileTokens[purpose] = "";
+          this.state.captchaTokens[purpose] = "";
           if (purpose === "age") this.syncAgeCaptchaState(false);
         },
         "error-callback": () => {
-          this.state.turnstileTokens[purpose] = "";
+          this.state.captchaTokens[purpose] = "";
           if (purpose === "age") this.syncAgeCaptchaState(false);
         },
       });
 
-      this.state.turnstileWidgets[purpose] = widgetId;
+      this.state.captchaWidgets[purpose] = widgetId;
       container.dataset.rendered = "1";
     });
   },
@@ -2246,7 +2246,7 @@ const app = {
   // We update render to call these side-effecty things after DOM is ready
   afterRender(page, data) {
     this.syncTemplateControls();
-    this.renderTurnstileWidgets();
+    this.renderCaptchaWidgets();
     if (page === "watch") {
       this.fetchComments(data.id);
       this.setupVideoAnalytics(data.id);
@@ -2254,7 +2254,7 @@ const app = {
         document
           .getElementById("age-verification-overlay")
           .classList.add("active");
-        this.syncAgeCaptchaState(!this.turnstileConfig().enabled);
+        this.syncAgeCaptchaState(!this.captchaConfig().enabled);
         document.body.style.overflow = "hidden";
       } else {
         this.startPrerollAd();
@@ -3124,5 +3124,5 @@ const app = {
   },
 };
 
-window.limevideoTurnstileReady = () => app.renderTurnstileWidgets();
+window.limevideoCaptchaReady = () => app.renderCaptchaWidgets();
 window.onload = () => app.init();

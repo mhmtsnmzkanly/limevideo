@@ -1,3 +1,7 @@
 /uploads
+/cache/
 /cachedir
+/logs/
+/config.php
+*.tmp
 .ini

@@ -1303,7 +1303,7 @@ body {
     border-color: var(--lime-green);
 }
 
-.turnstile-captcha {
+.captcha-widget {
     min-height: 65px;
     margin: 20px 0;
     display: flex;
@@ -1315,7 +1315,7 @@ body {
     overflow: hidden;
 }
 
-.turnstile-captcha[hidden] {
+.captcha-widget[hidden] {
     display: none;
 }
 
