@@ -204,6 +204,154 @@ final class LimeVideo
             ltrim($path, "/");
     }
 
+    private function xmlEscape(string $value): string
+    {
+        return htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, "UTF-8");
+    }
+
+    private function sitemapLastmod(?string $value): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+        $time = strtotime($value);
+        return $time ? gmdate("Y-m-d", $time) : null;
+    }
+
+    private function buildSitemapUrlEntry(string $loc, ?string $lastmod = null): string
+    {
+        $entry = "  <url>\n    <loc>" . $this->xmlEscape($loc) . "</loc>\n";
+        if ($lastmod) {
+            $entry .= "    <lastmod>" . $this->xmlEscape($lastmod) . "</lastmod>\n";
+        }
+        return $entry . "  </url>\n";
+    }
+
+    private function getPublicSitemapUrls(): array
+    {
+        $urls = [["loc" => $this->baseUrl("/"), "lastmod" => null]];
+        $chatVideoId = $this->chatVideoId();
+        $chatOwnerId = (string) $this->cfg("CHAT_OWNER_USER_ID", "u_system");
+
+        $videoStmt = $this->db()->prepare(
+            "SELECT v.id, COALESCE(v.updated_at, v.created_at) AS lastmod
+            FROM videos v
+            JOIN users u ON u.id = v.user_id
+            WHERE v.status = 'public'
+              AND v.processing_status = 'ready'
+              AND v.id <> ?
+              AND u.status = 'active'
+              AND u.id <> ?
+              AND NOT EXISTS (
+                SELECT 1 FROM bans b
+                WHERE b.user_id = u.id
+                  AND b.type = 'general'
+                  AND b.revoked_at IS NULL
+                  AND (b.ends_at IS NULL OR b.ends_at > NOW())
+              )
+            ORDER BY v.updated_at DESC, v.created_at DESC
+            LIMIT 20000",
+        );
+        $videoStmt->execute([$chatVideoId, $chatOwnerId]);
+        foreach ($videoStmt->fetchAll() as $video) {
+            $urls[] = [
+                "loc" => $this->baseUrl("/video/" . rawurlencode($video["id"])),
+                "lastmod" => $this->sitemapLastmod($video["lastmod"] ?? null),
+            ];
+        }
+
+        $userStmt = $this->db()->prepare(
+            "SELECT u.id, COALESCE(u.updated_at, u.created_at) AS lastmod
+            FROM users u
+            WHERE u.status = 'active'
+              AND u.id <> ?
+              AND NOT EXISTS (
+                SELECT 1 FROM bans b
+                WHERE b.user_id = u.id
+                  AND b.type = 'general'
+                  AND b.revoked_at IS NULL
+                  AND (b.ends_at IS NULL OR b.ends_at > NOW())
+              )
+            ORDER BY u.updated_at DESC, u.created_at DESC
+            LIMIT 20000",
+        );
+        $userStmt->execute([$chatOwnerId]);
+        foreach ($userStmt->fetchAll() as $user) {
+            $urls[] = [
+                "loc" => $this->baseUrl("/profile/" . rawurlencode($user["id"])),
+                "lastmod" => $this->sitemapLastmod($user["lastmod"] ?? null),
+            ];
+        }
+
+        $tagStmt = $this->db()->prepare(
+            "SELECT t.slug, MAX(COALESCE(v.updated_at, v.created_at)) AS lastmod
+            FROM tags t
+            JOIN video_tags vt ON vt.tag_slug = t.slug
+            JOIN videos v ON v.id = vt.video_id
+            JOIN users u ON u.id = v.user_id
+            WHERE v.status = 'public'
+              AND v.processing_status = 'ready'
+              AND v.id <> ?
+              AND u.status = 'active'
+              AND u.id <> ?
+              AND NOT EXISTS (
+                SELECT 1 FROM bans b
+                WHERE b.user_id = u.id
+                  AND b.type = 'general'
+                  AND b.revoked_at IS NULL
+                  AND (b.ends_at IS NULL OR b.ends_at > NOW())
+              )
+            GROUP BY t.slug
+            ORDER BY lastmod DESC
+            LIMIT 20000",
+        );
+        $tagStmt->execute([$chatVideoId, $chatOwnerId]);
+        foreach ($tagStmt->fetchAll() as $tag) {
+            $urls[] = [
+                "loc" => $this->baseUrl("/tag/" . rawurlencode($tag["slug"])),
+                "lastmod" => $this->sitemapLastmod($tag["lastmod"] ?? null),
+            ];
+        }
+
+        return $urls;
+    }
+
+    public function generateSitemapXml(): bool
+    {
+        $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+        $xml .= "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
+        foreach ($this->getPublicSitemapUrls() as $url) {
+            $xml .= $this->buildSitemapUrlEntry($url["loc"], $url["lastmod"] ?? null);
+        }
+        $xml .= "</urlset>\n";
+
+        $target = __DIR__ . "/sitemap.xml";
+        $tmp = $target . ".tmp";
+        if (file_put_contents($tmp, $xml, LOCK_EX) === false) {
+            error_log("LimeVideo sitemap write failed.");
+            return false;
+        }
+        if (!@rename($tmp, $target)) {
+            @unlink($tmp);
+            error_log("LimeVideo sitemap rename failed.");
+            return false;
+        }
+        return true;
+    }
+
+    public function regenerateSitemap(?string $token = null): void
+    {
+        $expectedToken = trim((string) $this->cfg("CRON_TOKEN", ""));
+        if ($expectedToken === "" || !hash_equals($expectedToken, (string) $token)) {
+            $this->jsonResponse(["error" => "Invalid or missing cron token"], 403);
+        }
+
+        $this->jsonResponse([
+            "success" => $this->generateSitemapXml(),
+            "path" => "sitemap.xml",
+        ]);
+    }
+
     // --- Security, rate limit and cache helpers ---
 
     public function checkRateLimit(string $key, int $limit, int $period): void
@@ -1105,6 +1253,33 @@ final class LimeVideo
         return $jobId;
     }
 
+    private function enqueueSitemapRegeneration(
+        string $reason,
+        array $payload = [],
+    ): void {
+        $jobId = $this->generateId("j", 14);
+        $dedupeKey = hash("sha256", "sitemap_regenerate|main");
+        $stmt = $this->db()->prepare(
+            "INSERT INTO cron_jobs
+            (id, event_type, target_type, target_id, dedupe_key, priority, payload)
+            VALUES (?, 'sitemap_regenerate', 'sitemap', 'main', ?, -5, ?)
+            ON DUPLICATE KEY UPDATE
+                updated_at = NOW(),
+                payload = VALUES(payload),
+                available_at = IF(status = 'working', available_at, NOW()),
+                attempts = IF(status = 'working', attempts, 0),
+                completed_at = IF(status = 'working', completed_at, NULL),
+                failed_at = IF(status = 'working', failed_at, NULL),
+                last_error = NULL,
+                status = IF(status = 'working', status, 'pending')",
+        );
+        $stmt->execute([
+            $jobId,
+            $dedupeKey,
+            json_encode(["reason" => $reason, ...$payload]),
+        ]);
+    }
+
     private function cronMarkerFile(string $name): string
     {
         return $this->cacheDir .
@@ -1268,6 +1443,7 @@ final class LimeVideo
         try {
             $result = match ($job["event_type"]) {
                 "notification_video" => $this->processVideoNotificationJob($job),
+                "sitemap_regenerate" => $this->processSitemapRegenerationJob(),
                 "analytics_rollup_hourly" => $this->processAnalyticsRollupJob($job, "hour"),
                 "analytics_rollup_daily" => $this->processAnalyticsRollupJob($job, "day"),
                 "analytics_cleanup_raw" => $this->processAnalyticsCleanupJob($job),
@@ -1323,6 +1499,15 @@ final class LimeVideo
                 "error" => $e->getMessage(),
             ];
         }
+    }
+
+    private function processSitemapRegenerationJob(): array
+    {
+        $success = $this->generateSitemapXml();
+        if (!$success) {
+            throw new RuntimeException("Sitemap generation failed");
+        }
+        return ["generated" => true, "path" => "sitemap.xml"];
     }
 
     private function processVideoNotificationJob(array $job): array
@@ -1684,6 +1869,7 @@ final class LimeVideo
         $this->cacheDelete("user_" . $uid);
         $this->cacheDeletePrefix("profile_" . $uid . "_");
         $this->invalidateVideoBaseCaches($uid);
+        $this->enqueueSitemapRegeneration("profile_updated", ["user_id" => $uid]);
         $_SESSION["user"]["display_name"] = $displayName;
         $this->jsonResponse(["success" => true]);
     }
@@ -2024,6 +2210,10 @@ final class LimeVideo
         );
 
         $this->invalidateDiscoveryCaches();
+        $this->enqueueSitemapRegeneration("video_created", [
+            "video_id" => $vid,
+            "user_id" => $userId,
+        ]);
         if ($tags) {
             $this->cacheDelete("portal_tags_v2");
         }
@@ -2139,6 +2329,10 @@ final class LimeVideo
         $this->cacheDeletePrefix("profile_" . $userId . "_");
         $this->cacheDelete("video_base_user_{$userId}_video_{$videoId}");
         if ($status === "public") {
+            $this->enqueueSitemapRegeneration("public_video_created", [
+                "video_id" => $videoId,
+                "user_id" => $userId,
+            ]);
             $this->enqueueCronJob(
                 "notification_video",
                 "video",
@@ -2208,6 +2402,12 @@ final class LimeVideo
 
         $this->invalidateDiscoveryCaches();
         $this->invalidateVideoBaseCaches();
+        if ($stmt->rowCount() > 0 || $duration !== null) {
+            $this->enqueueSitemapRegeneration("provider_video_updated", [
+                "provider" => $provider,
+                "provider_asset_id" => $assetId,
+            ]);
+        }
         $this->jsonResponse([
             "success" => true,
             "updated" => $stmt->rowCount(),
@@ -3178,6 +3378,12 @@ session_start();
 $uri = parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH);
 $method = $_SERVER["REQUEST_METHOD"];
 
+if ($uri === "/sitemap.xml" && is_file(__DIR__ . "/sitemap.xml")) {
+    header("Content-Type: application/xml; charset=utf-8");
+    readfile(__DIR__ . "/sitemap.xml");
+    exit();
+}
+
 if (strpos($uri, "/api/") === 0) {
     $endpoint = substr($uri, 5);
     $input = json_decode(file_get_contents("php://input"), true) ?? $_POST;
@@ -3204,6 +3410,9 @@ if (strpos($uri, "/api/") === 0) {
             };
         }
         match ($endpoint) {
+            "sitemap/regenerate" => $App->regenerateSitemap(
+                $_GET["token"] ?? null,
+            ),
             "cron/run" => $App->runCronJobs(
                 (int) ($_GET["limit"] ?? 10),
                 $_GET["token"] ?? null,

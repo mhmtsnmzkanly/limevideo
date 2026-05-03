@@ -1224,6 +1224,16 @@ const app = {
         page: "user",
         load: (m) => this.loadProfile(m[1], hash),
       },
+      {
+        re: /^\/tag\/([^\/]+)$/,
+        page: "gallery",
+        load: (m) => {
+          this.setState("search.query", "");
+          this.setState("search.activeTag", decodeURIComponent(m[1] || ""));
+          this.setState("search.sort", "newest");
+          return this.loadGallery();
+        },
+      },
       { re: /^\/settings$/, page: "settings", load: () => ({}) },
       { re: /^\/auth$/, page: "auth", load: () => ({}) },
     ];
@@ -1249,6 +1259,8 @@ const app = {
     const query = this.state.search.query.trim();
     const tag = this.state.search.activeTag || "all";
     const sort = this.state.search.sort || "newest";
+    if (!query && tag !== "all" && sort === "newest")
+      return `/tag/${encodeURIComponent(tag)}`;
     if (query) params.set("q", query);
     if (tag !== "all") params.set("cat", tag);
     if (sort !== "newest") params.set("sort", sort);
@@ -1314,7 +1326,9 @@ const app = {
     const token = this.state.route.token + 1;
     this.setState("route.token", token);
     const { route, params, path, search, fullPath } = this.routeConfig();
-    if (route.page === "gallery") this.syncGalleryStateFromUrl(search);
+    if (route.page === "gallery" && !/^\/tag\//.test(path)) {
+      this.syncGalleryStateFromUrl(search);
+    }
 
     this.beforeRouteLeave(route.page, path);
     this.activePage = route.page;
@@ -1551,50 +1565,136 @@ const app = {
     return error?.message || "Request failed";
   },
 
-  updateDocumentTitle(page = this.activePage, data = null) {
-    const parts = [];
+  normalizeSeoText(value = "", maxLength = 160) {
+    const text = String(value || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/[<>"'`]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+  },
+
+  absoluteUrl(path = "/") {
+    try {
+      return new URL(path || "/", window.location.origin).toString();
+    } catch (error) {
+      return window.location.origin + "/";
+    }
+  },
+
+  setMetaTag(attribute, key, value) {
+    if (!value) return;
+    const escapedKey =
+      window.CSS && typeof window.CSS.escape === "function"
+        ? window.CSS.escape(key)
+        : String(key).replace(/"/g, '\\"');
+    const selector = `meta[${attribute}="${escapedKey}"]`;
+    let tag = document.head.querySelector(selector);
+    if (!tag) {
+      tag = document.createElement("meta");
+      tag.setAttribute(attribute, key);
+      document.head.appendChild(tag);
+    }
+    tag.setAttribute("content", this.normalizeSeoText(value, 280));
+  },
+
+  setCanonicalUrl(path = "/") {
+    let link = document.head.querySelector('link[rel="canonical"]');
+    if (!link) {
+      link = document.createElement("link");
+      link.setAttribute("rel", "canonical");
+      document.head.appendChild(link);
+    }
+    link.setAttribute("href", this.absoluteUrl(path));
+  },
+
+  updateSeoForRoute(page = this.activePage, data = null) {
     const base = "LimeVideo";
+    const fallbackDescription =
+      "Discover public videos, creators and tags on LimeVideo.";
+    let title = base;
+    let description = fallbackDescription;
+    let canonicalPath = "/";
+    let robots = "index,follow";
+    let ogType = "website";
 
-    const normalize = (val) =>
-      String(val || "")
-        .replace(/[<>]/g, "")
-        .trim();
-
-    switch (page) {
-      case "gallery":
-        if (this.state.search.query) {
-          parts.push(`Search: ${normalize(this.state.search.query)}`);
-        } else if (this.state.search.activeTag !== "all") {
-          const tag = this.state.search.tags.find(
-            (t) => t.slug === this.state.search.activeTag,
-          );
-          parts.push(normalize(tag?.name || this.state.search.activeTag));
-        } else {
-          parts.push("Discover");
-        }
-        break;
-      case "watch":
-        parts.push(normalize(data?.title || "Watch Video"));
-        break;
-      case "user":
-        parts.push(normalize(data?.display_name || data?.username || "Profile"));
-        break;
-      case "auth":
-        const hash = window.location.hash || "#login";
-        parts.push(hash === "#register" ? "Register" : "Login");
-        break;
-      case "settings":
-        parts.push("Settings");
-        break;
-      default:
-        parts.push("Not Found");
+    if (page === "gallery") {
+      const query = this.normalizeSeoText(this.state.search.query, 80);
+      const activeTag = this.state.search.activeTag || "all";
+      if (query) {
+        title = `Search: ${query} - ${base}`;
+        description = `Search results for ${query} on LimeVideo.`;
+        canonicalPath = "/gallery";
+        robots = "noindex,follow";
+      } else if (activeTag !== "all") {
+        const tag = this.state.search.tags.find((t) => t.slug === activeTag);
+        const label = this.normalizeSeoText(tag?.name || activeTag, 80);
+        title = `#${label} - ${base}`;
+        description = `Videos tagged #${label} on LimeVideo.`;
+        canonicalPath = `/tag/${encodeURIComponent(activeTag)}`;
+      } else {
+        title = base;
+        canonicalPath = "/";
+      }
+    } else if (page === "watch") {
+      const videoTitle = this.normalizeSeoText(data?.title || "Watch Video", 90);
+      title = `${videoTitle} - ${base}`;
+      description =
+        this.normalizeSeoText(data?.description, 155) ||
+        `Watch ${videoTitle} on LimeVideo.`;
+      canonicalPath = data?.id ? `/video/${encodeURIComponent(data.id)}` : "/gallery";
+      ogType = "video.other";
+      if (data?.error || data?.status === 404 || data?.status === "private") {
+        robots = "noindex,nofollow";
+      }
+    } else if (page === "user") {
+      const name = this.normalizeSeoText(
+        data?.display_name || data?.username || "Profile",
+        90,
+      );
+      title = `${name} - ${base}`;
+      description =
+        this.normalizeSeoText(data?.bio, 155) ||
+        `Public LimeVideo profile for ${name}.`;
+      canonicalPath = data?.id ? `/profile/${encodeURIComponent(data.id)}` : "/gallery";
+      if (data?.error) robots = "noindex,nofollow";
+    } else if (page === "auth") {
+      const hash = window.location.hash || "#login";
+      title = `${hash === "#register" ? "Register" : "Login"} - ${base}`;
+      description = "Access your LimeVideo account.";
+      canonicalPath = "/auth";
+      robots = "noindex,nofollow";
+    } else if (page === "settings") {
+      title = `Settings - ${base}`;
+      description = "Manage LimeVideo account settings.";
+      canonicalPath = "/settings";
+      robots = "noindex,nofollow";
+    } else {
+      title = `Not Found - ${base}`;
+      description = "The requested LimeVideo page could not be found.";
+      canonicalPath = window.location.pathname || "/";
+      robots = "noindex,nofollow";
     }
 
     const unread = this.state.notifications.items.filter((n) => !n.read_at).length;
-    const prefix = unread > 0 ? `(${unread}) ` : "";
-    const title = parts.length ? `${parts.join(" - ")} - ${base}` : base;
+    document.title = `${unread > 0 ? `(${unread}) ` : ""}${title}`;
+    const canonicalUrl = this.absoluteUrl(canonicalPath);
 
-    document.title = prefix + title;
+    this.setMetaTag("name", "description", description);
+    this.setMetaTag("name", "robots", robots);
+    this.setMetaTag("property", "og:title", title);
+    this.setMetaTag("property", "og:description", description);
+    this.setMetaTag("property", "og:url", canonicalUrl);
+    this.setMetaTag("property", "og:type", ogType);
+    this.setMetaTag("name", "twitter:card", "summary");
+    this.setMetaTag("name", "twitter:title", title);
+    this.setMetaTag("name", "twitter:description", description);
+    this.setCanonicalUrl(canonicalPath);
+  },
+
+  updateDocumentTitle(page = this.activePage, data = null) {
+    this.updateSeoForRoute(page, data);
   },
 
   apiGet(url, options = {}) {
