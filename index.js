@@ -276,7 +276,7 @@ const app = {
           this.showStatus(data.error || "Report failed.", "error");
         }
       } catch (e) {
-        this.showStatus("Report failed.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e), "error");
       } finally {
         this.state.reportSubmitting = false;
         if (submitBtn) {
@@ -425,7 +425,7 @@ const app = {
         this.setText(counter, "0 / 500");
         await this.fetchChatMessages(false);
       } catch (e) {
-        this.showStatus(e.message || "Message could not be sent.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e), "error");
       }
     },
     "cancel-chat-confirm"() {
@@ -469,7 +469,7 @@ const app = {
           this.showStatus("Removed from profile.");
         else this.showStatus(data.error || "Save failed.", "error");
       } catch (e) {
-        this.showStatus("Save failed.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e), "error");
       }
     },
     async "watch-later"(target) {
@@ -490,7 +490,7 @@ const app = {
             : "Removed from Watch Later.",
         );
       } catch (e) {
-        this.showStatus("Action failed.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e), "error");
       }
     },
     async "follow-profile"(target) {
@@ -505,7 +505,7 @@ const app = {
         else this.showStatus("Unfollowed.");
         if (this.activePage === "user") this.route();
       } catch (e) {
-        this.showStatus("Action failed.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e), "error");
       }
     },
     async "vote-video"(target) {
@@ -527,7 +527,7 @@ const app = {
         });
         this.route();
       } catch (e) {
-        this.showStatus("Vote failed.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e), "error");
       }
     },
     async "vote-comment"(target) {
@@ -550,7 +550,7 @@ const app = {
         });
         await this.fetchComments(this.lastWatchedId);
       } catch (e) {
-        this.showStatus("Vote failed.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e), "error");
       }
     },
     async "add-comment"(target) {
@@ -600,7 +600,7 @@ const app = {
           this.showStatus(data.error || "Comment failed.", "error");
         }
       } catch (e) {
-        this.showStatus(e.message || "Comment failed.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e), "error");
       }
     },
     "begin-reply"(target) {
@@ -639,7 +639,7 @@ const app = {
         }
       } catch (e) {
         this.resetTurnstileWidget("login");
-        this.showStatus(e.message || "Server error.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e, "auth"), "error");
       }
     },
     async register() {
@@ -671,7 +671,7 @@ const app = {
         }
       } catch (e) {
         this.resetTurnstileWidget("register");
-        this.showStatus(e.message || "Server error.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e, "auth"), "error");
       }
     },
     async logout() {
@@ -720,7 +720,7 @@ const app = {
           this.showStatus(data.error || "Update failed.", "error");
         }
       } catch (e) {
-        this.showStatus("Server error.", "error");
+        this.showStatus(this.getFriendlyErrorMessage(e), "error");
       }
     },
     "toggle-edit-profile"(target) {
@@ -787,6 +787,7 @@ const app = {
         });
         this.renderNavbar(this.activePage);
         this.renderNotifications();
+        this.updateDocumentTitle();
         this.showStatus("Notifications marked as read.");
       } catch (e) {
         this.showStatus("Notification update failed.", "error");
@@ -1306,6 +1307,7 @@ const app = {
     window.scrollTo(0, 0);
     this.updateScrollProgress();
     this.trackPageView(page, path);
+    this.updateDocumentTitle(page, data);
   },
 
   async route() {
@@ -1320,6 +1322,10 @@ const app = {
     this.renderLoading(this.activePage);
     const data = await this.loadRouteData(route, params);
     if (token !== this.state.route.token) return;
+
+    if (data?.error && data?.status === 404) {
+      this.activePage = "notfound";
+    }
 
     this.renderRoute(this.activePage, data);
     this.afterRouteRender(this.activePage, data, fullPath);
@@ -1511,7 +1517,7 @@ const app = {
       const message =
         data?.error || data?.message || response.statusText || "Request failed";
       const error = new Error(message);
-      error.status = response.status;
+      error.status = Number(response.status) || 500;
       error.data = data;
       this.logApiError(error, {
         url,
@@ -1524,6 +1530,71 @@ const app = {
     }
 
     return raw ? { data, response } : data;
+  },
+
+  getFriendlyErrorMessage(error, context = "") {
+    const status = Number(error?.status);
+    if (!status) return error?.message || "An unexpected error occurred.";
+
+    if (status === 401) {
+      if (context === "auth") return "Username or password is wrong";
+      return "Please login to continue";
+    }
+    if (status === 400) return error?.message || "Invalid request";
+    if (status === 403) return "You do not have permission to do this";
+    if (status === 404) return "Not found";
+    if (status === 409) return "This action conflicts with the current state";
+    if (status === 422) return "Please check the form fields";
+    if (status === 429) return "Too many requests. Please try again later";
+    if (status >= 500) return "Server error. Please try again later";
+
+    return error?.message || "Request failed";
+  },
+
+  updateDocumentTitle(page = this.activePage, data = null) {
+    const parts = [];
+    const base = "LimeVideo";
+
+    const normalize = (val) =>
+      String(val || "")
+        .replace(/[<>]/g, "")
+        .trim();
+
+    switch (page) {
+      case "gallery":
+        if (this.state.search.query) {
+          parts.push(`Search: ${normalize(this.state.search.query)}`);
+        } else if (this.state.search.activeTag !== "all") {
+          const tag = this.state.search.tags.find(
+            (t) => t.slug === this.state.search.activeTag,
+          );
+          parts.push(normalize(tag?.name || this.state.search.activeTag));
+        } else {
+          parts.push("Discover");
+        }
+        break;
+      case "watch":
+        parts.push(normalize(data?.title || "Watch Video"));
+        break;
+      case "user":
+        parts.push(normalize(data?.display_name || data?.username || "Profile"));
+        break;
+      case "auth":
+        const hash = window.location.hash || "#login";
+        parts.push(hash === "#register" ? "Register" : "Login");
+        break;
+      case "settings":
+        parts.push("Settings");
+        break;
+      default:
+        parts.push("Not Found");
+    }
+
+    const unread = this.state.notifications.items.filter((n) => !n.read_at).length;
+    const prefix = unread > 0 ? `(${unread}) ` : "";
+    const title = parts.length ? `${parts.join(" - ")} - ${base}` : base;
+
+    document.title = prefix + title;
   },
 
   apiGet(url, options = {}) {
@@ -2006,6 +2077,7 @@ const app = {
         await this.apiGet("/api/notifications"),
       );
       this.renderNavbar();
+      this.updateDocumentTitle();
     } catch (e) {
       console.error("Notifications fetch failed");
     }
