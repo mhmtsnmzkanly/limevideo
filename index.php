@@ -38,6 +38,14 @@ final class LimeVideo
         "ANALYTICS_RAW_RETENTION_DAYS" => 90,
         "ANALYTICS_AUTO_ENQUEUE_MIN_INTERVAL" => 300,
         "SECURITY_CSRF_EXEMPT" => "login,register,provider_webhook,analytics",
+        "TURNSTILE_ENABLED" => false,
+        "TURNSTILE_SCRIPT_URL" =>
+            "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
+        "TURNSTILE_PUBLIC_KEY" => "",
+        "TURNSTILE_PRIVATE_KEY" => "",
+        "TURNSTILE_VERIFY_URL" =>
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        "TURNSTILE_FORM_FIELD_NAME" => "cf-turnstile-response",
         "AD_SERVICE_KEYS" => "internal,vast,gam,custom_js",
         "AD_SERVICE_INTERNAL_DISPLAY_NAME" => "Internal Ad Placements",
         "AD_SERVICE_INTERNAL_SCRIPT_URL" => "",
@@ -208,6 +216,66 @@ final class LimeVideo
                 $response["retry_after"] = $period - (time() - $data["start"]);
             }
             $this->jsonResponse($response, 429);
+        }
+    }
+
+    public function turnstilePublicConfig(): array
+    {
+        return [
+            "enabled" => (bool) $this->cfg("TURNSTILE_ENABLED"),
+            "script_url" => (string) $this->cfg("TURNSTILE_SCRIPT_URL"),
+            "public_key" => (string) $this->cfg("TURNSTILE_PUBLIC_KEY"),
+            "form_field_name" => (string) $this->cfg("TURNSTILE_FORM_FIELD_NAME"),
+        ];
+    }
+
+    public function turnstileTokenFromInput(array $input): string
+    {
+        $field = (string) $this->cfg("TURNSTILE_FORM_FIELD_NAME");
+        return trim((string) ($input[$field] ?? $input["turnstile_token"] ?? ""));
+    }
+
+    private function verifyTurnstile(string $token): void
+    {
+        if (!(bool) $this->cfg("TURNSTILE_ENABLED")) {
+            return;
+        }
+
+        $secret = trim((string) $this->cfg("TURNSTILE_PRIVATE_KEY"));
+        $verifyUrl = trim((string) $this->cfg("TURNSTILE_VERIFY_URL"));
+        if ($secret === "" || $verifyUrl === "") {
+            $this->jsonResponse(["error" => "Captcha is not configured"], 503);
+        }
+        if ($token === "") {
+            $this->jsonResponse(["error" => "Captcha verification is required"], 400);
+        }
+
+        $payload = http_build_query([
+            "secret" => $secret,
+            "response" => $token,
+            "remoteip" => $_SERVER["REMOTE_ADDR"] ?? "",
+        ]);
+        $context = stream_context_create([
+            "http" => [
+                "method" => "POST",
+                "header" =>
+                    "Content-Type: application/x-www-form-urlencoded\r\n" .
+                    "Content-Length: " .
+                    strlen($payload) .
+                    "\r\n",
+                "content" => $payload,
+                "timeout" => 5,
+            ],
+        ]);
+        $raw = @file_get_contents($verifyUrl, false, $context);
+        $result = $raw ? json_decode($raw, true) : null;
+
+        if (!is_array($result) || empty($result["success"])) {
+            $response = ["error" => "Captcha verification failed"];
+            if ((bool) $this->cfg("DEV_MODE")) {
+                $response["turnstile_errors"] = $result["error-codes"] ?? [];
+            }
+            $this->jsonResponse($response, 400);
         }
     }
 
@@ -2718,9 +2786,10 @@ final class LimeVideo
         $this->jsonResponse(["success" => true, "count" => count($events)]);
     }
 
-    public function login(string $user, string $pass): void
+    public function login(string $user, string $pass, string $captchaToken = ""): void
     {
         $this->checkRateLimit("login", 8, 300);
+        $this->verifyTurnstile($captchaToken);
         $stmt = $this->db()->prepare(
             "SELECT * FROM users WHERE (username = ? OR email = ?) AND status = 'active'",
         );
@@ -2777,8 +2846,10 @@ final class LimeVideo
         ?string $username,
         ?string $email,
         ?string $password,
+        string $captchaToken = "",
     ): void {
         $this->checkRateLimit("register", 5, 600);
+        $this->verifyTurnstile($captchaToken);
         $username = $this->validate($username ?? "", "text", ["max" => 50]);
         $email = $this->validate($email ?? "", "email");
 
@@ -2868,6 +2939,7 @@ if (strpos($uri, "/api/") === 0) {
                 "https" => (bool) $App->cfg("SITE_HTTPS"),
                 "base_url" => (string) $App->cfg("SITE_BASE_URL"),
                 "dev_mode" => (bool) $App->cfg("DEV_MODE"),
+                "turnstile" => $App->turnstilePublicConfig(),
             ]),
             "trending" => $App->getTrending(),
             "search" => $App->search(
@@ -2930,11 +3002,16 @@ if (strpos($uri, "/api/") === 0) {
                 $App->validate($input["parent_id"] ?? null, "id"),
             ),
             "update_profile" => $App->updateProfile($input),
-            "login" => $App->login($input["user"] ?? "", $input["pass"] ?? ""),
+            "login" => $App->login(
+                $input["user"] ?? "",
+                $input["pass"] ?? "",
+                $App->turnstileTokenFromInput($input),
+            ),
             "register" => $App->register(
                 $input["user"] ?? "",
                 $input["email"] ?? "",
                 $input["pass"] ?? "",
+                $App->turnstileTokenFromInput($input),
             ),
             "logout" => (function () use ($App, $method) {
                 if ($method !== "POST") {

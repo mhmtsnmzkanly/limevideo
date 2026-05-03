@@ -1303,6 +1303,22 @@ body {
     border-color: var(--lime-green);
 }
 
+.turnstile-captcha {
+    min-height: 65px;
+    margin: 20px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--lime-border);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.turnstile-captcha[hidden] {
+    display: none;
+}
+
 .age-btn-primary {
     width: 100%;
     padding: 16px;

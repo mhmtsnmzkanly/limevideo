@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="index.css">
+    <script id="turnstile-script" src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer onload="window.limevideoTurnstileReady && window.limevideoTurnstileReady()"></script>
 </head>
 <body>
     <!-- Global Loading Screen: full-page boot loader shown before the app shell is ready -->
@@ -75,15 +76,7 @@
                         This video is age-restricted according to our community guidelines. You must confirm you are over 18 to continue.
                     </p>
                 </div>
-                <div class="captcha-mock" id="captcha-trigger" data-action="toggle-captcha">
-                    <div class="checkbox-custom" id="captcha-checkbox">
-                        <i class="fa-solid fa-check text-black text-xs hidden" id="captcha-check-icon"></i>
-                    </div>
-                    <span class="text-xs font-semibold text-gray-300">I'm not a robot</span>
-                    <div class="ml-auto opacity-30">
-                        <i class="fa-solid fa-arrows-rotate text-xs"></i>
-                    </div>
-                </div>
+                <div class="turnstile-captcha" data-turnstile-widget data-purpose="age"></div>
                 <button id="btn-enter-age" class="age-btn-primary age-btn-disabled" disabled data-action="toggle-age" data-state="confirm">Yes, I am over 18</button>
                 <button data-action="navigate" data-to="/gallery" class="w-full py-3 text-[11px] font-bold uppercase tracking-widest text-gray-500 hover:text-white transition-colors">Go Back</button>
             </div>
@@ -800,24 +793,26 @@
 
     <!-- Template Engine: login form -->
     <template id="tpl-partial-auth-login-form">
-        <div class="space-y-5">
+        <form class="space-y-5" data-action="login">
             <div><label class="block text-[10px] uppercase font-black text-gray-500 mb-2 ml-1 tracking-widest">Username or Email</label><input type="text" id="login-user" class="lime-input !bg-black/20 !border-white/5 focus:!border-[#00ff41]/50 py-4" placeholder="lime_user"></div>
             <div><label class="block text-[10px] uppercase font-black text-gray-500 mb-2 ml-1 tracking-widest">Password</label><input type="password" id="login-pass" class="lime-input !bg-black/20 !border-white/5 focus:!border-[#00ff41]/50 py-4" placeholder="••••••••"></div>
-            <button data-action="login" class="w-full lime-btn-primary py-4 uppercase text-xs font-black tracking-[0.2em] mt-2 group">Access System <i class="fa-solid fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i></button>
-        </div>
+            <div class="turnstile-captcha" data-turnstile-widget data-purpose="login"></div>
+            <button type="submit" class="w-full lime-btn-primary py-4 uppercase text-xs font-black tracking-[0.2em] mt-2 group">Access System <i class="fa-solid fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i></button>
+        </form>
     </template>
 
     <!-- Template Engine: register form -->
     <template id="tpl-partial-auth-register-form">
-        <div class="space-y-5">
+        <form class="space-y-5" data-action="register">
             <div><label class="block text-[10px] uppercase font-black text-gray-500 mb-2 ml-1 tracking-widest">Username</label><input type="text" id="reg-user" class="lime-input !bg-black/20 !border-white/5 focus:!border-[#00ff41]/50 py-4" placeholder="new_limer"></div>
             <div><label class="block text-[10px] uppercase font-black text-gray-500 mb-2 ml-1 tracking-widest">Email</label><input type="email" id="reg-email" class="lime-input !bg-black/20 !border-white/5 focus:!border-[#00ff41]/50 py-4" placeholder="email@example.com"></div>
             <div class="grid grid-cols-2 gap-4">
                 <div><label class="block text-[10px] uppercase font-black text-gray-500 mb-2 ml-1 tracking-widest">Password</label><input type="password" id="reg-pass" class="lime-input !bg-black/20 !border-white/5 focus:!border-[#00ff41]/50 py-4" placeholder="••••"></div>
                 <div><label class="block text-[10px] uppercase font-black text-gray-500 mb-2 ml-1 tracking-widest">Repeat</label><input type="password" id="reg-pass2" class="lime-input !bg-black/20 !border-white/5 focus:!border-[#00ff41]/50 py-4" placeholder="••••"></div>
             </div>
-            <button data-action="register" class="w-full lime-btn-primary py-4 uppercase text-xs font-black tracking-[0.2em] mt-2">Complete Registration</button>
-        </div>
+            <div class="turnstile-captcha" data-turnstile-widget data-purpose="register"></div>
+            <button type="submit" class="w-full lime-btn-primary py-4 uppercase text-xs font-black tracking-[0.2em] mt-2">Complete Registration</button>
+        </form>
     </template>
 
     <!-- Template Engine: gallery page shell -->
