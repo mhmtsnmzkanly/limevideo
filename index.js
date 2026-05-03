@@ -60,21 +60,42 @@ const app = {
   },
 
   state: {
-    me: null,
+    auth: {
+      me: null,
+      csrfToken: "",
+    },
+    route: {
+      current: "",
+      token: 0,
+      currentPageStartedAt: 0,
+      currentPageMaxScroll: 0,
+    },
+    search: {
+      query: "",
+      sort: "newest",
+      activeTag: "all",
+      tags: ["all"],
+      videos: [],
+      galleryCursor: "",
+      galleryHasMore: true,
+      galleryLoadingMore: false,
+      galleryLimit: 24,
+    },
+    chat: {
+      open: false,
+      unreadCount: 0,
+      pendingMessage: "",
+      messages: [],
+      lastFetchedAt: "",
+      pollInterval: null,
+    },
+    notifications: {
+      items: [],
+    },
     popunderTriggered: false,
     adTimer: 5,
     adInterval: null,
     isCaptchaVerified: false,
-    searchQuery: "",
-    searchSort: "newest",
-    activeTag: "all",
-    tags: ["all"],
-    videos: [],
-    galleryCursor: "",
-    galleryHasMore: true,
-    galleryLoadingMore: false,
-    galleryLimit: 24,
-    notifications: [],
     replyParentId: null,
     autoplay: true,
     settings: null,
@@ -95,24 +116,14 @@ const app = {
     turnstileWidgets: {},
     turnstileTokens: {},
     ads: {},
-    csrfToken: "",
     commentSort: "new",
     profileView: "grid",
     analyticsSessionId: "",
     analyticsQueue: [],
     analyticsFlushTimer: null,
-    currentRoute: "",
-    currentPageStartedAt: 0,
-    currentPageMaxScroll: 0,
     activeVideoId: null,
     videoWatchStartedAt: 0,
     videoWatchInterval: null,
-    chatOpen: false,
-    chatUnreadCount: 0,
-    chatPendingMessage: "",
-    chatMessages: [],
-    chatLastFetchedAt: "",
-    chatPollInterval: null,
     uploadSource: "external",
     uploadSelectedTags: [],
     uploadSubmitting: false,
@@ -123,41 +134,6 @@ const app = {
     templateCache: new Map(),
     routeToken: 0,
     scrollRaf: null,
-  },
-
-  stateDomains: {
-    auth: {
-      me: "me",
-      csrfToken: "csrfToken",
-    },
-    route: {
-      current: "currentRoute",
-      token: "routeToken",
-      currentPageStartedAt: "currentPageStartedAt",
-      currentPageMaxScroll: "currentPageMaxScroll",
-    },
-    search: {
-      query: "searchQuery",
-      sort: "searchSort",
-      activeTag: "activeTag",
-      tags: "tags",
-      videos: "videos",
-      galleryCursor: "galleryCursor",
-      galleryHasMore: "galleryHasMore",
-      galleryLoadingMore: "galleryLoadingMore",
-      galleryLimit: "galleryLimit",
-    },
-    chat: {
-      open: "chatOpen",
-      unreadCount: "chatUnreadCount",
-      pendingMessage: "chatPendingMessage",
-      messages: "chatMessages",
-      lastFetchedAt: "chatLastFetchedAt",
-      pollInterval: "chatPollInterval",
-    },
-    notifications: {
-      items: "notifications",
-    },
   },
 
   reportIcons: {
@@ -186,7 +162,7 @@ const app = {
 
       const type = this.actionValue(target, "type");
       const id = this.actionValue(target, "id");
-      if (!this.state.me) {
+      if (!this.state.auth.me) {
         this.navigateTo("/auth");
         return;
       }
@@ -271,20 +247,20 @@ const app = {
     "toggle-chat"(target, event) {
       const state = this.actionValue(target, "state", "toggle");
       if (event) event.stopPropagation();
-      if (state === "close" || (state === "toggle" && this.state.chatOpen)) {
-        this.state.chatOpen = false;
+      if (state === "close" || (state === "toggle" && this.state.chat.open)) {
+        this.setState("chat.open", false);
         document.getElementById("chat-modal")?.classList.remove("active");
-        this.state.chatPendingMessage = "";
+        this.setState("chat.pendingMessage", "");
         document
           .getElementById("chat-confirm-popup")
           ?.classList.remove("active");
         return;
       }
-      if (!this.state.me) {
+      if (!this.state.auth.me) {
         this.navigateTo("/auth");
         return;
       }
-      this.state.chatOpen = true;
+      this.setState("chat.open", true);
       this.updateChatUnreadCount(0);
       const modal = document.getElementById("chat-modal");
       if (modal) modal.classList.add("active");
@@ -303,7 +279,7 @@ const app = {
         document.body.style.overflow = "auto";
         return;
       }
-      if (!this.state.me) {
+      if (!this.state.auth.me) {
         this.navigateTo("/auth");
         return;
       }
@@ -351,10 +327,10 @@ const app = {
       panel.classList.toggle("active");
       if (panel.classList.contains("active")) {
         this.renderNotifications();
-        if (!this.state.me) return;
+        if (!this.state.auth.me) return;
         try {
           await this.apiPost("/api/read_notifications");
-          this.state.notifications.forEach((n) => {
+          this.state.notifications.items.forEach((n) => {
             if (this.isUnreadNotification(n))
               n.read_at = new Date().toISOString();
           });
@@ -379,13 +355,13 @@ const app = {
       const input = document.getElementById("chat-input");
       const value = input?.value.trim() || "";
       if (!value) return;
-      this.state.chatPendingMessage = value;
+      this.setState("chat.pendingMessage", value);
       document.getElementById("chat-confirm-popup")?.classList.add("active");
     },
     async "confirm-chat"() {
-      const body = this.state.chatPendingMessage.trim();
+      const body = this.state.chat.pendingMessage.trim();
       if (!body) {
-        this.state.chatPendingMessage = "";
+        this.setState("chat.pendingMessage", "");
         document
           .getElementById("chat-confirm-popup")
           ?.classList.remove("active");
@@ -399,7 +375,7 @@ const app = {
         }
         const input = document.getElementById("chat-input");
         if (input) input.value = "";
-        this.state.chatPendingMessage = "";
+        this.setState("chat.pendingMessage", "");
         document
           .getElementById("chat-confirm-popup")
           ?.classList.remove("active");
@@ -411,14 +387,14 @@ const app = {
       }
     },
     "cancel-chat-confirm"() {
-      this.state.chatPendingMessage = "";
+      this.setState("chat.pendingMessage", "");
       document.getElementById("chat-confirm-popup")?.classList.remove("active");
     },
     async "set-tag"(target) {
       const value = this.actionValue(target, "value");
       const id = this.actionValue(target, "id");
       const tag = value || id;
-      this.state.activeTag = tag;
+      this.setState("search.activeTag", tag);
       this.trackAnalytics("category_select", { category: tag });
       this.updateGalleryUrl({ push: true });
     },
@@ -436,7 +412,7 @@ const app = {
     },
     async "save-video"(target) {
       const id = this.actionValue(target, "id");
-      if (!this.state.me) {
+      if (!this.state.auth.me) {
         this.showStatus("Please login to save videos!", "error");
         return;
       }
@@ -456,7 +432,7 @@ const app = {
     },
     async "watch-later"(target) {
       const id = this.actionValue(target, "id");
-      if (!this.state.me) {
+      if (!this.state.auth.me) {
         this.showStatus("Please login first.", "error");
         return;
       }
@@ -477,7 +453,7 @@ const app = {
     },
     async "follow-profile"(target) {
       const id = this.actionValue(target, "id");
-      if (!this.state.me) {
+      if (!this.state.auth.me) {
         this.showStatus("Please login to follow!", "error");
         return;
       }
@@ -492,7 +468,7 @@ const app = {
     },
     async "vote-video"(target) {
       const value = this.actionValue(target, "value");
-      if (!this.state.me) {
+      if (!this.state.auth.me) {
         this.showStatus("Please login to vote!", "error");
         return;
       }
@@ -515,7 +491,7 @@ const app = {
     async "vote-comment"(target) {
       const id = this.actionValue(target, "id");
       const value = this.actionValue(target, "value");
-      if (!this.state.me) {
+      if (!this.state.auth.me) {
         this.showStatus("Please login to vote!", "error");
         return;
       }
@@ -549,7 +525,7 @@ const app = {
         parentId ? `reply-text-${parentId}` : "comment-text",
       );
       if (!input || !input.value.trim()) return;
-      if (!this.state.me) {
+      if (!this.state.auth.me) {
         this.showStatus("Please login to comment!", "error");
         return;
       }
@@ -608,7 +584,7 @@ const app = {
           pass,
           ...this.captchaPayload("login"),
         });
-        if (data.csrf) this.state.csrfToken = data.csrf;
+        if (data.csrf) this.setState("auth.csrfToken", data.csrf);
         if (data.success) {
           this.showStatus("Login successful.");
           await this.checkAuth();
@@ -659,19 +635,19 @@ const app = {
     async logout() {
       try {
         await this.apiPost("/api/logout");
-        this.state.me = null;
+        this.setState("auth.me", null);
         this.state.settings = null;
-        this.state.notifications = [];
-        this.state.csrfToken = "";
-        this.state.chatMessages = [];
-        this.state.chatLastFetchedAt = "";
+        this.setState("notifications.items", []);
+        this.setState("auth.csrfToken", "");
+        this.setState("chat.messages", []);
+        this.setState("chat.lastFetchedAt", "");
         this.updateChatUnreadCount(0);
-        if (this.state.chatPollInterval)
-          clearInterval(this.state.chatPollInterval);
-        this.state.chatPollInterval = null;
-        this.state.chatOpen = false;
+        if (this.state.chat.pollInterval)
+          clearInterval(this.state.chat.pollInterval);
+        this.setState("chat.pollInterval", null);
+        this.setState("chat.open", false);
         document.getElementById("chat-modal")?.classList.remove("active");
-        this.state.chatPendingMessage = "";
+        this.setState("chat.pendingMessage", "");
         document
           .getElementById("chat-confirm-popup")
           ?.classList.remove("active");
@@ -722,16 +698,16 @@ const app = {
       if (display)
         display.value =
           this.currentProfile?.display_name ||
-          this.state.me?.display_name ||
-          this.state.me?.username ||
+          this.state.auth.me?.display_name ||
+          this.state.auth.me?.username ||
           "";
-      if (bio) bio.value = this.currentProfile?.bio || this.state.me?.bio || "";
+      if (bio) bio.value = this.currentProfile?.bio || this.state.auth.me?.bio || "";
       if (avatar)
         avatar.value =
-          this.currentProfile?.avatar_url || this.state.me?.avatar_url || "";
+          this.currentProfile?.avatar_url || this.state.auth.me?.avatar_url || "";
       if (cover)
         cover.value =
-          this.currentProfile?.cover_url || this.state.me?.cover_url || "";
+          this.currentProfile?.cover_url || this.state.auth.me?.cover_url || "";
       if (modal) modal.classList.add("active");
     },
     "toggle-age"() {
@@ -760,10 +736,10 @@ const app = {
       else popunder?.classList.toggle("active");
     },
     async "mark-notifications-read"() {
-      if (!this.state.me) return;
+      if (!this.state.auth.me) return;
       try {
         await this.apiPost("/api/read_notifications");
-        this.state.notifications.forEach((n) => {
+        this.state.notifications.items.forEach((n) => {
           if (this.isUnreadNotification(n))
             n.read_at = new Date().toISOString();
         });
@@ -839,7 +815,7 @@ const app = {
     },
     async "search-sort"(target) {
       const sort = target.value;
-      this.state.searchSort = sort;
+      this.setState("search.sort", sort);
       this.trackAnalytics("search_sort", { metadata: { sort } });
       this.updateGalleryUrl({ push: false });
     },
@@ -862,7 +838,7 @@ const app = {
       this.setText(counter, `${input?.value.length || 0} / 500`);
     },
     "search-input"(target) {
-      this.state.searchQuery = target.value;
+      this.setState("search.query", target.value);
       clearTimeout(this.searchTimer);
       this.searchTimer = setTimeout(
         () => this.updateGalleryUrl({ push: false }),
@@ -931,30 +907,27 @@ const app = {
 
   setupStateStore() {
     if (this.store) return;
-
-    Object.entries(this.stateDomains).forEach(([domain, aliases]) => {
-      this.state[domain] = this.state[domain] || {};
-      Object.entries(aliases).forEach(([domainKey, legacyKey]) => {
-        if (this.state[domain][domainKey] === undefined) {
-          this.state[domain][domainKey] = this.state[legacyKey];
-        }
-      });
-    });
-
     this.store = createStore(this.state);
+  },
 
-    Object.entries(this.stateDomains).forEach(([domain, aliases]) => {
-      Object.entries(aliases).forEach(([domainKey, legacyKey]) => {
-        if (Object.getOwnPropertyDescriptor(this.state, legacyKey)?.get) return;
-        delete this.state[legacyKey];
-        Object.defineProperty(this.state, legacyKey, {
-          configurable: true,
-          enumerable: true,
-          get: () => this.store.get(`${domain}.${domainKey}`),
-          set: (nextValue) => this.store.set(`${domain}.${domainKey}`, nextValue),
-        });
-      });
-    });
+  getState(path = "") {
+    this.setupStateStore();
+    return this.store.get(path);
+  },
+
+  setState(path, value) {
+    this.setupStateStore();
+    return this.store.set(path, value);
+  },
+
+  updateState(path, updater) {
+    this.setupStateStore();
+    return this.store.update(path, updater);
+  },
+
+  subscribeState(path, callback) {
+    this.setupStateStore();
+    return this.store.subscribe(path, callback);
   },
 
   loadClientPreferences() {
@@ -975,9 +948,9 @@ const app = {
     await this.fetchAds();
     this.renderStaticTemplates();
     this.renderTurnstileWidgets();
-    if (this.state.me) await this.fetchSettings();
-    if (this.state.me) await this.fetchNotifications();
-    if (this.state.me) this.startChatPolling();
+    if (this.state.auth.me) await this.fetchSettings();
+    if (this.state.auth.me) await this.fetchNotifications();
+    if (this.state.auth.me) this.startChatPolling();
 
     window.addEventListener("popstate", () => this.route());
     window.addEventListener("hashchange", () => this.route());
@@ -1000,10 +973,10 @@ const app = {
     });
     window.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
-      if (this.state.chatOpen) {
-        this.state.chatOpen = false;
+      if (this.state.chat.open) {
+        this.setState("chat.open", false);
         document.getElementById("chat-modal")?.classList.remove("active");
-        this.state.chatPendingMessage = "";
+        this.setState("chat.pendingMessage", "");
         document
           .getElementById("chat-confirm-popup")
           ?.classList.remove("active");
@@ -1107,30 +1080,30 @@ const app = {
     this.dispatchAction(event, this.submitActions, { prevent: true });
   },
 
-  updateChatUnreadCount(count = this.state.chatUnreadCount) {
-    this.state.chatUnreadCount = Math.max(0, Number(count) || 0);
+  updateChatUnreadCount(count = this.state.chat.unreadCount) {
+    this.setState("chat.unreadCount", Math.max(0, Number(count) || 0));
     const badge = document.getElementById("chat-unread-badge");
     if (!badge) return;
     this.setText(
       badge,
-      this.state.chatUnreadCount > 99
+      this.state.chat.unreadCount > 99
         ? "99+"
-        : String(this.state.chatUnreadCount),
+        : String(this.state.chat.unreadCount),
     );
-    badge.hidden = this.state.chatUnreadCount === 0;
+    badge.hidden = this.state.chat.unreadCount === 0;
   },
 
   renderChatMessages() {
     const list = document.getElementById("chat-messages");
     if (!list) return;
-    if (!this.state.chatMessages.length) {
+    if (!this.state.chat.messages.length) {
       this.setTemplateHtml(list, this.renderTemplate("partial-chat-empty"));
       return;
     }
-    const meId = this.state.me?.id || "demo_me";
+    const meId = this.state.auth.me?.id || "demo_me";
     this.setTemplateHtml(
       list,
-      this.state.chatMessages
+      this.state.chat.messages
         .map((message) =>
           this.renderTemplate("partial-chat-message", {
             message,
@@ -1143,48 +1116,51 @@ const app = {
   },
 
   async fetchChatMessages(append = true) {
-    if (!this.state.me) return;
+    if (!this.state.auth.me) return;
     try {
       const after =
-        append && this.state.chatLastFetchedAt
-          ? `?after=${encodeURIComponent(this.state.chatLastFetchedAt)}`
+        append && this.state.chat.lastFetchedAt
+          ? `?after=${encodeURIComponent(this.state.chat.lastFetchedAt)}`
           : "";
       const messages = await this.apiGet(`/api/chat/messages${after}`);
       if (!Array.isArray(messages)) return;
       if (!append) {
-        this.state.chatMessages = messages;
+        this.setState("chat.messages", messages);
       } else if (messages.length) {
         const known = new Set(
-          this.state.chatMessages.map((message) => message.id),
+          this.state.chat.messages.map((message) => message.id),
         );
         const fresh = messages.filter((message) => !known.has(message.id));
-        this.state.chatMessages = [...this.state.chatMessages, ...fresh].slice(
-          -100,
+        this.setState(
+          "chat.messages",
+          [...this.state.chat.messages, ...fresh].slice(-100),
         );
         const incomingCount = fresh.filter(
-          (message) => message.user_id !== this.state.me.id,
+          (message) => message.user_id !== this.state.auth.me.id,
         ).length;
-        if (!this.state.chatOpen && incomingCount > 0) {
+        if (!this.state.chat.open && incomingCount > 0) {
           this.updateChatUnreadCount(
-            this.state.chatUnreadCount + incomingCount,
+            this.state.chat.unreadCount + incomingCount,
           );
         }
       }
-      const last = this.state.chatMessages[this.state.chatMessages.length - 1];
-      this.state.chatLastFetchedAt =
-        last?.created_at || this.state.chatLastFetchedAt;
-      if (this.state.chatOpen) this.renderChatMessages();
+      const last = this.state.chat.messages[this.state.chat.messages.length - 1];
+      this.setState(
+        "chat.lastFetchedAt",
+        last?.created_at || this.state.chat.lastFetchedAt,
+      );
+      if (this.state.chat.open) this.renderChatMessages();
     } catch (e) {
       console.error("Chat fetch failed");
     }
   },
 
   startChatPolling() {
-    if (this.state.chatPollInterval) return;
+    if (this.state.chat.pollInterval) return;
     this.fetchChatMessages(false);
-    this.state.chatPollInterval = setInterval(
-      () => this.fetchChatMessages(true),
-      10000,
+    this.setState(
+      "chat.pollInterval",
+      setInterval(() => this.fetchChatMessages(true), 10000),
     );
   },
 
@@ -1220,16 +1196,16 @@ const app = {
 
   syncGalleryStateFromUrl(search = window.location.search) {
     const params = new URLSearchParams(search);
-    this.state.searchQuery = params.get("q") || "";
-    this.state.activeTag = params.get("cat") || "all";
-    this.state.searchSort = params.get("sort") || "newest";
+    this.setState("search.query", params.get("q") || "");
+    this.setState("search.activeTag", params.get("cat") || "all");
+    this.setState("search.sort", params.get("sort") || "newest");
   },
 
   galleryPathFromState() {
     const params = new URLSearchParams();
-    const query = this.state.searchQuery.trim();
-    const tag = this.state.activeTag || "all";
-    const sort = this.state.searchSort || "newest";
+    const query = this.state.search.query.trim();
+    const tag = this.state.search.activeTag || "all";
+    const sort = this.state.search.sort || "newest";
     if (query) params.set("q", query);
     if (tag !== "all") params.set("cat", tag);
     if (sort !== "newest") params.set("sort", sort);
@@ -1291,7 +1267,8 @@ const app = {
   },
 
   async route() {
-    const token = ++this.state.routeToken;
+    const token = this.state.route.token + 1;
+    this.setState("route.token", token);
     const { route, params, path, search, fullPath } = this.routeConfig();
     if (route.page === "gallery") this.syncGalleryStateFromUrl(search);
 
@@ -1300,7 +1277,7 @@ const app = {
     this.renderNavbar(this.activePage);
     this.renderLoading(this.activePage);
     const data = await this.loadRouteData(route, params);
-    if (token !== this.state.routeToken) return;
+    if (token !== this.state.route.token) return;
 
     this.renderRoute(this.activePage, data);
     this.afterRouteRender(this.activePage, data, fullPath);
@@ -1309,12 +1286,12 @@ const app = {
   async checkAuth() {
     try {
       const data = await this.apiGet("/api/me");
-      this.state.csrfToken = data?.csrf || "";
+      this.setState("auth.csrfToken", data?.csrf || "");
       if (data && data.id && !data.error) {
         const { csrf, ...user } = data;
-        this.state.me = user;
+        this.setState("auth.me", user);
       } else {
-        this.state.me = null;
+        this.setState("auth.me", null);
       }
     } catch (e) {
       console.error("Auth check failed");
@@ -1450,7 +1427,7 @@ const app = {
   apiHeaders(extra = {}) {
     return {
       "Content-Type": "application/json",
-      "X-CSRF-Token": this.state.csrfToken || "",
+      "X-CSRF-Token": this.state.auth.csrfToken || "",
       ...extra,
     };
   },
@@ -1778,8 +1755,8 @@ const app = {
       if (document.visibilityState === "hidden") {
         this.flushVideoAnalytics("hidden");
         this.flushPageAnalytics("hidden");
-      } else if (this.state.currentRoute) {
-        this.state.currentPageStartedAt = Date.now();
+      } else if (this.state.route.current) {
+        this.setState("route.currentPageStartedAt", Date.now());
       }
     });
     document.addEventListener("click", (event) => this.trackClick(event), {
@@ -1864,28 +1841,28 @@ const app = {
   },
 
   trackPageView(page, route) {
-    this.state.currentRoute = route;
-    this.state.currentPageStartedAt = Date.now();
-    this.state.currentPageMaxScroll = 0;
+    this.setState("route.current", route);
+    this.setState("route.currentPageStartedAt", Date.now());
+    this.setState("route.currentPageMaxScroll", 0);
     this.trackAnalytics("page_view", { page, route });
   },
 
   flushPageAnalytics(reason = "flush") {
-    if (!this.state.currentRoute || !this.state.currentPageStartedAt) return;
-    const duration = Date.now() - this.state.currentPageStartedAt;
+    if (!this.state.route.current || !this.state.route.currentPageStartedAt) return;
+    const duration = Date.now() - this.state.route.currentPageStartedAt;
     if (duration < 500) return;
     this.trackAnalytics(
       "page_duration",
       {
         page: this.activePage || "",
-        route: this.state.currentRoute,
+        route: this.state.route.current,
         duration_ms: duration,
-        scroll_depth: this.state.currentPageMaxScroll,
+        scroll_depth: this.state.route.currentPageMaxScroll,
         metadata: { reason },
       },
       true,
     );
-    this.state.currentPageStartedAt = Date.now();
+    this.setState("route.currentPageStartedAt", Date.now());
   },
 
   getScrollDepth() {
@@ -1894,9 +1871,9 @@ const app = {
     const depth =
       maxScroll > 0 ? Math.round((window.scrollY / maxScroll) * 100) : 0;
     const bounded = Math.min(100, Math.max(0, depth));
-    this.state.currentPageMaxScroll = Math.max(
-      this.state.currentPageMaxScroll || 0,
-      bounded,
+    this.setState(
+      "route.currentPageMaxScroll",
+      Math.max(this.state.route.currentPageMaxScroll || 0, bounded),
     );
     return bounded;
   },
@@ -1943,7 +1920,7 @@ const app = {
             )
             .filter((tag) => tag && tag.slug)
         : [];
-      this.state.tags = [{ name: "All", slug: "all" }, ...tags];
+      this.setState("search.tags", [{ name: "All", slug: "all" }, ...tags]);
     } catch (e) {
       console.error("Tags fetch failed");
     }
@@ -1951,7 +1928,10 @@ const app = {
 
   async fetchNotifications() {
     try {
-      this.state.notifications = await this.apiGet("/api/notifications");
+      this.setState(
+        "notifications.items",
+        await this.apiGet("/api/notifications"),
+      );
       this.renderNavbar();
     } catch (e) {
       console.error("Notifications fetch failed");
@@ -2007,20 +1987,20 @@ const app = {
         : Array.isArray(page)
           ? page
           : [];
-      this.state.videos = videos;
-      this.state.galleryCursor = page.next_cursor || "";
-      this.state.galleryHasMore = Boolean(page.has_more);
-      if (this.state.searchQuery || this.state.activeTag !== "all") {
+      this.setState("search.videos", videos);
+      this.setState("search.galleryCursor", page.next_cursor || "");
+      this.setState("search.galleryHasMore", Boolean(page.has_more));
+      if (this.state.search.query || this.state.search.activeTag !== "all") {
         this.trackAnalytics("search", {
-          search_query: this.state.searchQuery,
-          category: this.state.activeTag,
+          search_query: this.state.search.query,
+          category: this.state.search.activeTag,
           metadata: {
-            results_count: this.state.videos.length,
-            sort: this.state.searchSort,
+            results_count: this.state.search.videos.length,
+            sort: this.state.search.sort,
           },
         });
       }
-      return this.state.videos;
+      return this.state.search.videos;
     } catch (e) {
       return [];
     }
@@ -2028,10 +2008,10 @@ const app = {
 
   galleryQueryParams(extra = {}) {
     const params = new URLSearchParams({
-      q: this.state.searchQuery,
-      cat: this.state.activeTag,
-      sort: this.state.searchSort,
-      limit: String(this.state.galleryLimit),
+      q: this.state.search.query,
+      cat: this.state.search.activeTag,
+      sort: this.state.search.sort,
+      limit: String(this.state.search.galleryLimit),
       ...extra,
     });
     return params.toString();
@@ -2045,9 +2025,9 @@ const app = {
   async loadMoreGallery() {
     if (
       this.activePage !== "gallery" ||
-      this.state.galleryLoadingMore ||
-      !this.state.galleryHasMore ||
-      !this.state.galleryCursor
+      this.state.search.galleryLoadingMore ||
+      !this.state.search.galleryHasMore ||
+      !this.state.search.galleryCursor
     ) {
       return;
     }
@@ -2056,26 +2036,26 @@ const app = {
     if (!feed) return;
 
     try {
-      this.state.galleryLoadingMore = true;
+      this.setState("search.galleryLoadingMore", true);
       this.updateGalleryMoreStatus();
-      const startIndex = this.state.videos.length;
-      const page = await this.fetchGalleryPage(this.state.galleryCursor);
+      const startIndex = this.state.search.videos.length;
+      const page = await this.fetchGalleryPage(this.state.search.galleryCursor);
       const items = Array.isArray(page.items) ? page.items : [];
       if (!items.length) {
-        this.state.galleryHasMore = false;
-        this.state.galleryCursor = "";
+        this.setState("search.galleryHasMore", false);
+        this.setState("search.galleryCursor", "");
         return;
       }
 
-      this.state.videos = [...this.state.videos, ...items];
-      this.state.galleryCursor = page.next_cursor || "";
-      this.state.galleryHasMore = Boolean(page.has_more);
+      this.setState("search.videos", [...this.state.search.videos, ...items]);
+      this.setState("search.galleryCursor", page.next_cursor || "");
+      this.setState("search.galleryHasMore", Boolean(page.has_more));
       this.appendTemplateHtml(feed, this.renderGalleryFeed(items, startIndex));
       this.updateGalleryResultLabel();
     } catch (e) {
       this.showStatus(e.message || "More videos could not be loaded.", "error");
     } finally {
-      this.state.galleryLoadingMore = false;
+      this.setState("search.galleryLoadingMore", false);
       this.updateGalleryMoreStatus();
     }
   },
@@ -2107,7 +2087,7 @@ const app = {
           storage_type: data.storage_type || "",
         },
       });
-      if (this.state.videos.length === 0) {
+      if (this.state.search.videos.length === 0) {
         await this.loadGallery();
       }
       return data;
@@ -2141,7 +2121,7 @@ const app = {
 
   syncTemplateControls() {
     const searchSort = document.getElementById("search-sort-select");
-    if (searchSort) searchSort.value = this.state.searchSort;
+    if (searchSort) searchSort.value = this.state.search.sort;
     document.querySelectorAll("[data-setting-field]").forEach((input) => {
       input.checked = input.dataset.checked === "1";
     });
@@ -2284,12 +2264,12 @@ const app = {
   },
 
   applySearchSort() {
-    const videos = this.state.videos;
+    const videos = this.state.search.videos;
     if (!Array.isArray(videos)) return;
     const toNumber = (value) => Number(value || 0);
-    if (this.state.searchSort === "popular") {
+    if (this.state.search.sort === "popular") {
       videos.sort((a, b) => toNumber(b.views) - toNumber(a.views));
-    } else if (this.state.searchSort === "duration") {
+    } else if (this.state.search.sort === "duration") {
       videos.sort((a, b) => toNumber(b.duration) - toNumber(a.duration));
     } else {
       videos.sort((a, b) =>
@@ -2355,11 +2335,11 @@ const app = {
         Number(value) ? "1" : "0",
       );
     }
-    if (this.state.me) await this.saveSettings({ [field]: value });
+    if (this.state.auth.me) await this.saveSettings({ [field]: value });
   },
 
   async saveSettings(patch = {}) {
-    if (!this.state.me) return;
+    if (!this.state.auth.me) return;
     const current = this.state.settings || {};
     const next = { ...current, ...patch };
     try {
@@ -2373,10 +2353,10 @@ const app = {
   renderNavbar(page) {
     const nav = document.getElementById("navbar-dynamic");
     if (!nav) return;
-    const unreadCount = this.state.notifications.filter((i) =>
+    const unreadCount = this.state.notifications.items.filter((i) =>
       this.isUnreadNotification(i),
     ).length;
-    if (!this.state.me) {
+    if (!this.state.auth.me) {
       this.setTemplateHtml(
         nav,
         this.renderTemplate("partial-navbar-guest", { page }),
@@ -2388,15 +2368,15 @@ const app = {
       this.renderTemplate("partial-navbar-user", {
         page,
         unreadCount,
-        me: this.state.me,
+        me: this.state.auth.me,
         notificationDotHtml:
           unreadCount > 0
             ? this.renderTemplate("partial-notification-dot")
             : "",
-        chatUnreadCount: this.state.chatUnreadCount,
+        chatUnreadCount: this.state.chat.unreadCount,
         chatBadgeLabel:
-          this.state.chatUnreadCount > 99 ? "99+" : this.state.chatUnreadCount,
-        chatBadgeHidden: this.state.chatUnreadCount === 0 ? "hidden" : "",
+          this.state.chat.unreadCount > 99 ? "99+" : this.state.chat.unreadCount,
+        chatBadgeHidden: this.state.chat.unreadCount === 0 ? "hidden" : "",
       }),
     );
     this.updateChatUnreadCount();
@@ -2409,7 +2389,7 @@ const app = {
   renderNotifications() {
     const list = document.getElementById("notification-list");
     if (!list) return;
-    if (this.state.notifications.length === 0) {
+    if (this.state.notifications.items.length === 0) {
       this.setTemplateHtml(
         list,
         this.renderTemplate("partial-notifications-empty"),
@@ -2418,7 +2398,7 @@ const app = {
     }
     this.setTemplateHtml(
       list,
-      this.state.notifications
+      this.state.notifications.items
         .map((n) => this.renderTemplate("partial-notification-item", { n }))
         .join(""),
     );
@@ -2506,15 +2486,15 @@ const app = {
   },
 
   renderSearchPanel(videos = []) {
-    const activeTag = this.state.tags.find(
-      (tag) => tag.slug === this.state.activeTag,
+    const activeTag = this.state.search.tags.find(
+      (tag) => tag.slug === this.state.search.activeTag,
     );
     const title =
-      this.state.activeTag === "all"
+      this.state.search.activeTag === "all"
         ? "Discover"
-        : activeTag?.name || this.state.activeTag;
+        : activeTag?.name || this.state.search.activeTag;
     const resultLabel = this.galleryResultLabel(videos.length);
-    const categoryPills = this.state.tags
+    const categoryPills = this.state.search.tags
       .map((c) =>
         this.renderTemplate("partial-category-pill", {
           c,
@@ -2532,8 +2512,8 @@ const app = {
     });
   },
 
-  galleryResultLabel(count = this.state.videos.length) {
-    const suffix = this.state.galleryHasMore ? " loaded" : " total";
+  galleryResultLabel(count = this.state.search.videos.length) {
+    const suffix = this.state.search.galleryHasMore ? " loaded" : " total";
     return `${count} result${count === 1 ? "" : "s"}${suffix}`;
   },
 
@@ -2544,7 +2524,7 @@ const app = {
   updateGalleryMoreStatus() {
     const status = document.getElementById("gallery-more-status");
     if (!status) return;
-    if (this.state.galleryLoadingMore) {
+    if (this.state.search.galleryLoadingMore) {
       this.setTemplateHtml(
         status,
         this.renderTemplate("partial-gallery-loading-more"),
@@ -2552,7 +2532,7 @@ const app = {
       status.hidden = false;
       return;
     }
-    if (!this.state.galleryHasMore && this.state.videos.length > 0) {
+    if (!this.state.search.galleryHasMore && this.state.search.videos.length > 0) {
       this.setTemplateHtml(
         status,
         this.renderTemplate("partial-gallery-end"),
@@ -2573,7 +2553,7 @@ const app = {
   },
 
   renderUploadTags() {
-    return this.state.tags
+    return this.state.search.tags
       .filter((tag) => tag && tag.slug && tag.slug !== "all")
       .map((tag) => this.renderTemplate("partial-upload-tag-pill", { tag }))
       .join("");
@@ -2600,7 +2580,7 @@ const app = {
 
   async submitUploadForm() {
     if (this.state.uploadSubmitting) return;
-    if (!this.state.me) {
+    if (!this.state.auth.me) {
       this.navigateTo("/auth");
       return;
     }
@@ -2774,8 +2754,8 @@ const app = {
   },
 
   renderWatchPlaylist(currentVideo = {}) {
-    const videos = this.state.videos.length
-      ? this.state.videos
+    const videos = this.state.search.videos.length
+      ? this.state.search.videos
       : [currentVideo];
     const currentIndex = Math.max(
       0,
@@ -2869,7 +2849,7 @@ const app = {
       }),
 
     settings: () =>
-      !app.state.me
+      !app.state.auth.me
         ? app.renderTemplate("page-settings-guest")
         : app.renderTemplate("page-settings", {
             rowsHtml: [
@@ -2906,7 +2886,7 @@ const app = {
         v.avatar_url ? "partial-avatar-img" : "partial-avatar-shield-icon",
         { url: app.safeUrl(v.avatar_url) },
       );
-      const suggestionsHtml = app.state.videos
+      const suggestionsHtml = app.state.search.videos
         .filter((vi) => vi.id !== v.id)
         .slice(0, 4)
         .map((vi) =>
@@ -2932,7 +2912,7 @@ const app = {
     },
 
     user: (u = {}) => {
-      const isOwn = app.state.me && app.state.me.id === u.id;
+      const isOwn = app.state.auth.me && app.state.auth.me.id === u.id;
       const activeTab = window.location.hash || "#videos";
       const displayName = u.display_name || u.username || "Loading...";
       const coverUrl = app.safeStyleUrl(u.cover_url);
