@@ -953,6 +953,16 @@ final class LimeVideo
         );
     }
 
+    /**
+     * Decides whether an account status may start an authenticated session.
+     * Input: raw users.status value.
+     * Output: true when login is allowed; action bans are checked separately.
+     */
+    private function canLoginWithStatus(?string $status): bool
+    {
+        return $status === "active";
+    }
+
     private function enqueueCronJob(
         string $eventType,
         string $targetType,
@@ -1761,7 +1771,7 @@ final class LimeVideo
         $stmt->execute([$id]);
         $user = $stmt->fetch();
 
-        if (!$user || $user["status"] !== "active") {
+        if (!$user || ($user["status"] ?? null) !== "active") {
             $this->jsonResponse(
                 ["error" => "This profile is no longer available."],
                 404,
@@ -2791,12 +2801,14 @@ final class LimeVideo
         $this->checkRateLimit("login", 8, 300);
         $this->verifyTurnstile($captchaToken);
         $stmt = $this->db()->prepare(
-            "SELECT * FROM users WHERE (username = ? OR email = ?) AND status = 'active'",
+            "SELECT * FROM users WHERE username = ? OR email = ? LIMIT 1",
         );
         $stmt->execute([$user, $user]);
         $u = $stmt->fetch();
 
-        $success = $u && password_verify($pass, $u["password_hash"]);
+        $statusAllowed = $u && $this->canLoginWithStatus($u["status"] ?? null);
+        $success =
+            $statusAllowed && password_verify($pass, $u["password_hash"]);
 
         if ($success) {
             session_regenerate_id(true);
@@ -2832,7 +2844,11 @@ final class LimeVideo
                 $u ? $u["id"] : null,
                 [
                     "email" => $user,
-                    "reason" => $u ? "invalid_password" : "user_not_found",
+                    "reason" => !$u
+                        ? "user_not_found"
+                        : ($statusAllowed
+                            ? "invalid_password"
+                            : "status_blocked"),
                 ],
             );
             $this->jsonResponse(

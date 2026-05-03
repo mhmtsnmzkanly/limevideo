@@ -10,7 +10,7 @@ INSERT INTO users (id, username, display_name, email, password_hash, bio, avatar
 ('u_system', 'limevideo_system', 'LimeVideo System', 'system@limevideo.local', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Internal LimeVideo system account.', '', '', 'disabled', 0, NULL, NULL, NULL),
 ('u_demo1', 'limevideo_master', 'LimeVideo Master', 'limevideo_master@example.com', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Frontend systems, creator tooling and high performance video interfaces.', '', '', 'active', 0, NULL, NULL, NULL),
 ('u_demo2', 'techvision', 'Tech Vision', 'techvision@example.com', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Delivery experiments, infrastructure notes and product breakdowns.', '', '', 'active', 0, NULL, NULL, NULL),
-('u_banned', 'limited_creator', 'Limited Creator', 'limited@example.com', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Demo account with active moderation restrictions.', '', '', 'banned', 1, 'Repeated spam during development tests.', DATE_ADD(NOW(), INTERVAL 7 DAY), 'u_system')
+('u_banned', 'limited_creator', 'Limited Creator', 'limited@example.com', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Demo account with active moderation restrictions.', '', '', 'active', 1, 'Repeated spam during development tests.', DATE_ADD(NOW(), INTERVAL 7 DAY), 'u_system')
 ON DUPLICATE KEY UPDATE
 display_name = VALUES(display_name),
 bio = VALUES(bio),
