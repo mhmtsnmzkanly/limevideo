@@ -1230,6 +1230,13 @@ const app = {
       const error = new Error(message);
       error.status = response.status;
       error.data = data;
+      this.logApiError(error, {
+        url,
+        method,
+        status: response.status,
+        statusText: response.statusText,
+        requestBody: body,
+      });
       throw error;
     }
 
@@ -1242,6 +1249,81 @@ const app = {
 
   apiPost(url, body = {}, options = {}) {
     return this.apiRequest(url, { ...options, method: "POST", body });
+  },
+
+  isDetailedApiError(data) {
+    return (
+      data &&
+      typeof data === "object" &&
+      (data.type || data.file || data.line || Array.isArray(data.trace))
+    );
+  },
+
+  redactForConsole(value) {
+    if (value === null || value === undefined) return value;
+    if (typeof value === "string") {
+      try {
+        return this.redactForConsole(JSON.parse(value));
+      } catch (error) {
+        return value;
+      }
+    }
+    if (Array.isArray(value)) return value.map((item) => this.redactForConsole(item));
+    if (typeof value !== "object") return value;
+
+    const secretKeys = new Set([
+      "pass",
+      "password",
+      "token",
+      "csrf",
+      "csrf_token",
+      "authorization",
+      "secret",
+    ]);
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        secretKeys.has(String(key).toLowerCase())
+          ? "[redacted]"
+          : this.redactForConsole(item),
+      ]),
+    );
+  },
+
+  logApiError(error, context = {}) {
+    const data = error?.data;
+    if (!this.isDetailedApiError(data)) return;
+
+    const titleStyle =
+      "background:#14251b;color:#9cffb7;border-left:4px solid #32d46f;padding:3px 8px;font-weight:700";
+    const labelStyle = "color:#32d46f;font-weight:700";
+    const mutedStyle = "color:#8b949e";
+    const trace = Array.isArray(data.trace) ? data.trace : [];
+
+    console.groupCollapsed(
+      "%cLimeVideo PHP API Error%c %s %s -> %s",
+      titleStyle,
+      mutedStyle,
+      context.method || "GET",
+      context.url || "unknown-url",
+      context.status || error.status || "error",
+    );
+    console.log("%cMessage", labelStyle, data.error || error.message);
+    console.log("%cException", labelStyle, data.type || "Unknown");
+    console.log("%cLocation", labelStyle, `${data.file || "unknown"}:${data.line || 0}`);
+    console.log("%cRequest", labelStyle, {
+      method: context.method,
+      url: context.url,
+      status: context.status,
+      statusText: context.statusText,
+      body: this.redactForConsole(context.requestBody),
+    });
+    if (trace.length) {
+      console.log("%cTrace", labelStyle);
+      console.table(trace);
+    }
+    console.log("%cRaw response", labelStyle, data);
+    console.groupEnd();
   },
 
   jsString(value = "") {
