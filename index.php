@@ -1199,9 +1199,9 @@ final class LimeVideo
 
     public function runCronJobs(int $limit = 10, ?string $token = null): void
     {
-        $expectedToken = (string) $this->cfg("CRON_TOKEN", "");
-        if ($expectedToken !== "" && !hash_equals($expectedToken, (string) $token)) {
-            $this->jsonResponse(["error" => "Invalid cron token"], 403);
+        $expectedToken = trim((string) $this->cfg("CRON_TOKEN", ""));
+        if ($expectedToken === "" || !hash_equals($expectedToken, (string) $token)) {
+            $this->jsonResponse(["error" => "Invalid or missing cron token"], 403);
         }
 
         $result = $this->runCronJobBatch($limit);
@@ -1222,7 +1222,7 @@ final class LimeVideo
                     attempts = attempts + 1,
                     locked_by = ?,
                     locked_at = NOW(),
-                    locked_until = DATE_ADD(NOW(), INTERVAL 5 MINUTE),
+                    locked_until = DATE_ADD(NOW(), INTERVAL 15 MINUTE),
                     started_at = COALESCE(started_at, NOW()),
                     last_error = NULL
                 WHERE id = (
@@ -1282,6 +1282,7 @@ final class LimeVideo
             ];
         } catch (Throwable $e) {
             $willRetry = (int) $job["attempts"] < (int) $job["max_attempts"];
+            $backoffMinutes = min(1440, pow(2, (int) $job["attempts"]));
             $this->db()
                 ->prepare(
                     "UPDATE cron_jobs
@@ -1295,7 +1296,7 @@ final class LimeVideo
                 )
                 ->execute([
                     $willRetry ? "failed" : "cancelled",
-                    max(1, (int) $job["attempts"]),
+                    $backoffMinutes,
                     $e->getMessage(),
                     $job["id"],
                     $workerId,
