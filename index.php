@@ -423,9 +423,9 @@ final class LimeVideo
         $password = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
         $this->db()
             ->prepare(
-                "INSERT INTO users (id, username, display_name, email, password_hash, status)
-            VALUES (?, 'limevideo_system', 'LimeVideo System', 'system@limevideo.local', ?, 'disabled')
-            ON DUPLICATE KEY UPDATE display_name = VALUES(display_name)",
+                "INSERT INTO users (id, username, display_name, email, password_hash, role, status)
+            VALUES (?, 'limevideo_system', 'LimeVideo System', 'system@limevideo.local', ?, 'system', 'disabled')
+            ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), role = VALUES(role)",
             )
             ->execute([$ownerId, $password]);
 
@@ -650,7 +650,7 @@ final class LimeVideo
 
         try {
             $stmt = $this->db()->prepare(
-                "SELECT id, username, display_name, email, bio, avatar_url, cover_url, status, is_banned, ban_reason, ban_ends_at, banned_by, created_at FROM users WHERE id = ? LIMIT 1",
+                "SELECT id, username, display_name, email, bio, avatar_url, cover_url, role, status, created_at FROM users WHERE id = ? LIMIT 1",
             );
             $stmt->execute([$id]);
             $user = $stmt->fetch() ?: null;
@@ -881,7 +881,6 @@ final class LimeVideo
             FROM bans
             WHERE user_id = ?
               AND revoked_at IS NULL
-              AND starts_at <= NOW()
               AND (ends_at IS NULL OR ends_at > NOW())
               AND type IN ('general', ?)
             ORDER BY FIELD(type, 'general', ?) ASC, created_at DESC
@@ -961,6 +960,79 @@ final class LimeVideo
     private function canLoginWithStatus(?string $status): bool
     {
         return $status === "active";
+    }
+
+    /**
+     * Reads the authenticated user id from the current session.
+     * Input: none.
+     * Output: user id or null for guests.
+     */
+    private function currentUserId(): ?string
+    {
+        return $_SESSION["user"]["id"] ?? null;
+    }
+
+    /**
+     * Reads the authenticated user's role from the current session.
+     * Input: none.
+     * Output: role key; guests are treated as user.
+     */
+    private function currentUserRole(): string
+    {
+        return (string) ($_SESSION["user"]["role"] ?? "user");
+    }
+
+    /**
+     * Checks whether the current user may inspect hidden video records.
+     * Input: none.
+     * Output: true for moderator/admin/system roles.
+     */
+    private function canModerateVideos(): bool
+    {
+        return in_array(
+            $this->currentUserRole(),
+            ["moderator", "admin", "system"],
+            true,
+        );
+    }
+
+    /**
+     * Applies LimeVideo's video visibility rule.
+     * Input: video row containing user_id and status.
+     * Output: true when the current viewer may access it.
+     */
+    private function canViewVideo(array $video): bool
+    {
+        $status = (string) ($video["status"] ?? "");
+        if ($status === "public") {
+            return true;
+        }
+        if ($status === "private") {
+            return $this->canModerateVideos() ||
+                $this->currentUserId() === ($video["user_id"] ?? null);
+        }
+        if ($status === "deleted") {
+            return $this->canModerateVideos();
+        }
+        return false;
+    }
+
+    /**
+     * Loads a video row and stops when it is not visible to the current viewer.
+     * Input: video id.
+     * Output: visible video row.
+     */
+    private function visibleVideoOrFail(string $videoId): array
+    {
+        $stmt = $this->db()->prepare(
+            "SELECT id, user_id, status, disable_comments FROM videos WHERE id = ? LIMIT 1",
+        );
+        $stmt->execute([$videoId]);
+        $video = $stmt->fetch();
+        if (!$video || !$this->canViewVideo($video)) {
+            $this->jsonResponse(["error" => "This video does not exist."], 404);
+        }
+        return $video;
     }
 
     private function enqueueCronJob(
@@ -1370,10 +1442,19 @@ final class LimeVideo
         $commentVideoId = null;
         if ($targetType === "comment") {
             $lookup = $this->db()->prepare(
-                "SELECT target_id FROM comments WHERE id = ? LIMIT 1",
+                "SELECT c.target_id, v.user_id, v.status
+                FROM comments c
+                JOIN videos v ON v.id = c.target_id
+                WHERE c.id = ? LIMIT 1",
             );
             $lookup->execute([$targetId]);
-            $commentVideoId = $lookup->fetchColumn() ?: null;
+            $commentVideo = $lookup->fetch();
+            $commentVideoId = $commentVideo["target_id"] ?? null;
+            if (!$commentVideo || !$this->canViewVideo($commentVideo)) {
+                $this->jsonResponse(["error" => "This video does not exist."], 404);
+            }
+        } else {
+            $this->visibleVideoOrFail($targetId);
         }
 
         $this->db()
@@ -1416,14 +1497,7 @@ final class LimeVideo
         $uid = $_SESSION["user"]["id"];
         $cid = $this->generateId("c", 10);
 
-        $guardStmt = $this->db()->prepare(
-            "SELECT disable_comments FROM videos WHERE id = ? LIMIT 1",
-        );
-        $guardStmt->execute([$videoId]);
-        $videoCommentState = $guardStmt->fetch();
-        if (!$videoCommentState) {
-            $this->jsonResponse(["error" => "This video does not exist."], 404);
-        }
+        $videoCommentState = $this->visibleVideoOrFail($videoId);
         if ((int) ($videoCommentState["disable_comments"] ?? 0) === 1) {
             $this->jsonResponse(
                 ["error" => "Comments are disabled for this video."],
@@ -1595,6 +1669,7 @@ final class LimeVideo
                 400,
             );
         }
+        $this->visibleVideoOrFail($videoId);
         $viewerId = $_SESSION["user"]["id"] ?? "guest";
         $cacheKey =
             "comments_{$videoId}_{$viewerId}_{$sort}_" . sha1((string) $before);
@@ -1715,8 +1790,7 @@ final class LimeVideo
         }
 
         if ($video["status"] !== "public") {
-            $myId = $_SESSION["user"]["id"] ?? null;
-            if ($myId !== $video["user_id"]) {
+            if (!$this->canViewVideo($video)) {
                 $msg =
                     $video["status"] === "deleted"
                         ? "This video has been deleted."
@@ -1766,7 +1840,7 @@ final class LimeVideo
         $chatVideoId = $this->chatVideoId();
 
         $stmt = $this->db()->prepare(
-            "SELECT id, username, display_name, bio, avatar_url, cover_url, created_at, status, is_banned, ban_reason, ban_ends_at, banned_by FROM users WHERE id = ? LIMIT 1",
+            "SELECT id, username, display_name, bio, avatar_url, cover_url, role, created_at, status FROM users WHERE id = ? LIMIT 1",
         );
         $stmt->execute([$id]);
         $user = $stmt->fetch();
@@ -1778,13 +1852,22 @@ final class LimeVideo
             );
         }
 
+        $canSeePrivateProfileVideos =
+            $this->canModerateVideos() || $viewerId === $user["id"];
+        $profileStatusSql = $canSeePrivateProfileVideos
+            ? "status IN ('public','private')"
+            : "status = 'public'";
+        $profileVideoStatusSql = $canSeePrivateProfileVideos
+            ? "v.status IN ('public','private')"
+            : "v.status = 'public'";
+
         $statsStmt = $this->db()->prepare("SELECT
-            (SELECT COUNT(*) FROM videos WHERE user_id = ? AND status = 'public' AND id <> ?) AS videos,
+            (SELECT COUNT(*) FROM videos WHERE user_id = ? AND {$profileStatusSql} AND id <> ?) AS videos,
             (SELECT COUNT(*) FROM follows WHERE followed_id = ?) AS followers,
             (SELECT COUNT(*) FROM follows WHERE follower_id = ?) AS following,
             (SELECT COUNT(*) FROM savings WHERE user_id = ?) AS saved,
-            (SELECT COUNT(*) FROM comments WHERE user_id = ? AND status = 'active' AND target_id <> ?) AS comments,
-            (SELECT COALESCE(SUM(views_count), 0) FROM videos WHERE user_id = ? AND status = 'public' AND id <> ?) AS views");
+            (SELECT COUNT(*) FROM comments c JOIN videos v ON v.id = c.target_id WHERE c.user_id = ? AND c.status = 'active' AND {$profileVideoStatusSql} AND c.target_id <> ?) AS comments,
+            (SELECT COALESCE(SUM(views_count), 0) FROM videos WHERE user_id = ? AND {$profileStatusSql} AND id <> ?) AS views");
         $statsStmt->execute([
             $user["id"],
             $chatVideoId,
@@ -1821,25 +1904,25 @@ final class LimeVideo
             JOIN users u ON v.user_id = u.id";
 
         $vStmt = $this->db()->prepare(
-            "$videoSelect WHERE v.user_id = ? AND v.status='public' AND v.id <> ? ORDER BY v.created_at DESC",
+            "$videoSelect WHERE v.user_id = ? AND {$profileVideoStatusSql} AND v.id <> ? ORDER BY v.created_at DESC",
         );
         $vStmt->execute([$user["id"], $chatVideoId]);
         $user["videos"] = $vStmt->fetchAll();
 
         $sStmt = $this->db()->prepare(
-            "$videoSelect JOIN savings s ON s.video_id = v.id WHERE s.user_id = ? AND v.status='public' AND v.id <> ? ORDER BY s.saved_at DESC",
+            "$videoSelect JOIN savings s ON s.video_id = v.id WHERE s.user_id = ? AND {$profileVideoStatusSql} AND v.id <> ? ORDER BY s.saved_at DESC",
         );
         $sStmt->execute([$user["id"], $chatVideoId]);
         $user["saved"] = $sStmt->fetchAll();
 
         $lStmt = $this->db()->prepare(
-            "$videoSelect JOIN votes vo ON vo.target_id = v.id WHERE vo.voter_user_id = ? AND vo.target_type = 'video' AND vo.vote_type = 'up' AND v.status='public' AND v.id <> ? ORDER BY vo.voted_at DESC",
+            "$videoSelect JOIN votes vo ON vo.target_id = v.id WHERE vo.voter_user_id = ? AND vo.target_type = 'video' AND vo.vote_type = 'up' AND {$profileVideoStatusSql} AND v.id <> ? ORDER BY vo.voted_at DESC",
         );
         $lStmt->execute([$user["id"], $chatVideoId]);
         $user["liked"] = $lStmt->fetchAll();
 
         $cStmt = $this->db()->prepare(
-            "SELECT c.*, v.title AS video_title FROM comments c JOIN videos v ON c.target_id = v.id WHERE c.user_id = ? AND c.status = 'active' AND c.target_id <> ? ORDER BY c.created_at DESC LIMIT 30",
+            "SELECT c.*, v.title AS video_title FROM comments c JOIN videos v ON c.target_id = v.id WHERE c.user_id = ? AND c.status = 'active' AND {$profileVideoStatusSql} AND c.target_id <> ? ORDER BY c.created_at DESC LIMIT 30",
         );
         $cStmt->execute([$user["id"], $chatVideoId]);
         $user["comments"] = $cStmt->fetchAll();
@@ -2363,6 +2446,7 @@ final class LimeVideo
         if (empty($_SESSION["user"])) {
             $this->jsonResponse(["status" => "error"], 401);
         }
+        $this->visibleVideoOrFail($videoId);
         $uid = $_SESSION["user"]["id"];
         $stmt = $this->db()->prepare(
             "SELECT 1 FROM savings WHERE user_id = ? AND video_id = ?",
@@ -2416,6 +2500,7 @@ final class LimeVideo
         if (empty($_SESSION["user"])) {
             $this->jsonResponse(["error" => "Auth required"], 401);
         }
+        $this->visibleVideoOrFail($videoId);
         $uid = $_SESSION["user"]["id"];
         $fields = [
             "autoplay",
@@ -2466,6 +2551,21 @@ final class LimeVideo
                 ["error" => "Report details must be at least 10 characters."],
                 400,
             );
+        }
+        if ($targetType === "video") {
+            $this->visibleVideoOrFail($targetId);
+        } elseif ($targetType === "comment") {
+            $commentStmt = $this->db()->prepare(
+                "SELECT c.target_id, v.user_id, v.status
+                FROM comments c
+                JOIN videos v ON v.id = c.target_id
+                WHERE c.id = ? LIMIT 1",
+            );
+            $commentStmt->execute([$targetId]);
+            $commentVideo = $commentStmt->fetch();
+            if (!$commentVideo || !$this->canViewVideo($commentVideo)) {
+                $this->jsonResponse(["error" => "This comment does not exist."], 404);
+            }
         }
 
         $stmt = $this->db()->prepare(
@@ -2939,6 +3039,7 @@ final class LimeVideo
                 "id" => $u["id"],
                 "username" => $u["username"],
                 "display_name" => $u["display_name"] ?? $u["username"],
+                "role" => $u["role"] ?? "user",
             ];
             $this->csrfToken();
             $this->logActivity(

@@ -16,19 +16,14 @@ CREATE TABLE `users` (
   `bio` text DEFAULT NULL,
   `avatar_url` varchar(255) DEFAULT NULL,
   `cover_url` varchar(255) DEFAULT NULL,
+  `role` enum('user','moderator','admin','system') NOT NULL DEFAULT 'user',
   `status` enum('active', 'pending', 'disabled', 'banned', 'deleted') DEFAULT 'active',
-  `is_banned` tinyint(1) NOT NULL DEFAULT 0,
-  `ban_reason` varchar(255) DEFAULT NULL,
-  `ban_ends_at` datetime DEFAULT NULL,
-  `banned_by` char(8) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`),
   UNIQUE KEY `email` (`email`),
-  KEY `idx_users_ban_status` (`status`,`is_banned`,`ban_ends_at`),
-  KEY `idx_users_banned_by` (`banned_by`),
-  CONSTRAINT `fk_users_banned_by` FOREIGN KEY (`banned_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  KEY `idx_users_role_status` (`role`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. ACTION BANS
@@ -38,7 +33,6 @@ CREATE TABLE `bans` (
   `user_id` char(8) NOT NULL,
   `type` enum('general','comment','video','chat') NOT NULL,
   `reason` text NOT NULL,
-  `starts_at` datetime NOT NULL DEFAULT current_timestamp(),
   `ends_at` datetime DEFAULT NULL,
   `banned_by_type` enum('system','user') NOT NULL DEFAULT 'system',
   `banned_by_user_id` char(8) DEFAULT NULL,
@@ -47,7 +41,7 @@ CREATE TABLE `bans` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
-  KEY `idx_bans_user_active` (`user_id`,`type`,`revoked_at`,`starts_at`,`ends_at`),
+  KEY `idx_bans_user_active` (`user_id`,`type`,`revoked_at`,`ends_at`),
   KEY `idx_bans_ends_at` (`ends_at`),
   KEY `idx_bans_banned_by` (`banned_by_user_id`),
   KEY `idx_bans_revoked_by` (`revoked_by_user_id`),

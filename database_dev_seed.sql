@@ -6,21 +6,18 @@ DELETE FROM analytics_events WHERE session_id IN ('00000000-0000-4000-8000-00000
 DELETE FROM activity_logs WHERE context LIKE '%dev-seed%' OR context LIKE '%rep_demo0001%' OR context LIKE '%ban_demo0001%';
 DELETE FROM notifications WHERE data LIKE '%dev_seed%' OR data LIKE '%ban_demo0001%' OR data LIKE '%rep_demo0002%';
 
-INSERT INTO users (id, username, display_name, email, password_hash, bio, avatar_url, cover_url, status, is_banned, ban_reason, ban_ends_at, banned_by) VALUES
-('u_system', 'limevideo_system', 'LimeVideo System', 'system@limevideo.local', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Internal LimeVideo system account.', '', '', 'disabled', 0, NULL, NULL, NULL),
-('u_demo1', 'limevideo_master', 'LimeVideo Master', 'limevideo_master@example.com', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Frontend systems, creator tooling and high performance video interfaces.', '', '', 'active', 0, NULL, NULL, NULL),
-('u_demo2', 'techvision', 'Tech Vision', 'techvision@example.com', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Delivery experiments, infrastructure notes and product breakdowns.', '', '', 'active', 0, NULL, NULL, NULL),
-('u_banned', 'limited_creator', 'Limited Creator', 'limited@example.com', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Demo account with active moderation restrictions.', '', '', 'active', 1, 'Repeated spam during development tests.', DATE_ADD(NOW(), INTERVAL 7 DAY), 'u_system')
+INSERT INTO users (id, username, display_name, email, password_hash, bio, avatar_url, cover_url, role, status) VALUES
+('u_system', 'limevideo_system', 'LimeVideo System', 'system@limevideo.local', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Internal LimeVideo system account.', '', '', 'system', 'disabled'),
+('u_demo1', 'limevideo_master', 'LimeVideo Master', 'limevideo_master@example.com', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Frontend systems, creator tooling and high performance video interfaces.', '', '', 'admin', 'active'),
+('u_demo2', 'techvision', 'Tech Vision', 'techvision@example.com', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Delivery experiments, infrastructure notes and product breakdowns.', '', '', 'user', 'active'),
+('u_banned', 'limited_creator', 'Limited Creator', 'limited@example.com', '$2y$12$U7oZG7ZvRTW1pdndxgG.2eM7TTye.l6kr.dg1ZRTpiBg0.6euaQuK', 'Demo account with active moderation restrictions.', '', '', 'user', 'active')
 ON DUPLICATE KEY UPDATE
 display_name = VALUES(display_name),
 bio = VALUES(bio),
 avatar_url = VALUES(avatar_url),
 cover_url = VALUES(cover_url),
-status = VALUES(status),
-is_banned = VALUES(is_banned),
-ban_reason = VALUES(ban_reason),
-ban_ends_at = VALUES(ban_ends_at),
-banned_by = VALUES(banned_by);
+role = VALUES(role),
+status = VALUES(status);
 
 INSERT INTO tags (name, slug) VALUES
 ('Design', 'design'),
@@ -50,10 +47,10 @@ file_path = VALUES(file_path),
 thumbnail_path = VALUES(thumbnail_path),
 processing_status = VALUES(processing_status);
 
-INSERT INTO bans (id, user_id, type, reason, starts_at, ends_at, banned_by_type, banned_by_user_id) VALUES
-('ban_demo0001', 'u_banned', 'comment', 'Comment spam in multiple watch pages.', NOW(), DATE_ADD(NOW(), INTERVAL 7 DAY), 'system', NULL),
-('ban_demo0002', 'u_banned', 'chat', 'Flooding global chat with repeated messages.', NOW(), NULL, 'user', 'u_demo1'),
-('ban_demo0003', 'u_demo2', 'video', 'Resolved upload moderation test ban.', DATE_SUB(NOW(), INTERVAL 10 DAY), DATE_SUB(NOW(), INTERVAL 5 DAY), 'user', 'u_demo1')
+INSERT INTO bans (id, user_id, type, reason, ends_at, banned_by_type, banned_by_user_id) VALUES
+('ban_demo0001', 'u_banned', 'comment', 'Comment spam in multiple watch pages.', DATE_ADD(NOW(), INTERVAL 7 DAY), 'system', NULL),
+('ban_demo0002', 'u_banned', 'chat', 'Flooding global chat with repeated messages.', NULL, 'user', 'u_demo1'),
+('ban_demo0003', 'u_demo2', 'video', 'Resolved upload moderation test ban.', DATE_SUB(NOW(), INTERVAL 5 DAY), 'user', 'u_demo1')
 ON DUPLICATE KEY UPDATE
 reason = VALUES(reason),
 ends_at = VALUES(ends_at),
