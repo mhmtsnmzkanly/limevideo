@@ -106,6 +106,7 @@ const app = {
       dev_mode: AppConfig.dev_mode,
       captcha: {
         enabled: false,
+        provider: "turnstile",
         script_url:
           "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
         public_key: "",
@@ -1384,6 +1385,7 @@ const app = {
   normalizeCaptchaConfig(config = {}) {
     return {
       enabled: Boolean(config.enabled),
+      provider: String(config.provider || "turnstile").toLowerCase(),
       script_url:
         String(config.script_url || "") ||
         "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
@@ -1396,9 +1398,24 @@ const app = {
     return this.state.siteConfig?.captcha || this.normalizeCaptchaConfig();
   },
 
+  isSupportedCaptchaProvider(config = this.captchaConfig()) {
+    return String(config.provider || "turnstile").toLowerCase() === "turnstile";
+  },
+
+  warnUnsupportedCaptchaProvider(config = this.captchaConfig()) {
+    if (!this.state.devMode || !config.enabled || this.isSupportedCaptchaProvider(config)) return;
+    console.error(
+      `Unsupported captcha provider "${config.provider}". LimeVideo v1 supports Turnstile-compatible captcha only.`,
+    );
+  },
+
   ensureCaptchaScript() {
     const config = this.captchaConfig();
     if (!config.enabled || !config.script_url) return;
+    if (!this.isSupportedCaptchaProvider(config)) {
+      this.warnUnsupportedCaptchaProvider(config);
+      return;
+    }
 
     let script = document.getElementById("captcha-script");
     if (script && script.getAttribute("src") === config.script_url) return;
@@ -1422,12 +1439,22 @@ const app = {
   requireCaptcha(purpose) {
     const config = this.captchaConfig();
     if (!config.enabled) return true;
+    if (!this.isSupportedCaptchaProvider(config)) {
+      this.warnUnsupportedCaptchaProvider(config);
+      this.showStatus("Captcha provider is not supported.", "error");
+      return false;
+    }
     if (this.state.captchaTokens[purpose]) return true;
     this.showStatus("Please complete the captcha challenge.", "error");
     return false;
   },
 
   resetCaptchaWidget(purpose) {
+    const config = this.captchaConfig();
+    if (!this.isSupportedCaptchaProvider(config)) {
+      this.state.captchaTokens[purpose] = "";
+      return;
+    }
     const widgetId = this.state.captchaWidgets[purpose];
     if (window.turnstile && widgetId !== undefined) {
       window.turnstile.reset(widgetId);
@@ -1452,6 +1479,15 @@ const app = {
         container.hidden = true;
       });
       this.syncAgeCaptchaState(true);
+      return;
+    }
+
+    if (!this.isSupportedCaptchaProvider(config)) {
+      this.warnUnsupportedCaptchaProvider(config);
+      containers.forEach((container) => {
+        container.hidden = false;
+      });
+      this.syncAgeCaptchaState(false);
       return;
     }
 

@@ -36,6 +36,7 @@ final class LimeVideo
         "ANALYTICS_AUTO_ENQUEUE_MIN_INTERVAL" => 300,
         "SECURITY_CSRF_EXEMPT" => "login,register,provider_webhook,analytics",
         "CAPTCHA_ENABLED" => false,
+        "CAPTCHA_PROVIDER" => "turnstile",
         "CAPTCHA_SCRIPT_URL" =>
             "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
         "CAPTCHA_PUBLIC_KEY" => "",
@@ -378,6 +379,7 @@ final class LimeVideo
     {
         return [
             "enabled" => (bool) $this->cfg("CAPTCHA_ENABLED"),
+            "provider" => (string) $this->cfg("CAPTCHA_PROVIDER", "turnstile"),
             "script_url" => (string) $this->cfg("CAPTCHA_SCRIPT_URL"),
             "public_key" => (string) $this->cfg("CAPTCHA_PUBLIC_KEY"),
             "form_field_name" => (string) $this->cfg("CAPTCHA_FORM_FIELD_NAME"),

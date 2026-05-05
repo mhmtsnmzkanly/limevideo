@@ -44,8 +44,11 @@ return [
     // Security/CSRF settings.
     "SECURITY_CSRF_EXEMPT" => "login,register,provider_webhook,analytics",
 
-    // Captcha settings. Script URL, public key and form field are frontend-safe.
+    // Captcha settings. v1 supports Turnstile / Turnstile-compatible captcha only.
+    // CAPTCHA_SCRIPT_URL must provide window.turnstile. hCaptcha/reCAPTCHA need a future provider adapter.
+    // CAPTCHA_VERIFY_URL and CAPTCHA_PRIVATE_KEY are private/server-only.
     "CAPTCHA_ENABLED" => false,
+    "CAPTCHA_PROVIDER" => "turnstile",
     "CAPTCHA_SCRIPT_URL" =>
         "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
     "CAPTCHA_PUBLIC_KEY" => "CHANGE_ME_PUBLIC_KEY",
