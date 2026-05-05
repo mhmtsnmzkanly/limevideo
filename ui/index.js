@@ -1604,7 +1604,12 @@ const app = {
 
   getFriendlyErrorMessage(error, context = "") {
     const status = Number(error?.status);
-    if (!status) return error?.message || "An unexpected error occurred.";
+    if (!status) {
+      if (this.state.devMode && error?.message && !this.looksLikeDebugMessage(error.message)) {
+        return error.message;
+      }
+      return "An unexpected error occurred.";
+    }
 
     if (status === 401) {
       if (context === "auth") return "Username or password is wrong";
@@ -1619,6 +1624,16 @@ const app = {
     if (status >= 500) return "Server error. Please try again later";
 
     return error?.message || "Request failed";
+  },
+
+  looksLikeDebugMessage(message = "") {
+    const text = String(message);
+    return /(\bSQLSTATE\b|\bStack trace\b|\/home\/|\\|\.php\b|\.js\b|{\s*"|^\s*\[)/i.test(text);
+  },
+
+  showApiError(error, fallback = "Request failed", context = "") {
+    const message = this.getFriendlyErrorMessage(error, context) || fallback;
+    this.showStatus(message === "An unexpected error occurred." ? fallback : message, "error");
   },
 
   normalizeSeoText(value = "", maxLength = 160) {
@@ -2354,7 +2369,7 @@ const app = {
       this.appendTemplateHtml(feed, this.renderGalleryFeed(items, startIndex));
       this.updateGalleryResultLabel();
     } catch (e) {
-      this.showStatus(e.message || "More videos could not be loaded.", "error");
+      this.showApiError(e, "Could not load more videos");
     } finally {
       this.setState("search.galleryLoadingMore", false);
       this.updateGalleryMoreStatus();
@@ -2368,7 +2383,7 @@ const app = {
       this.currentProfile = data;
       return data;
     } catch (e) {
-      this.showStatus(e.message || "Profile could not be loaded.", "error");
+      this.showApiError(e, "Could not load profile");
       this.navigateTo("/gallery");
       return {};
     }
@@ -2393,7 +2408,7 @@ const app = {
       }
       return data;
     } catch (e) {
-      this.showStatus(e.message || "Video could not be loaded.", "error");
+      this.showApiError(e, "Could not load video");
       this.navigateTo("/gallery");
       return {};
     }
@@ -2949,7 +2964,7 @@ const app = {
       this.showStatus("Video published.");
       this.navigateTo(`/video/${data.id}`);
     } catch (e) {
-      this.showStatus(e.message || "Video could not be published.", "error");
+      this.showApiError(e, "Upload failed. Please check the form and try again");
     } finally {
       this.state.uploadSubmitting = false;
       this.setElementLoading(
