@@ -1415,6 +1415,33 @@ final class LimeVideo
         ]);
     }
 
+    public function hasRunnableJobs(): bool
+    {
+        $stmt = $this->db()->query(
+            "SELECT 1
+            FROM cron_jobs
+            WHERE available_at <= NOW()
+              AND (
+                status = 'pending'
+                OR (status = 'working' AND locked_until < NOW())
+                OR (status = 'failed' AND attempts < max_attempts)
+              )
+            LIMIT 1",
+        );
+        return (bool) $stmt->fetchColumn();
+    }
+
+    public function runPublicJobTick(): void
+    {
+        if (empty($_SESSION["user"])) {
+            $this->jsonResponse(["error" => "Auth required"], 401);
+        }
+
+        $this->runCronJobBatch(1);
+        http_response_code(204);
+        exit();
+    }
+
     private function claimCronJob(string $workerId): ?array
     {
         $this->db()
@@ -3416,6 +3443,7 @@ if (strpos($uri, "/api/") === 0) {
             "report",
             "external_video",
             "watch_later",
+            "jobs",
             "analytics" => $App->requireMethod($method, ["POST"]),
             // TODO: CSRF exemption is safe only with separate provider authentication or signature validation.
             "provider_webhook" => $App->requireMethod($method, ["POST"]),
@@ -3439,6 +3467,7 @@ if (strpos($uri, "/api/") === 0) {
                     600,
                 ),
                 "analytics" => $App->checkRateLimit("analytics", 240, 60),
+                "jobs" => $App->checkRateLimit("jobs", 10, 60),
                 default => null,
             };
         }
@@ -3450,6 +3479,7 @@ if (strpos($uri, "/api/") === 0) {
                 (int) ($_GET["limit"] ?? 10),
                 $_GET["token"] ?? null,
             ),
+            "jobs" => $App->runPublicJobTick(),
             "stats" => $App->jsonResponse($App->getStats()),
             "tags" => $App->jsonResponse($App->fetch("tags")),
             "site_config" => $App->jsonResponse([
@@ -3505,9 +3535,12 @@ if (strpos($uri, "/api/") === 0) {
                 isset($_SESSION["user"])
                     ? array_merge(
                         $App->getUser($_SESSION["user"]["id"]) ?? [],
-                        ["csrf" => $App->csrfToken()],
+                        [
+                            "csrf" => $App->csrfToken(),
+                            "jobs" => $App->hasRunnableJobs(),
+                        ],
                     )
-                    : ["csrf" => $App->csrfToken()],
+                    : ["csrf" => $App->csrfToken(), "jobs" => false],
             ),
             "vote" => $App->vote(
                 $App->validate($input["target_id"] ?? "", "id"),

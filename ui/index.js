@@ -56,6 +56,7 @@ function createStore(initialState) {
 const app = {
   storageKeys: {
     guestAutoplay: "limevideo_pref_autoplay",
+    jobsLastTriggeredAt: "limevideo_jobs_last_triggered_at",
     profileView: "limevideo_pref_profile_view",
   },
 
@@ -122,6 +123,7 @@ const app = {
     analyticsSessionId: "",
     analyticsQueue: [],
     analyticsFlushTimer: null,
+    jobsLastTriggeredAt: 0,
     activeVideoId: null,
     videoWatchStartedAt: 0,
     videoWatchInterval: null,
@@ -1356,9 +1358,27 @@ const app = {
       } else {
         this.setState("auth.me", null);
       }
+      if (data?.jobs === true) this.triggerJobs();
     } catch (e) {
       console.error("Auth check failed");
     }
+  },
+
+  triggerJobs() {
+    const now = Date.now();
+    const interval = 60000;
+    const stored = Number(this.readStorage(this.storageKeys.jobsLastTriggeredAt) || 0);
+    const last = Math.max(this.state.jobsLastTriggeredAt || 0, stored || 0);
+    if (now - last < interval) return;
+
+    this.state.jobsLastTriggeredAt = now;
+    this.writeStorage(this.storageKeys.jobsLastTriggeredAt, String(now));
+
+    this.apiPost("/api/jobs").catch((error) => {
+      if (this.state.devMode) {
+        console.warn("Background jobs trigger failed.", error?.message || error);
+      }
+    });
   },
 
   async fetchSiteConfig() {
