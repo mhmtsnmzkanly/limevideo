@@ -1060,6 +1060,12 @@ final class LimeVideo
                 "banned_by_user_id" => $bannedByUserId,
             ],
         );
+        if ($type === "general") {
+            $this->enqueueSitemapRegeneration("user_general_ban_created", [
+                "user_id" => $userId,
+                "ban_id" => $banId,
+            ]);
+        }
 
         return $banId;
     }
@@ -3398,6 +3404,7 @@ final class LimeVideo
             ->prepare("INSERT INTO user_settings (user_id) VALUES (?)")
             ->execute([$id]);
         $this->cacheDelete("global_stats");
+        $this->enqueueSitemapRegeneration("user_registered", ["user_id" => $id]);
         $this->jsonResponse(["success" => true, "id" => $id]);
     }
 }
