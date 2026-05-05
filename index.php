@@ -795,6 +795,20 @@ final class LimeVideo
         }
     }
 
+    public function requireMethod(string $actualMethod, array $allowedMethods): void
+    {
+        $allowed = array_map(
+            static fn(string $method): string => strtoupper($method),
+            $allowedMethods,
+        );
+        if (in_array(strtoupper($actualMethod), $allowed, true)) {
+            return;
+        }
+
+        header("Allow: " . implode(", ", $allowed));
+        $this->jsonResponse(["error" => "Method not allowed"], 405);
+    }
+
     public function fetch(string $name): mixed
     {
         return match ($name) {
@@ -3267,13 +3281,13 @@ final class LimeVideo
 
         if ($success) {
             session_regenerate_id(true);
+            $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
             $_SESSION["user"] = [
                 "id" => $u["id"],
                 "username" => $u["username"],
                 "display_name" => $u["display_name"] ?? $u["username"],
                 "role" => $u["role"] ?? "user",
             ];
-            $this->csrfToken();
             $this->logActivity(
                 "LOGIN_ATTEMPT",
                 "LOGIN_SUCCESS",
@@ -3387,6 +3401,26 @@ if (strpos($uri, "/api/") === 0) {
 
     try {
         $App->assertCsrf($endpoint, $method);
+        match ($endpoint) {
+            "vote",
+            "follow",
+            "comment",
+            "update_profile",
+            "login",
+            "register",
+            "logout",
+            "read_notifications",
+            "save",
+            "report",
+            "external_video",
+            "watch_later",
+            "analytics" => $App->requireMethod($method, ["POST"]),
+            // TODO: CSRF exemption is safe only with separate provider authentication or signature validation.
+            "provider_webhook" => $App->requireMethod($method, ["POST"]),
+            "chat/messages",
+            "settings" => $App->requireMethod($method, ["GET", "POST"]),
+            default => null,
+        };
         if ($method === "POST") {
             match ($endpoint) {
                 "vote" => $App->checkRateLimit("vote", 60, 60),
