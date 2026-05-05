@@ -5,3 +5,5 @@
 /config.php
 *.tmp
 .ini
+tools/node_modules/
+.tailwindcss.tmp
