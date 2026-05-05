@@ -3549,6 +3549,21 @@ if (strpos($uri, "/api/") === 0) {
 }
 
 // --- SPA shell fallback ---
-// Every non-API path falls back to index.html; frontend owns route resolution.
-include "index.html";
+// Every non-API path falls back to the appropriate index.html based on DEV_MODE.
+$shellPath = (bool) $App->cfg("DEV_MODE") 
+    ? __DIR__ . "/ui/index.html" 
+    : __DIR__ . "/public/index.html";
+
+if (!file_exists($shellPath)) {
+    $errorMsg = (bool) $App->cfg("DEV_MODE")
+        ? "Frontend shell missing at: " . $shellPath
+        : "System maintenance. Please check back later.";
+    
+    header("Content-Type: text/plain");
+    http_response_code(503);
+    echo $errorMsg;
+    exit();
+}
+
+include $shellPath;
 exit();

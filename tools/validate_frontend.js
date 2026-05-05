@@ -1,8 +1,8 @@
 const fs = require('fs');
 const vm = require('vm');
 
-const html = fs.readFileSync('index.html', 'utf8');
-const js = fs.readFileSync('index.js', 'utf8');
+const html = fs.readFileSync('../ui/index.html', 'utf8');
+const js = fs.readFileSync('../ui/index.js', 'utf8');
 
 function extractTemplates(source) {
     const templates = {};
