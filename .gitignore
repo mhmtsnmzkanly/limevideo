@@ -1,9 +1,7 @@
-/uploads
+/uploads/
 /cache/
-/cachedir
-/logs/
 /config.php
+
 *.tmp
-.ini
-tools/node_modules/
-.tailwindcss.tmp
+/tools/node_modules/
+/tools/.tailwindcss.tmp
