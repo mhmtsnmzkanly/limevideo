@@ -3425,8 +3425,13 @@ session_start();
 $uri = parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH);
 $method = $_SERVER["REQUEST_METHOD"];
 
-if ($uri === "/sitemap.xml" && is_file(__DIR__ . "/sitemap.xml")) {
+if ($uri === "/sitemap.xml") {
     header("Content-Type: application/xml; charset=utf-8");
+    if (!is_file(__DIR__ . "/sitemap.xml")) {
+        http_response_code(404);
+        echo "sitemap.xml not generated";
+        exit();
+    }
     readfile(__DIR__ . "/sitemap.xml");
     exit();
 }
