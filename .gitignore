@@ -1,6 +1,7 @@
 /uploads/
 /cache/
 /config.php
+/sitemap.xml
 
 *.tmp
 /tools/node_modules/
