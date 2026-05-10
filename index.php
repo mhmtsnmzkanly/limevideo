@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+define("LIMEVIDEO", true);
+
 /**
  * LimeVideo Monolith
  * ------------------
@@ -11,134 +13,41 @@ declare(strict_types=1);
 
 final class LimeVideo
 {
-    private array $config = [
-        "DEV_MODE" => false,
-        "SITE_DOMAIN" => "127.0.0.1:8010",
-        "SITE_HTTPS" => false,
-        "DB_HOST" => "127.0.0.1",
-        "DB_PORT" => 3306,
-        "DB_NAME" => "limevideo",
-        "DB_USER" => "root",
-        "DB_PASSWORD" => "default000",
-        "DB_CHARSET" => "utf8mb4",
-        "CHAT_VIDEO_ID" => "globalchat01",
-        "CHAT_OWNER_USER_ID" => "u_system",
-        "CHAT_MESSAGE_LIMIT" => 50,
-        "CHAT_MESSAGE_MAX_LENGTH" => 500,
-        "CRON_TOKEN" => "",
-        "CRON_AUTO_RUN_ENABLED" => false,
-        "CRON_AUTO_RUN_LIMIT" => 2,
-        "CRON_AUTO_RUN_MIN_INTERVAL" => 60,
-        "ANALYTICS_ROLLUP_ENABLED" => true,
-        "ANALYTICS_ROLLUP_LOOKBACK_HOURS" => 48,
-        "ANALYTICS_ROLLUP_LOOKBACK_DAYS" => 14,
-        "ANALYTICS_RAW_RETENTION_DAYS" => 90,
-        "ANALYTICS_AUTO_ENQUEUE_MIN_INTERVAL" => 300,
-        "SECURITY_CSRF_EXEMPT" => "login,register,provider_webhook,analytics",
-        "CAPTCHA_ENABLED" => false,
-        "CAPTCHA_PROVIDER" => "turnstile",
-        "CAPTCHA_SCRIPT_URL" =>
-            "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
-        "CAPTCHA_PUBLIC_KEY" => "",
-        "CAPTCHA_PRIVATE_KEY" => "",
-        "CAPTCHA_VERIFY_URL" =>
-            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-        "CAPTCHA_FORM_FIELD_NAME" => "captcha_token",
-        "AD_SERVICE_KEYS" => "internal,vast,gam,custom_js",
-        "AD_SERVICE_INTERNAL_DISPLAY_NAME" => "Internal Ad Placements",
-        "AD_SERVICE_INTERNAL_SCRIPT_URL" => "",
-        "AD_SERVICE_INTERNAL_ENABLED" => true,
-        "AD_SERVICE_INTERNAL_SETTING_MODE" => "fallback",
-        "AD_SERVICE_VAST_DISPLAY_NAME" => "VAST Compatible Service",
-        "AD_SERVICE_VAST_SCRIPT_URL" => "",
-        "AD_SERVICE_VAST_ENABLED" => false,
-        "AD_SERVICE_VAST_SETTING_ADAPTER" => "planned",
-        "AD_SERVICE_GAM_DISPLAY_NAME" => "Google Ad Manager",
-        "AD_SERVICE_GAM_SCRIPT_URL" => "",
-        "AD_SERVICE_GAM_ENABLED" => false,
-        "AD_SERVICE_GAM_SETTING_ADAPTER" => "planned",
-        "AD_SERVICE_CUSTOM_JS_DISPLAY_NAME" => "Custom JavaScript Ad Service",
-        "AD_SERVICE_CUSTOM_JS_SCRIPT_URL" => "",
-        "AD_SERVICE_CUSTOM_JS_ENABLED" => false,
-        "AD_SERVICE_CUSTOM_JS_SETTING_ADAPTER" => "planned",
-        "AD_PLACEMENT_KEYS" =>
-            "feed_native,watch_sidebar,preroll,popunder,leaderboard",
-        "AD_PLACEMENT_FEED_NATIVE_SOURCE" => "internal",
-        "AD_PLACEMENT_FEED_NATIVE_SERVICE" => "internal",
-        "AD_PLACEMENT_FEED_NATIVE_EXTERNAL_ZONE_ID" => "",
-        "AD_PLACEMENT_FEED_NATIVE_LABEL" => "Sponsored",
-        "AD_PLACEMENT_FEED_NATIVE_TITLE" => "LimeVideo VPN Pro",
-        "AD_PLACEMENT_FEED_NATIVE_BODY" =>
-            "Secure creator sessions from every network.",
-        "AD_PLACEMENT_FEED_NATIVE_CTA_LABEL" => "Learn More",
-        "AD_PLACEMENT_FEED_NATIVE_CTA_URL" => "#",
-        "AD_PLACEMENT_FEED_NATIVE_ENABLED" => true,
-        "AD_PLACEMENT_FEED_NATIVE_FREQUENCY" => 5,
-        "AD_PLACEMENT_WATCH_SIDEBAR_SOURCE" => "internal",
-        "AD_PLACEMENT_WATCH_SIDEBAR_SERVICE" => "internal",
-        "AD_PLACEMENT_WATCH_SIDEBAR_EXTERNAL_ZONE_ID" => "",
-        "AD_PLACEMENT_WATCH_SIDEBAR_LABEL" => "Sponsored",
-        "AD_PLACEMENT_WATCH_SIDEBAR_TITLE" => "Upgrade to LimeVideo Pro",
-        "AD_PLACEMENT_WATCH_SIDEBAR_BODY" =>
-            "Creator analytics and cleaner watch sessions.",
-        "AD_PLACEMENT_WATCH_SIDEBAR_CTA_LABEL" => "View Plans",
-        "AD_PLACEMENT_WATCH_SIDEBAR_CTA_URL" => "#",
-        "AD_PLACEMENT_WATCH_SIDEBAR_ENABLED" => true,
-        "AD_PLACEMENT_WATCH_SIDEBAR_FREQUENCY" => 1,
-        "AD_PLACEMENT_PREROLL_SOURCE" => "internal",
-        "AD_PLACEMENT_PREROLL_SERVICE" => "internal",
-        "AD_PLACEMENT_PREROLL_EXTERNAL_ZONE_ID" => "",
-        "AD_PLACEMENT_PREROLL_LABEL" => "Advertisement",
-        "AD_PLACEMENT_PREROLL_TITLE" => "Sponsored Video",
-        "AD_PLACEMENT_PREROLL_BODY" => "Video will start shortly.",
-        "AD_PLACEMENT_PREROLL_CTA_LABEL" => "Skip Ad",
-        "AD_PLACEMENT_PREROLL_CTA_URL" => "#",
-        "AD_PLACEMENT_PREROLL_ENABLED" => true,
-        "AD_PLACEMENT_PREROLL_FREQUENCY" => 1,
-        "AD_PLACEMENT_POPUNDER_SOURCE" => "internal",
-        "AD_PLACEMENT_POPUNDER_SERVICE" => "internal",
-        "AD_PLACEMENT_POPUNDER_EXTERNAL_ZONE_ID" => "",
-        "AD_PLACEMENT_POPUNDER_LABEL" => "Special Offer",
-        "AD_PLACEMENT_POPUNDER_TITLE" => "LimeVideo API",
-        "AD_PLACEMENT_POPUNDER_BODY" =>
-            "Build your own platform in 10 minutes.",
-        "AD_PLACEMENT_POPUNDER_CTA_LABEL" => "Check Now",
-        "AD_PLACEMENT_POPUNDER_CTA_URL" => "#",
-        "AD_PLACEMENT_POPUNDER_ENABLED" => true,
-        "AD_PLACEMENT_POPUNDER_FREQUENCY" => 1,
-        "AD_PLACEMENT_LEADERBOARD_SOURCE" => "internal",
-        "AD_PLACEMENT_LEADERBOARD_SERVICE" => "internal",
-        "AD_PLACEMENT_LEADERBOARD_EXTERNAL_ZONE_ID" => "",
-        "AD_PLACEMENT_LEADERBOARD_LABEL" => "Sponsored",
-        "AD_PLACEMENT_LEADERBOARD_TITLE" => "LimeVideo Creator Stack",
-        "AD_PLACEMENT_LEADERBOARD_BODY" =>
-            "A compact toolkit for creators and curators.",
-        "AD_PLACEMENT_LEADERBOARD_CTA_LABEL" => "Explore",
-        "AD_PLACEMENT_LEADERBOARD_CTA_URL" => "#",
-        "AD_PLACEMENT_LEADERBOARD_ENABLED" => true,
-        "AD_PLACEMENT_LEADERBOARD_FREQUENCY" => 1,
-    ];
+    private array $config = [];
     private ?PDO $pdo = null;
     private string $cacheDir;
 
     public function __construct()
     {
+        $defaultsFile = __DIR__ . "/config.example.php";
+        if (!is_file($defaultsFile)) {
+            throw new RuntimeException("config.example.php is required.");
+        }
+        $defaults = require $defaultsFile;
+        if (!is_array($defaults)) {
+            throw new RuntimeException("config.example.php must return an array.");
+        }
+        $this->assertModernConfig($defaults, "config.example.php");
+        $this->config = $defaults;
+
         $configFile = __DIR__ . "/config.php";
         if (is_file($configFile)) {
             $override = require $configFile;
             if (!is_array($override)) {
                 throw new RuntimeException("config.php must return an array.");
             }
+            $this->assertModernConfig($override, "config.php");
             $this->config = array_replace_recursive($this->config, $override);
         }
 
         $domain = preg_replace(
             "#^https?://#",
             "",
-            rtrim((string) $this->config["SITE_DOMAIN"], "/"),
+            rtrim((string) $this->cfg("app.site_domain"), "/"),
         );
-        $scheme = (bool) $this->config["SITE_HTTPS"] ? "https" : "http";
-        $this->config["SITE_BASE_URL"] = $scheme . "://" . $domain;
+        $scheme = (bool) $this->cfg("app.site_https") ? "https" : "http";
+        $this->config["app"]["site_base_url"] = $scheme . "://" . $domain;
+        $this->validateConfig();
 
         $this->cacheDir = __DIR__ . "/cache";
         if (!is_dir($this->cacheDir)) {
@@ -147,13 +56,129 @@ final class LimeVideo
     }
 
     /**
-     * Reads a flat configuration key.
-     * Input: $key config name, $default fallback when missing.
+     * Reads a dot-path configuration key.
+     * Input: $key config path, $default fallback when missing.
      * Output: configured value or fallback value.
      */
     public function cfg(string $key, mixed $default = null): mixed
     {
-        return $this->config[$key] ?? $default;
+        $value = $this->config;
+        foreach (explode(".", $key) as $part) {
+            if (!is_array($value) || !array_key_exists($part, $value)) {
+                return $default;
+            }
+            $value = $value[$part];
+        }
+        return $value;
+    }
+
+    private function assertModernConfig(array $config, string $file): void
+    {
+        foreach (array_keys($config) as $key) {
+            if (is_string($key) && preg_match("/^[A-Z0-9_]+$/", $key)) {
+                throw new RuntimeException(
+                    "{$file} uses the old flat uppercase format. Copy config.example.php and update values.",
+                );
+            }
+        }
+    }
+
+    private function validateConfig(): void
+    {
+        foreach (
+            [
+                "app",
+                "database",
+                "chat",
+                "cron",
+                "analytics",
+                "csrf",
+                "captcha",
+                "ads",
+            ]
+            as $group
+        ) {
+            if (!isset($this->config[$group]) || !is_array($this->config[$group])) {
+                throw new RuntimeException("Missing config group: {$group}");
+            }
+        }
+
+        foreach (
+            [
+                "app.dev_mode",
+                "app.site_domain",
+                "app.site_https",
+                "database.host",
+                "database.port",
+                "database.name",
+                "database.user",
+                "database.password",
+                "database.charset",
+                "cron.token",
+                "captcha.enabled",
+                "captcha.provider",
+            ]
+            as $path
+        ) {
+            if ($this->cfg($path, null) === null) {
+                throw new RuntimeException("Missing config value: {$path}");
+            }
+        }
+
+        if (!(bool) $this->cfg("app.dev_mode", false)) {
+            $this->assertConfigNotPlaceholder(
+                "database.password",
+                ["CHANGE_ME", ""],
+            );
+            $this->assertConfigNotPlaceholder(
+                "cron.token",
+                ["CHANGE_ME_LONG_RANDOM_SECRET", ""],
+            );
+            if ((bool) $this->cfg("captcha.enabled", false)) {
+                $this->assertConfigNotPlaceholder("captcha.private_key", [
+                    "CHANGE_ME_PRIVATE_KEY",
+                    "",
+                ]);
+            }
+        }
+    }
+
+    private function assertConfigNotPlaceholder(
+        string $path,
+        array $placeholders,
+    ): void {
+        if (in_array((string) $this->cfg($path, ""), $placeholders, true)) {
+            throw new RuntimeException("Production config value is not set: {$path}");
+        }
+    }
+
+    private function configList(string $path): array
+    {
+        $value = $this->cfg($path, []);
+        if (is_string($value)) {
+            $value = explode(",", $value);
+        }
+        if (!is_array($value)) {
+            return [];
+        }
+        return array_values(
+            array_filter(
+                array_map(static fn($item): string => trim((string) $item), $value),
+                static fn(string $item): bool => $item !== "",
+            ),
+        );
+    }
+
+    private function adConfigSettings(array $service): array
+    {
+        $settings = $service["settings"] ?? [];
+        if (!is_array($settings)) {
+            return [];
+        }
+        return array_map(
+            static fn($value) => $value === "" ? null : $value,
+            $settings,
+        );
     }
 
     public function cachePath(): string
@@ -168,38 +193,385 @@ final class LimeVideo
         }
         $dsn =
             "mysql:host=" .
-            $this->cfg("DB_HOST") .
+            $this->cfg("database.host") .
             ";port=" .
-            (int) $this->cfg("DB_PORT", 3306) .
+            (int) $this->cfg("database.port", 3306) .
             ";dbname=" .
-            $this->cfg("DB_NAME") .
+            $this->cfg("database.name") .
             ";charset=" .
-            $this->cfg("DB_CHARSET", "utf8mb4");
+            $this->cfg("database.charset", "utf8mb4");
         $this->pdo = new PDO(
             $dsn,
-            $this->cfg("DB_USER"),
-            $this->cfg("DB_PASSWORD"),
+            $this->cfg("database.user"),
+            $this->cfg("database.password"),
             [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ],
         );
-        unset(
-            $this->config["DB_HOST"],
-            $this->config["DB_PORT"],
-            $this->config["DB_NAME"],
-            $this->config["DB_USER"],
-            $this->config["DB_PASSWORD"],
-            $this->config["DB_CHARSET"],
-        );
+        unset($this->config["database"]["password"]);
         return $this->pdo;
     }
 
     public function baseUrl(string $path = ""): string
     {
-        return rtrim((string) $this->cfg("SITE_BASE_URL"), "/") .
+        return rtrim((string) $this->cfg("app.site_base_url"), "/") .
             "/" .
             ltrim($path, "/");
+    }
+
+    private function htmlEscape(string $value): string
+    {
+        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8");
+    }
+
+    private function plainText(string $value, int $max = 160): string
+    {
+        $text = trim((string) preg_replace("/\s+/", " ", strip_tags($value)));
+        $length = function_exists("mb_strlen") ? mb_strlen($text) : strlen($text);
+        if ($length <= $max) {
+            return $text;
+        }
+        $slice = function_exists("mb_substr")
+            ? mb_substr($text, 0, max(0, $max - 1))
+            : substr($text, 0, max(0, $max - 1));
+        return rtrim($slice) . "…";
+    }
+
+    private function encodeBootstrapJson(array $data): string
+    {
+        return json_encode(
+            $data,
+            JSON_HEX_TAG |
+                JSON_HEX_AMP |
+                JSON_HEX_APOS |
+                JSON_HEX_QUOT |
+                JSON_UNESCAPED_SLASHES |
+                JSON_UNESCAPED_UNICODE,
+        ) ?: "{}";
+    }
+
+    private function defaultSeoMeta(): array
+    {
+        $description = "Discover public videos, creators and tags on LimeVideo.";
+        return [
+            "title" => "LimeVideo",
+            "description" => $description,
+            "canonical" => $this->baseUrl("/"),
+            "robots" => "index,follow",
+            "og_type" => "website",
+            "image" => "",
+        ];
+    }
+
+    private function safeVideoSummary(array $video): array
+    {
+        return [
+            "id" => $video["id"] ?? "",
+            "user_id" => $video["user_id"] ?? "",
+            "title" => $video["title"] ?? "",
+            "description" => $video["description"] ?? "",
+            "duration" => (int) ($video["duration"] ?? 0),
+            "views_count" => (int) ($video["views_count"] ?? $video["views"] ?? 0),
+            "views" => (int) ($video["views"] ?? $video["views_count"] ?? 0),
+            "is_sensitive" => (int) ($video["is_sensitive"] ?? 0),
+            "disable_comments" => (int) ($video["disable_comments"] ?? 0),
+            "status" => "public",
+            "storage_type" => $video["storage_type"] ?? "internal",
+            "provider" => $video["provider"] ?? null,
+            "file_path" => $video["file_path"] ?? null,
+            "playback_url" => $video["playback_url"] ?? null,
+            "thumbnail_path" => $video["thumbnail_path"] ?? "",
+            "thumbnail_url" => $video["thumbnail_url"] ?? null,
+            "playback_mode" => $video["playback_mode"] ?? "direct",
+            "processing_status" => "ready",
+            "created_at" => $video["created_at"] ?? null,
+            "updated_at" => $video["updated_at"] ?? null,
+            "username" => $video["username"] ?? "",
+            "display_name" => $video["display_name"] ?? ($video["username"] ?? ""),
+            "avatar_url" => $video["avatar_url"] ?? "",
+            "playback_source_url" => $video["playback_source_url"] ?? "",
+            "player_mode" => $video["player_mode"] ?? "direct",
+        ];
+    }
+
+    private function publicVideoForBootstrap(string $id): ?array
+    {
+        if ($this->isChatVideoId($id)) {
+            return null;
+        }
+        $stmt = $this->db()->prepare("SELECT 1
+            FROM videos v
+            JOIN users u ON u.id = v.user_id
+            WHERE v.id = ?
+              AND v.status = 'public'
+              AND v.processing_status = 'ready'
+              AND u.status = 'active'
+            LIMIT 1");
+        $stmt->execute([$id]);
+        if (!$stmt->fetchColumn()) {
+            return null;
+        }
+        return $this->safeVideoSummary($this->getVideoDetail($id, false));
+    }
+
+    private function publicProfileForBootstrap(string $id): ?array
+    {
+        $stmt = $this->db()->prepare(
+            "SELECT id, username, display_name, bio, avatar_url, cover_url, created_at
+            FROM users WHERE id = ? AND status = 'active' LIMIT 1",
+        );
+        $stmt->execute([$id]);
+        $user = $stmt->fetch();
+        if (!$user) {
+            return null;
+        }
+
+        $chatVideoId = $this->chatVideoId();
+        $stats = $this->db()->prepare("SELECT
+            (SELECT COUNT(*) FROM videos WHERE user_id = ? AND status = 'public' AND processing_status = 'ready' AND id <> ?) AS videos,
+            (SELECT COUNT(*) FROM follows WHERE followed_id = ?) AS followers,
+            (SELECT COUNT(*) FROM follows WHERE follower_id = ?) AS following,
+            (SELECT COUNT(*) FROM comments c JOIN videos v ON v.id = c.target_id WHERE c.user_id = ? AND c.status = 'active' AND v.status = 'public' AND v.processing_status = 'ready' AND c.target_id <> ?) AS comments,
+            (SELECT COALESCE(SUM(views_count), 0) FROM videos WHERE user_id = ? AND status = 'public' AND processing_status = 'ready' AND id <> ?) AS views");
+        $stats->execute([
+            $id,
+            $chatVideoId,
+            $id,
+            $id,
+            $id,
+            $chatVideoId,
+            $id,
+            $chatVideoId,
+        ]);
+
+        $videos = $this->db()->prepare("SELECT v.*, u.username,
+            COALESCE(NULLIF(v.thumbnail_url, ''), v.thumbnail_path) AS thumbnail_path,
+            v.views_count AS views
+            FROM videos v
+            JOIN users u ON u.id = v.user_id
+            WHERE v.user_id = ? AND v.status = 'public' AND v.processing_status = 'ready' AND v.id <> ?
+            ORDER BY v.created_at DESC LIMIT 12");
+        $videos->execute([$id, $chatVideoId]);
+
+        return [
+            "id" => $user["id"],
+            "username" => $user["username"],
+            "display_name" => $user["display_name"] ?? $user["username"],
+            "bio" => $user["bio"] ?? "",
+            "avatar_url" => $user["avatar_url"] ?? "",
+            "cover_url" => $user["cover_url"] ?? "",
+            "created_at" => $user["created_at"] ?? null,
+            "stats" => $stats->fetch() ?: [],
+            "videos" => array_map(
+                fn(array $video): array => $this->safeVideoSummary(
+                    $this->hydrateVideoPlayback($video),
+                ),
+                $videos->fetchAll(),
+            ),
+        ];
+    }
+
+    private function publicGalleryForBootstrap(string $tag = "all"): array
+    {
+        $chatVideoId = $this->chatVideoId();
+        $params = [$chatVideoId];
+        $sql = "SELECT DISTINCT v.*, u.username,
+                COALESCE(NULLIF(v.thumbnail_url, ''), v.thumbnail_path) AS thumbnail_path,
+                v.views_count AS views
+            FROM videos v
+            JOIN users u ON u.id = v.user_id
+            LEFT JOIN video_tags vt ON vt.video_id = v.id
+            WHERE v.status = 'public'
+              AND v.processing_status = 'ready'
+              AND u.status = 'active'
+              AND v.id <> ?";
+        if ($tag !== "all") {
+            $sql .= " AND vt.tag_slug = ?";
+            $params[] = $tag;
+        }
+        $sql .= " ORDER BY v.created_at DESC, v.id DESC LIMIT 24";
+
+        $stmt = $this->db()->prepare($sql);
+        $stmt->execute($params);
+        $items = array_map(
+            fn(array $video): array => $this->safeVideoSummary(
+                $this->hydrateVideoPlayback($video),
+            ),
+            $stmt->fetchAll(),
+        );
+
+        $last = $items ? $items[count($items) - 1] : null;
+        return [
+            "items" => $items,
+            "next_cursor" => count($items) === 24 && $last
+                ? $this->encodeSearchCursor($last, "newest")
+                : null,
+            "has_more" => count($items) === 24,
+        ];
+    }
+
+    private function publicTagForBootstrap(string $slug): ?array
+    {
+        $stmt = $this->db()->prepare("SELECT t.name, t.slug, MAX(v.updated_at) AS lastmod
+            FROM tags t
+            JOIN video_tags vt ON vt.tag_slug = t.slug
+            JOIN videos v ON v.id = vt.video_id
+            JOIN users u ON u.id = v.user_id
+            WHERE t.slug = ?
+              AND v.status = 'public'
+              AND v.processing_status = 'ready'
+              AND u.status = 'active'
+              AND v.id <> ?
+            GROUP BY t.name, t.slug
+            LIMIT 1");
+        $stmt->execute([$slug, $this->chatVideoId()]);
+        $tag = $stmt->fetch();
+        return $tag ?: null;
+    }
+
+    private function buildBootstrapDataForRequest(string $path): array
+    {
+        $seo = $this->defaultSeoMeta();
+        $bootstrap = [
+            "route" => [
+                "type" => "gallery",
+                "canonical" => $this->baseUrl("/"),
+            ],
+            "seo" => $seo,
+            "data" => [],
+        ];
+
+        if (preg_match("#^/video/([^/]+)$#", $path, $match)) {
+            $id = rawurldecode($match[1]);
+            $video = $this->publicVideoForBootstrap($id);
+            if (!$video) {
+                $bootstrap["route"] = [
+                    "type" => "notfound",
+                    "id" => $id,
+                    "canonical" => $this->baseUrl($path),
+                ];
+                $bootstrap["seo"] = [
+                    ...$seo,
+                    "title" => "Not Found - LimeVideo",
+                    "description" => "The requested LimeVideo page could not be found.",
+                    "canonical" => $this->baseUrl($path),
+                    "robots" => "noindex,nofollow",
+                ];
+                return $bootstrap;
+            }
+            $title = $this->plainText($video["title"], 90);
+            $description =
+                $this->plainText($video["description"], 155) ?:
+                "Watch {$title} on LimeVideo.";
+            $image = $video["thumbnail_url"] ?: $video["thumbnail_path"];
+            if ($image && !preg_match("#^https?://#i", (string) $image)) {
+                $image = $this->baseUrl((string) $image);
+            }
+            return [
+                "route" => [
+                    "type" => "video",
+                    "id" => $id,
+                    "canonical" => $this->baseUrl("/video/" . rawurlencode($id)),
+                ],
+                "seo" => [
+                    "title" => "{$title} - LimeVideo",
+                    "description" => $description,
+                    "canonical" => $this->baseUrl("/video/" . rawurlencode($id)),
+                    "robots" => "index,follow",
+                    "og_type" => "video.other",
+                    "image" => $image ?: "",
+                ],
+                "data" => ["video" => $video],
+            ];
+        }
+
+        if (preg_match("#^/profile/([^/]+)$#", $path, $match)) {
+            $id = rawurldecode($match[1]);
+            $profile = $this->publicProfileForBootstrap($id);
+            if ($profile) {
+                $name = $this->plainText(
+                    $profile["display_name"] ?: $profile["username"],
+                    90,
+                );
+                return [
+                    "route" => [
+                        "type" => "profile",
+                        "id" => $id,
+                        "canonical" => $this->baseUrl("/profile/" . rawurlencode($id)),
+                    ],
+                    "seo" => [
+                        "title" => "{$name} - LimeVideo",
+                        "description" =>
+                            $this->plainText($profile["bio"], 155) ?:
+                            "Public LimeVideo profile for {$name}.",
+                        "canonical" => $this->baseUrl("/profile/" . rawurlencode($id)),
+                        "robots" => "index,follow",
+                        "og_type" => "profile",
+                        "image" => $profile["avatar_url"] ?: "",
+                    ],
+                    "data" => ["profile" => $profile],
+                ];
+            }
+        }
+
+        if (preg_match("#^/tag/([^/]+)$#", $path, $match)) {
+            $slug = rawurldecode($match[1]);
+            $tag = $this->publicTagForBootstrap($slug);
+            if ($tag) {
+                $label = $this->plainText($tag["name"] ?: $slug, 80);
+                return [
+                    "route" => [
+                        "type" => "tag",
+                        "slug" => $slug,
+                        "canonical" => $this->baseUrl("/tag/" . rawurlencode($slug)),
+                    ],
+                    "seo" => [
+                        "title" => "#{$label} - LimeVideo",
+                        "description" => "Videos tagged #{$label} on LimeVideo.",
+                        "canonical" => $this->baseUrl("/tag/" . rawurlencode($slug)),
+                        "robots" => "index,follow",
+                        "og_type" => "website",
+                        "image" => "",
+                    ],
+                    "data" => [
+                        "tag" => $tag,
+                        "gallery" => $this->publicGalleryForBootstrap($slug),
+                    ],
+                ];
+            }
+        }
+
+        if ($path === "/" || $path === "/gallery") {
+            $bootstrap["data"] = ["gallery" => $this->publicGalleryForBootstrap()];
+        }
+
+        return $bootstrap;
+    }
+
+    public function renderShell(string $shellPath, string $path): void
+    {
+        $html = (string) file_get_contents($shellPath);
+        $bootstrap = $this->buildBootstrapDataForRequest($path);
+        $seo = array_replace($this->defaultSeoMeta(), $bootstrap["seo"] ?? []);
+        $replacements = [
+            "__LIMEVIDEO_TITLE__" => $this->htmlEscape((string) $seo["title"]),
+            "__LIMEVIDEO_META_DESCRIPTION__" => $this->htmlEscape((string) $seo["description"]),
+            "__LIMEVIDEO_ROBOTS__" => $this->htmlEscape((string) $seo["robots"]),
+            "__LIMEVIDEO_CANONICAL__" => $this->htmlEscape((string) $seo["canonical"]),
+            "__LIMEVIDEO_OG_TITLE__" => $this->htmlEscape((string) $seo["title"]),
+            "__LIMEVIDEO_OG_DESCRIPTION__" => $this->htmlEscape((string) $seo["description"]),
+            "__LIMEVIDEO_OG_URL__" => $this->htmlEscape((string) $seo["canonical"]),
+            "__LIMEVIDEO_OG_TYPE__" => $this->htmlEscape((string) $seo["og_type"]),
+            "__LIMEVIDEO_OG_IMAGE__" => $this->htmlEscape((string) ($seo["image"] ?? "")),
+            "__LIMEVIDEO_TWITTER_TITLE__" => $this->htmlEscape((string) $seo["title"]),
+            "__LIMEVIDEO_TWITTER_DESCRIPTION__" => $this->htmlEscape((string) $seo["description"]),
+            "__LIMEVIDEO_TWITTER_IMAGE__" => $this->htmlEscape((string) ($seo["image"] ?? "")),
+            "__LIMEVIDEO_BOOTSTRAP__" => $this->encodeBootstrapJson($bootstrap),
+        ];
+
+        header("Content-Type: text/html; charset=utf-8");
+        echo strtr($html, $replacements);
     }
 
     private function xmlEscape(string $value): string
@@ -229,7 +601,7 @@ final class LimeVideo
     {
         $urls = [["loc" => $this->baseUrl("/"), "lastmod" => null]];
         $chatVideoId = $this->chatVideoId();
-        $chatOwnerId = (string) $this->cfg("CHAT_OWNER_USER_ID", "u_system");
+        $chatOwnerId = (string) $this->cfg("chat.owner_user_id", "u_system");
 
         $videoStmt = $this->db()->prepare(
             "SELECT v.id, COALESCE(v.updated_at, v.created_at) AS lastmod
@@ -339,7 +711,7 @@ final class LimeVideo
 
     public function regenerateSitemap(?string $token = null): void
     {
-        $expectedToken = trim((string) $this->cfg("CRON_TOKEN", ""));
+        $expectedToken = trim((string) $this->cfg("cron.token", ""));
         if ($expectedToken === "" || !hash_equals($expectedToken, (string) $token)) {
             $this->jsonResponse(["error" => "Invalid or missing cron token"], 403);
         }
@@ -368,7 +740,7 @@ final class LimeVideo
         file_put_contents($file, json_encode($data), LOCK_EX);
         if ($data["count"] > $limit) {
             $response = ["error" => "Rate limit exceeded"];
-            if ((bool) $this->cfg("DEV_MODE")) {
+            if ((bool) $this->cfg("app.dev_mode")) {
                 $response["retry_after"] = $period - (time() - $data["start"]);
             }
             $this->jsonResponse($response, 429);
@@ -378,17 +750,17 @@ final class LimeVideo
     public function captchaPublicConfig(): array
     {
         return [
-            "enabled" => (bool) $this->cfg("CAPTCHA_ENABLED"),
-            "provider" => (string) $this->cfg("CAPTCHA_PROVIDER", "turnstile"),
-            "script_url" => (string) $this->cfg("CAPTCHA_SCRIPT_URL"),
-            "public_key" => (string) $this->cfg("CAPTCHA_PUBLIC_KEY"),
-            "form_field_name" => (string) $this->cfg("CAPTCHA_FORM_FIELD_NAME"),
+            "enabled" => (bool) $this->cfg("captcha.enabled"),
+            "provider" => (string) $this->cfg("captcha.provider", "turnstile"),
+            "script_url" => (string) $this->cfg("captcha.script_url"),
+            "public_key" => (string) $this->cfg("captcha.public_key"),
+            "form_field_name" => (string) $this->cfg("captcha.form_field_name"),
         ];
     }
 
     public function captchaTokenFromInput(array $input): string
     {
-        $field = (string) $this->cfg("CAPTCHA_FORM_FIELD_NAME");
+        $field = (string) $this->cfg("captcha.form_field_name");
         return trim(
             (string) ($input[$field] ??
                 $input["captcha_token"] ??
@@ -398,12 +770,12 @@ final class LimeVideo
 
     private function verifyCaptcha(string $token): void
     {
-        if (!(bool) $this->cfg("CAPTCHA_ENABLED")) {
+        if (!(bool) $this->cfg("captcha.enabled")) {
             return;
         }
 
-        $secret = trim((string) $this->cfg("CAPTCHA_PRIVATE_KEY"));
-        $verifyUrl = trim((string) $this->cfg("CAPTCHA_VERIFY_URL"));
+        $secret = trim((string) $this->cfg("captcha.private_key"));
+        $verifyUrl = trim((string) $this->cfg("captcha.verify_url"));
         if ($secret === "" || $verifyUrl === "") {
             $this->jsonResponse(["error" => "Captcha is not configured"], 503);
         }
@@ -433,7 +805,7 @@ final class LimeVideo
 
         if (!is_array($result) || empty($result["success"])) {
             $response = ["error" => "Captcha verification failed"];
-            if ((bool) $this->cfg("DEV_MODE")) {
+            if ((bool) $this->cfg("app.dev_mode")) {
                 $response["captcha_errors"] = $result["error-codes"] ?? [];
             }
             $this->jsonResponse($response, 400);
@@ -473,7 +845,7 @@ final class LimeVideo
         if (file_put_contents($tmp, $payload) !== false) {
             if (!@rename($tmp, $file)) {
                 @unlink($tmp);
-                if ((bool) $this->cfg("DEV_MODE")) {
+                if ((bool) $this->cfg("app.dev_mode")) {
                     error_log("Cache rename failed: {$tmp} -> {$file}");
                 }
             }
@@ -580,7 +952,7 @@ final class LimeVideo
 
     private function chatVideoId(): string
     {
-        return (string) $this->cfg("CHAT_VIDEO_ID", "globalchat01");
+        return (string) $this->cfg("chat.video_id", "globalchat01");
     }
 
     private function isChatVideoId(string $videoId): bool
@@ -591,7 +963,7 @@ final class LimeVideo
     private function ensureChatChannel(): void
     {
         $chatVideoId = $this->chatVideoId();
-        $ownerId = (string) $this->cfg("CHAT_OWNER_USER_ID", "u_system");
+        $ownerId = (string) $this->cfg("chat.owner_user_id", "u_system");
 
         $exists = $this->db()->prepare(
             "SELECT 1 FROM videos WHERE id = ? LIMIT 1",
@@ -721,7 +1093,7 @@ final class LimeVideo
 
     public function errorResponse(\Throwable $exception, int $code = 500): void
     {
-        if ((bool) $this->cfg("DEV_MODE")) {
+        if ((bool) $this->cfg("app.dev_mode")) {
             $data = [
                 "error" => $exception->getMessage(),
                 "code" => $code,
@@ -772,20 +1144,16 @@ final class LimeVideo
         if ($method !== "POST") {
             return;
         }
+        $exemptEndpoints = $this->cfg("csrf.exempt_endpoints", []);
+        if (is_string($exemptEndpoints)) {
+            $exemptEndpoints = array_filter(
+                array_map("trim", explode(",", $exemptEndpoints)),
+            );
+        }
         if (
             in_array(
                 $endpoint,
-                array_values(
-                    array_filter(
-                        array_map(
-                            "trim",
-                            explode(
-                                ",",
-                                (string) $this->cfg("SECURITY_CSRF_EXEMPT", ""),
-                            ),
-                        ),
-                    ),
-                ),
+                array_values($exemptEndpoints),
                 true,
             )
         ) {
@@ -854,7 +1222,7 @@ final class LimeVideo
             }
             return $user;
         } catch (\PDOException $e) {
-            if ((bool) $this->cfg("DEV_MODE")) {
+            if ((bool) $this->cfg("app.dev_mode")) {
                 error_log("[DB Error] getUser($id): " . $e->getMessage());
             }
             return null;
@@ -1320,13 +1688,13 @@ final class LimeVideo
 
     private function maybeScheduleAnalyticsJobs(): void
     {
-        if (!(bool) $this->cfg("ANALYTICS_ROLLUP_ENABLED", true)) {
+        if (!(bool) $this->cfg("analytics.rollup_enabled", true)) {
             return;
         }
 
         $interval = max(
             60,
-            (int) $this->cfg("ANALYTICS_AUTO_ENQUEUE_MIN_INTERVAL", 300),
+            (int) $this->cfg("analytics.auto_enqueue_min_interval", 300),
         );
         if ($this->markerRecentlyTouched("analytics_enqueue", $interval)) {
             return;
@@ -1341,7 +1709,7 @@ final class LimeVideo
             $hourTarget,
             [
                 "lookback_hours" => (int) $this->cfg(
-                    "ANALYTICS_ROLLUP_LOOKBACK_HOURS",
+                    "analytics.rollup_lookback_hours",
                     48,
                 ),
             ],
@@ -1353,7 +1721,7 @@ final class LimeVideo
             $dayTarget,
             [
                 "lookback_days" => (int) $this->cfg(
-                    "ANALYTICS_ROLLUP_LOOKBACK_DAYS",
+                    "analytics.rollup_lookback_days",
                     14,
                 ),
             ],
@@ -1365,7 +1733,7 @@ final class LimeVideo
             "retention_" . gmdate("Ymd"),
             [
                 "retention_days" => (int) $this->cfg(
-                    "ANALYTICS_RAW_RETENTION_DAYS",
+                    "analytics.raw_retention_days",
                     90,
                 ),
             ],
@@ -1376,16 +1744,16 @@ final class LimeVideo
 
     private function maybeAutoRunCronJobs(): void
     {
-        if (!(bool) $this->cfg("CRON_AUTO_RUN_ENABLED", false)) {
+        if (!(bool) $this->cfg("cron.auto_run_enabled", false)) {
             return;
         }
 
-        $interval = max(10, (int) $this->cfg("CRON_AUTO_RUN_MIN_INTERVAL", 60));
+        $interval = max(10, (int) $this->cfg("cron.auto_run_min_interval", 60));
         if ($this->markerRecentlyTouched("auto_run", $interval)) {
             return;
         }
         $this->touchCronMarker("auto_run");
-        $this->runCronJobBatch((int) $this->cfg("CRON_AUTO_RUN_LIMIT", 2));
+        $this->runCronJobBatch((int) $this->cfg("cron.auto_run_limit", 2));
     }
 
     private function runCronJobBatch(int $limit = 10): array
@@ -1407,7 +1775,7 @@ final class LimeVideo
 
     public function runCronJobs(int $limit = 10, ?string $token = null): void
     {
-        $expectedToken = trim((string) $this->cfg("CRON_TOKEN", ""));
+        $expectedToken = trim((string) $this->cfg("cron.token", ""));
         if ($expectedToken === "" || !hash_equals($expectedToken, (string) $token)) {
             $this->jsonResponse(["error" => "Invalid or missing cron token"], 403);
         }
@@ -1602,7 +1970,7 @@ final class LimeVideo
                 min(
                     168,
                     (int) ($payload["lookback_hours"] ??
-                        $this->cfg("ANALYTICS_ROLLUP_LOOKBACK_HOURS", 48)),
+                        $this->cfg("analytics.rollup_lookback_hours", 48)),
                 ),
             )
             : max(
@@ -1610,7 +1978,7 @@ final class LimeVideo
                 min(
                     365,
                     (int) ($payload["lookback_days"] ??
-                        $this->cfg("ANALYTICS_ROLLUP_LOOKBACK_DAYS", 14)),
+                        $this->cfg("analytics.rollup_lookback_days", 14)),
                 ),
             );
         $cutoff = (new DateTimeImmutable())
@@ -1677,7 +2045,7 @@ final class LimeVideo
         $retentionDays = max(
             1,
             (int) ($payload["retention_days"] ??
-                $this->cfg("ANALYTICS_RAW_RETENTION_DAYS", 90)),
+                $this->cfg("analytics.raw_retention_days", 90)),
         );
         $cutoff = (new DateTimeImmutable())
             ->modify("-{$retentionDays} days")
@@ -1824,7 +2192,7 @@ final class LimeVideo
     {
         $this->ensureChatChannel();
         $chatVideoId = $this->chatVideoId();
-        $limit = min(100, max(1, (int) $this->cfg("CHAT_MESSAGE_LIMIT", 50)));
+        $limit = min(100, max(1, (int) $this->cfg("chat.message_limit", 50)));
         $params = [$chatVideoId];
         $sql = "SELECT c.id, c.user_id, c.body, c.created_at, u.username, u.display_name
                 FROM comments c
@@ -1850,7 +2218,7 @@ final class LimeVideo
         }
         $this->assertActionAllowed("chat");
         $body = $this->validate($body ?? "", "text", [
-            "max" => (int) $this->cfg("CHAT_MESSAGE_MAX_LENGTH", 500),
+            "max" => (int) $this->cfg("chat.message_max_length", 500),
         ]);
         if (!$body) {
             $this->jsonResponse(["error" => "Message is required"], 400);
@@ -2013,16 +2381,19 @@ final class LimeVideo
         $this->jsonResponse($videos);
     }
 
-    public function getVideoDetail(string $id): void
+    public function getVideoDetail(string $id, bool $increaseView = true): array
     {
         if ($this->isChatVideoId($id)) {
             $this->jsonResponse(["error" => "This video does not exist."], 404);
         }
-        $this->db()
-            ->prepare(
-                "UPDATE videos SET views_count = views_count + 1, updated_at = updated_at WHERE id = ? AND status = 'public'",
-            )
-            ->execute([$id]);
+        // Server-side SEO/bootstrap reads must pass false so HTML generation is not counted as a video view.
+        if ($increaseView) {
+            $this->db()
+                ->prepare(
+                    "UPDATE videos SET views_count = views_count + 1, updated_at = updated_at WHERE id = ? AND status = 'public'",
+                )
+                ->execute([$id]);
+        }
         $viewerId = $_SESSION["user"]["id"] ?? null;
         $ownerStmt = $this->db()->prepare(
             "SELECT user_id FROM videos WHERE id = ? LIMIT 1",
@@ -2082,18 +2453,20 @@ final class LimeVideo
             array_merge($video, $dynamicStmt->fetch() ?: []),
         );
 
-        // Track the watch action in the activity log.
-        $this->logActivity(
-            "USER_ACTION",
-            "VIEW_VIDEO",
-            "SUCCESS",
-            isset($_SESSION["user"]) ? "USER" : "GUEST",
-            $_SESSION["user"]["id"] ?? null,
-            "video",
-            $id,
-        );
+        if ($increaseView) {
+            // Track only real API watch actions; server-side SEO/bootstrap reads are not user views.
+            $this->logActivity(
+                "USER_ACTION",
+                "VIEW_VIDEO",
+                "SUCCESS",
+                isset($_SESSION["user"]) ? "USER" : "GUEST",
+                $_SESSION["user"]["id"] ?? null,
+                "video",
+                $id,
+            );
+        }
 
-        $this->jsonResponse($video);
+        return $video;
     }
 
     public function getProfile(string $id, string $tab = "videos"): void
@@ -2868,105 +3241,40 @@ final class LimeVideo
         $ads = $this->remember("ad_placements_v1", 300, function () {
             $ads = [];
             $services = [];
-            foreach (
-                array_filter(
-                    array_map(
-                        "trim",
-                        explode(
-                            ",",
-                            (string) $this->cfg("AD_SERVICE_KEYS", ""),
-                        ),
-                    ),
-                )
-                as $service
-            ) {
-                $part = strtoupper(
-                    (string) preg_replace("/[^a-z0-9]+/i", "_", $service),
-                );
-                $settings = [];
-                foreach ($this->config as $key => $value) {
-                    $prefix = "AD_SERVICE_{$part}_SETTING_";
-                    if (str_starts_with($key, $prefix)) {
-                        $settings[strtolower(substr($key, strlen($prefix)))] =
-                            $value === "" ? null : $value;
-                    }
-                }
+            $serviceConfig = $this->cfg("ads.services", []);
+            foreach ($this->configList("ads.service_keys") as $service) {
+                $data = is_array($serviceConfig[$service] ?? null)
+                    ? $serviceConfig[$service]
+                    : [];
                 $services[$service] = [
-                    "display_name" => (string) $this->cfg(
-                        "AD_SERVICE_{$part}_DISPLAY_NAME",
-                        $service,
-                    ),
+                    "display_name" => (string) ($data["display_name"] ?? $service),
                     "script_url" =>
-                        ($value = $this->cfg(
-                            "AD_SERVICE_{$part}_SCRIPT_URL",
-                            "",
-                        )) === ""
+                        ($value = ($data["script_url"] ?? "")) === ""
                             ? null
                             : $value,
-                    "enabled" => (bool) $this->cfg(
-                        "AD_SERVICE_{$part}_ENABLED",
-                    ),
-                    "settings" => $settings,
+                    "enabled" => (bool) ($data["enabled"] ?? false),
+                    "settings" => $this->adConfigSettings($data),
                 ];
             }
-            foreach (
-                array_filter(
-                    array_map(
-                        "trim",
-                        explode(
-                            ",",
-                            (string) $this->cfg("AD_PLACEMENT_KEYS", ""),
-                        ),
-                    ),
-                )
-                as $placement
-            ) {
-                $part = strtoupper(
-                    (string) preg_replace("/[^a-z0-9]+/i", "_", $placement),
-                );
+            $placementConfig = $this->cfg("ads.placements", []);
+            foreach ($this->configList("ads.placement_keys") as $placement) {
+                $data = is_array($placementConfig[$placement] ?? null)
+                    ? $placementConfig[$placement]
+                    : [];
                 $ad = [
-                    "source" => (string) $this->cfg(
-                        "AD_PLACEMENT_{$part}_SOURCE",
-                        "internal",
-                    ),
-                    "service" => (string) $this->cfg(
-                        "AD_PLACEMENT_{$part}_SERVICE",
-                        "internal",
-                    ),
+                    "source" => (string) ($data["source"] ?? "internal"),
+                    "service" => (string) ($data["service"] ?? "internal"),
                     "external_zone_id" =>
-                        ($value = $this->cfg(
-                            "AD_PLACEMENT_{$part}_EXTERNAL_ZONE_ID",
-                            "",
-                        )) === ""
+                        ($value = ($data["external_zone_id"] ?? "")) === ""
                             ? null
                             : $value,
-                    "label" => (string) $this->cfg(
-                        "AD_PLACEMENT_{$part}_LABEL",
-                        "Sponsored",
-                    ),
-                    "title" => (string) $this->cfg(
-                        "AD_PLACEMENT_{$part}_TITLE",
-                        "Advertisement",
-                    ),
-                    "body" => (string) $this->cfg(
-                        "AD_PLACEMENT_{$part}_BODY",
-                        "",
-                    ),
-                    "cta_label" => (string) $this->cfg(
-                        "AD_PLACEMENT_{$part}_CTA_LABEL",
-                        "Learn More",
-                    ),
-                    "cta_url" => (string) $this->cfg(
-                        "AD_PLACEMENT_{$part}_CTA_URL",
-                        "#",
-                    ),
-                    "enabled" => (bool) $this->cfg(
-                        "AD_PLACEMENT_{$part}_ENABLED",
-                    ),
-                    "frequency" => (int) $this->cfg(
-                        "AD_PLACEMENT_{$part}_FREQUENCY",
-                        1,
-                    ),
+                    "label" => (string) ($data["label"] ?? "Sponsored"),
+                    "title" => (string) ($data["title"] ?? "Advertisement"),
+                    "body" => (string) ($data["body"] ?? ""),
+                    "cta_label" => (string) ($data["cta_label"] ?? "Learn More"),
+                    "cta_url" => (string) ($data["cta_url"] ?? "#"),
+                    "enabled" => (bool) ($data["enabled"] ?? false),
+                    "frequency" => (int) ($data["frequency"] ?? 1),
                 ];
                 if (empty($ad["enabled"])) {
                     continue;
@@ -3024,46 +3332,20 @@ final class LimeVideo
     {
         $services = $this->remember("ad_services_v1", 300, function () {
             $services = [];
-            foreach (
-                array_filter(
-                    array_map(
-                        "trim",
-                        explode(
-                            ",",
-                            (string) $this->cfg("AD_SERVICE_KEYS", ""),
-                        ),
-                    ),
-                )
-                as $service
-            ) {
-                $part = strtoupper(
-                    (string) preg_replace("/[^a-z0-9]+/i", "_", $service),
-                );
-                $settings = [];
-                foreach ($this->config as $key => $value) {
-                    $prefix = "AD_SERVICE_{$part}_SETTING_";
-                    if (str_starts_with($key, $prefix)) {
-                        $settings[strtolower(substr($key, strlen($prefix)))] =
-                            $value === "" ? null : $value;
-                    }
-                }
+            $serviceConfig = $this->cfg("ads.services", []);
+            foreach ($this->configList("ads.service_keys") as $service) {
+                $data = is_array($serviceConfig[$service] ?? null)
+                    ? $serviceConfig[$service]
+                    : [];
                 $services[] = [
                     "service" => $service,
-                    "display_name" => (string) $this->cfg(
-                        "AD_SERVICE_{$part}_DISPLAY_NAME",
-                        $service,
-                    ),
+                    "display_name" => (string) ($data["display_name"] ?? $service),
                     "script_url" =>
-                        ($value = $this->cfg(
-                            "AD_SERVICE_{$part}_SCRIPT_URL",
-                            "",
-                        )) === ""
+                        ($value = ($data["script_url"] ?? "")) === ""
                             ? null
                             : $value,
-                    "enabled" => (int) (bool) $this->cfg(
-                        "AD_SERVICE_{$part}_ENABLED",
-                    ),
-                    "settings" => $settings,
+                    "enabled" => (int) (bool) ($data["enabled"] ?? false),
+                    "settings" => $this->adConfigSettings($data),
                 ];
             }
             usort(
@@ -3416,7 +3698,7 @@ session_save_path($App->cachePath());
 session_set_cookie_params([
     "lifetime" => 0,
     "path" => "/",
-    "secure" => (bool) $App->cfg("SITE_HTTPS"),
+    "secure" => (bool) $App->cfg("app.site_https"),
     "httponly" => true,
     "samesite" => "Lax",
 ]);
@@ -3495,10 +3777,10 @@ if (strpos($uri, "/api/") === 0) {
             "stats" => $App->jsonResponse($App->getStats()),
             "tags" => $App->jsonResponse($App->fetch("tags")),
             "site_config" => $App->jsonResponse([
-                "domain" => (string) $App->cfg("SITE_DOMAIN"),
-                "https" => (bool) $App->cfg("SITE_HTTPS"),
-                "base_url" => (string) $App->cfg("SITE_BASE_URL"),
-                "dev_mode" => (bool) $App->cfg("DEV_MODE"),
+                "domain" => (string) $App->cfg("app.site_domain"),
+                "https" => (bool) $App->cfg("app.site_https"),
+                "base_url" => (string) $App->cfg("app.site_base_url"),
+                "dev_mode" => (bool) $App->cfg("app.dev_mode"),
                 "captcha" => $App->captchaPublicConfig(),
             ]),
             "trending" => $App->getTrending(),
@@ -3513,8 +3795,10 @@ if (strpos($uri, "/api/") === 0) {
                 ]),
                 (int) ($_GET["limit"] ?? 24),
             ),
-            "video" => $App->getVideoDetail(
-                $App->validate($_GET["id"] ?? "", "id"),
+            "video" => $App->jsonResponse(
+                $App->getVideoDetail(
+                    $App->validate($_GET["id"] ?? "", "id"),
+                ),
             ),
             "comments" => $App->getComments(
                 $App->validate($_GET["video_id"] ?? "", "id"),
@@ -3619,7 +3903,7 @@ if (strpos($uri, "/api/") === 0) {
         };
     } catch (Throwable $e) {
         error_log("LimeVideo API error: " . $e->getMessage());
-        if ((bool) $App->cfg("DEV_MODE")) {
+        if ((bool) $App->cfg("app.dev_mode")) {
             $App->errorResponse($e, 500);
         }
         $App->jsonResponse(["error" => "Server error"], 500);
@@ -3627,13 +3911,13 @@ if (strpos($uri, "/api/") === 0) {
 }
 
 // --- SPA shell fallback ---
-// Every non-API path falls back to the appropriate index.html based on DEV_MODE.
-$shellPath = (bool) $App->cfg("DEV_MODE") 
+// Every non-API path falls back to the shell selected by app.dev_mode.
+$shellPath = (bool) $App->cfg("app.dev_mode") 
     ? __DIR__ . "/ui/index.html" 
     : __DIR__ . "/public/index.html";
 
 if (!file_exists($shellPath)) {
-    $errorMsg = (bool) $App->cfg("DEV_MODE")
+    $errorMsg = (bool) $App->cfg("app.dev_mode")
         ? "Frontend shell missing at: " . $shellPath
         : "System maintenance. Please check back later.";
     
@@ -3643,5 +3927,5 @@ if (!file_exists($shellPath)) {
     exit();
 }
 
-include $shellPath;
+$App->renderShell($shellPath, $uri);
 exit();

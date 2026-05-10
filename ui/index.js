@@ -114,6 +114,7 @@ const app = {
         form_field_name: "captcha_token",
       },
     },
+    bootstrap: null,
     devMode: AppConfig.dev_mode,
     captchaWidgets: {},
     captchaTokens: {},
@@ -987,6 +988,7 @@ const app = {
   async init() {
     this.setupStateStore();
     this.setupGlobalLoader();
+    this.state.bootstrap = this.readLimeVideoBootstrap();
     this.loadClientPreferences();
     await this.fetchSiteConfig();
     await this.checkAuth();
@@ -1035,6 +1037,29 @@ const app = {
         document.body.style.overflow = "auto";
       }
     });
+  },
+
+  readLimeVideoBootstrap() {
+    const node = document.getElementById("limevideo-bootstrap");
+    if (!node) return null;
+    try {
+      const data = JSON.parse(node.textContent || "{}");
+      return data && typeof data === "object" ? data : null;
+    } catch (error) {
+      if (this.state.devMode) console.warn("Invalid LimeVideo bootstrap JSON.");
+      return null;
+    }
+  },
+
+  bootstrapForRoute(type, key = "") {
+    const bootstrap = this.state.bootstrap;
+    const route = bootstrap?.route || {};
+    if (route.type !== type) return null;
+    if ((type === "video" || type === "profile") && String(route.id || "") !== String(key || ""))
+      return null;
+    if (type === "tag" && String(route.slug || "") !== String(key || ""))
+      return null;
+    return bootstrap;
   },
 
   setupGlobalLoader() {
@@ -2297,6 +2322,22 @@ const app = {
 
   async loadGallery() {
     try {
+      const tag = this.state.search.activeTag || "all";
+      const bootstrap =
+        !this.state.search.query && this.state.search.sort === "newest"
+          ? tag !== "all"
+            ? this.bootstrapForRoute("tag", tag)
+            : this.bootstrapForRoute("gallery")
+          : null;
+      const bootstrapPage = bootstrap?.data?.gallery;
+      if (bootstrapPage && !this.state.search.galleryCursor) {
+        const videos = Array.isArray(bootstrapPage.items) ? bootstrapPage.items : [];
+        this.setState("search.videos", videos);
+        this.setState("search.galleryCursor", bootstrapPage.next_cursor || "");
+        this.setState("search.galleryHasMore", Boolean(bootstrapPage.has_more));
+        return this.state.search.videos;
+      }
+
       const page = await this.fetchGalleryPage();
       const videos = Array.isArray(page.items)
         ? page.items
@@ -2378,6 +2419,11 @@ const app = {
 
   async loadProfile(id, tab = null) {
     try {
+      const bootstrap = this.bootstrapForRoute("profile", id);
+      if (!tab && bootstrap?.data?.profile) {
+        this.currentProfile = bootstrap.data.profile;
+        return bootstrap.data.profile;
+      }
       const url = `/api/profile?id=${id}${tab ? `&tab=${tab}` : ""}`;
       const data = await this.apiGet(url);
       this.currentProfile = data;
@@ -2391,7 +2437,8 @@ const app = {
 
   async loadWatch(videoId) {
     try {
-      const data = await this.apiGet(`/api/video?id=${videoId}`);
+      const bootstrap = this.bootstrapForRoute("video", videoId);
+      const data = bootstrap?.data?.video || (await this.apiGet(`/api/video?id=${videoId}`));
 
       this.lastWatchedId = videoId;
       this.currentWatch = data;
