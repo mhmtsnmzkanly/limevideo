@@ -737,7 +737,7 @@ final class LimeVideo
         } else {
             $data["count"]++;
         }
-        file_put_contents($file, json_encode($data), LOCK_EX);
+        $this->writeRuntimeFileAtomic($file, json_encode($data));
         if ($data["count"] > $limit) {
             $response = ["error" => "Rate limit exceeded"];
             if ((bool) $this->cfg("app.dev_mode")) {
@@ -810,6 +810,27 @@ final class LimeVideo
             }
             $this->jsonResponse($response, 400);
         }
+    }
+
+    private function writeRuntimeFileAtomic(string $path, string $payload): bool
+    {
+        $dir = dirname($path);
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+            return false;
+        }
+
+        $tmp = $path . "." . bin2hex(random_bytes(8)) . ".tmp";
+        if (file_put_contents($tmp, $payload, LOCK_EX) === false) {
+            @unlink($tmp);
+            return false;
+        }
+
+        if (!@rename($tmp, $path)) {
+            @unlink($tmp);
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -1285,7 +1306,7 @@ final class LimeVideo
                 $val = trim(strip_tags((string) $value));
                 return mb_strlen($val) > $max ? mb_substr($val, 0, $max) : $val;
             })(),
-            "enum" => in_array($value, $options["allowed"] ?? [])
+            "enum" => in_array($value, $options["allowed"] ?? [], true)
                 ? $value
                 : null,
             "email" => filter_var($value, FILTER_VALIDATE_EMAIL)
@@ -1683,7 +1704,7 @@ final class LimeVideo
 
     private function touchCronMarker(string $name): void
     {
-        file_put_contents($this->cronMarkerFile($name), (string) time(), LOCK_EX);
+        $this->writeRuntimeFileAtomic($this->cronMarkerFile($name), (string) time());
     }
 
     private function maybeScheduleAnalyticsJobs(): void
@@ -3718,7 +3739,7 @@ if ($uri === "/sitemap.xml") {
     exit();
 }
 
-if (strpos($uri, "/api/") === 0) {
+if (str_starts_with($uri, "/api/")) {
     $endpoint = substr($uri, 5);
     $input = json_decode(file_get_contents("php://input"), true) ?? $_POST;
 
