@@ -150,14 +150,13 @@ const app = {
     "actionsHtml",
     "activeOverlayHtml",
     "avatarHtml",
-    "cards",
-    "categoryPills",
+    "authFormHtml",
+    "categoryLabelHtml",
+    "categoryPillsHtml",
     "commentFormHtml",
-    "contentHtml",
-    "feedHtml",
-    "formHtml",
-    "items",
-    "labelHtml",
+    "galleryContentHtml",
+    "galleryFeedHtml",
+    "itemsHtml",
     "leaderboardHtml",
     "notificationDotHtml",
     "playerHtml",
@@ -166,10 +165,11 @@ const app = {
     "replyButtonHtml",
     "repliesHtml",
     "replyLineHtml",
-    "rowsHtml",
-    "searchPanel",
+    "searchPanelHtml",
+    "settingsRowsHtml",
+    "skeletonCardsHtml",
     "suggestionsHtml",
-    "tabHtml",
+    "profileTabHtml",
     "tagsHtml",
     "thumbnailHtml",
     "viewToggleHtml",
@@ -180,6 +180,18 @@ const app = {
     "safeAttr",
     "safeStyleUrl",
     "safeUrl",
+  ]),
+
+  allowedTemplateFunctionCalls: new Set([
+    "Number",
+    "app.escapeHtml",
+    "app.formatDuration",
+    "app.isUnreadNotification",
+    "app.notificationIcon",
+    "app.safeAttr",
+    "app.safeStyleUrl",
+    "app.safeUrl",
+    "includes",
   ]),
 
   reportIcons: {
@@ -1971,6 +1983,19 @@ const app = {
     ) {
       throw new Error(`Unsafe template expression in ${name}: ${source}`);
     }
+
+    const calls = [...source.matchAll(/(?:^|[^\w$])([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/g)]
+      .map((match) => match[1]);
+    const forbiddenCall = calls.find(
+      (call) =>
+        !this.allowedTemplateFunctionCalls.has(call) &&
+        !call.endsWith(".includes"),
+    );
+    if (forbiddenCall) {
+      throw new Error(
+        `Disallowed template function call in ${name}: ${forbiddenCall}`,
+      );
+    }
   },
 
   templateContextArgs(context = {}) {
@@ -2616,7 +2641,7 @@ const app = {
         : this.renderTemplate("partial-comment-reply-button", { c }),
       repliesHtml: replies.length
         ? this.renderTemplate("partial-comment-replies", {
-            items: replies.map((r) => this.renderComment(r, true)).join(""),
+            itemsHtml: replies.map((r) => this.renderComment(r, true)).join(""),
           })
         : "",
       replyBoxHtml:
@@ -2857,11 +2882,11 @@ const app = {
         ? "Discover"
         : activeTag?.name || this.state.search.activeTag;
     const resultLabel = this.galleryResultLabel(videos.length);
-    const categoryPills = this.state.search.tags
+    const categoryPillsHtml = this.state.search.tags
       .map((c) =>
         this.renderTemplate("partial-category-pill", {
           c,
-          labelHtml:
+          categoryLabelHtml:
             c.slug === "all"
               ? this.renderTemplate("partial-category-all-label")
               : this.escapeHtml(c.name),
@@ -2871,7 +2896,7 @@ const app = {
     return this.renderTemplate("partial-search-panel", {
       title,
       resultLabel,
-      categoryPills,
+      categoryPillsHtml,
     });
   },
 
@@ -3031,7 +3056,7 @@ const app = {
     }
     if (this.state.profileView === "list") {
       return this.renderTemplate("partial-profile-video-list", {
-        items: videos
+        itemsHtml: videos
           .map((v) =>
             this.renderTemplate("partial-profile-video-list-item", {
               v,
@@ -3042,7 +3067,7 @@ const app = {
       });
     }
     return this.renderTemplate("partial-profile-video-grid", {
-      items: videos
+      itemsHtml: videos
         .map((v) =>
           this.renderTemplate("partial-profile-video-grid-item", {
             v,
@@ -3060,7 +3085,7 @@ const app = {
       });
     }
     return this.renderTemplate("partial-profile-comments", {
-      items: comments
+      itemsHtml: comments
         .map((c) => this.renderTemplate("partial-profile-comment-item", { c }))
         .join(""),
     });
@@ -3073,7 +3098,7 @@ const app = {
       });
     }
     return this.renderTemplate("partial-profile-users", {
-      items: users
+      itemsHtml: users
         .map((u) =>
           this.renderTemplate("partial-profile-user-item", {
             u,
@@ -3128,7 +3153,7 @@ const app = {
       currentVideo,
       currentIndex,
       total: videos.length,
-      items: videos
+      itemsHtml: videos
         .slice(0, 8)
         .map((video) =>
           this.renderTemplate("partial-watch-playlist-item", {
@@ -3177,7 +3202,7 @@ const app = {
       root,
       this.renderTemplate("partial-route-loading", {
         page,
-        cards: Array.from({ length: cardCount })
+        skeletonCardsHtml: Array.from({ length: cardCount })
           .map(() => this.renderTemplate("partial-skeleton-card"))
           .join(""),
       }),
@@ -3189,7 +3214,7 @@ const app = {
       const activeTab = window.location.hash || "#login";
       return app.renderTemplate("page-auth", {
         activeTab,
-        formHtml: app.renderTemplate(
+        authFormHtml: app.renderTemplate(
           activeTab === "#login"
             ? "partial-auth-login-form"
             : "partial-auth-register-form",
@@ -3201,12 +3226,12 @@ const app = {
     gallery: (videos = []) =>
       app.renderTemplate("page-gallery", {
         videos,
-        searchPanel: app.renderSearchPanel(videos),
-        contentHtml:
+        searchPanelHtml: app.renderSearchPanel(videos),
+        galleryContentHtml:
           videos.length === 0
             ? app.renderTemplate("partial-gallery-empty")
             : app.renderTemplate("partial-gallery-results", {
-                feedHtml: app.renderGalleryFeed(videos),
+                galleryFeedHtml: app.renderGalleryFeed(videos),
                 leaderboardHtml: app.renderLeaderboardAd(),
               }),
       }),
@@ -3215,7 +3240,7 @@ const app = {
       !app.state.auth.me
         ? app.renderTemplate("page-settings-guest")
         : app.renderTemplate("page-settings", {
-            rowsHtml: [
+            settingsRowsHtml: [
               app.settingRow(
                 "Autoplay",
                 "autoplay",
@@ -3302,7 +3327,7 @@ const app = {
         viewToggleHtml: ["#videos", "#saved", "#liked"].includes(activeTab)
           ? app.renderTemplate("partial-profile-view-toggle")
           : "",
-        tabHtml: app.renderProfileTab(u, activeTab),
+        profileTabHtml: app.renderProfileTab(u, activeTab),
       });
     },
   },

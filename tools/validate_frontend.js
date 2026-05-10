@@ -17,6 +17,16 @@ function extractDataActions(source) {
     return [...new Set([...source.matchAll(/data-action="([^"]+)"/g)].map(match => match[1]))].sort();
 }
 
+function extractTemplateExpressions(source) {
+    return [...source.matchAll(/\$\{([^}]+)\}/g)].map(match => match[1].trim());
+}
+
+function extractRawTemplateFragments(source) {
+    const match = source.match(/rawTemplateFragments:\s*new Set\(\[([\s\S]*?)\]\)/);
+    if (!match) return [];
+    return [...match[1].matchAll(/"([^"]+)"/g)].map(item => item[1]);
+}
+
 function createSandbox(templates) {
     return {
         console,
@@ -79,11 +89,11 @@ function sampleContext() {
         ad: { label: 'Ad', title: '<Ad>', body: '<Body>' },
         title: '<T>',
         resultLabel: 'R',
-        categoryPills: '',
-        cards: '',
-        labelHtml: '<b>All</b>',
+        categoryPillsHtml: '',
+        skeletonCardsHtml: '',
+        categoryLabelHtml: '<b>All</b>',
         message: '<Empty>',
-        items: '',
+        itemsHtml: '',
         label: 'L',
         field: 'autoplay',
         description: 'D',
@@ -99,14 +109,14 @@ function sampleContext() {
         replyBoxHtml: '',
         repliesHtml: '',
         activeTab: '#videos',
-        formHtml: '',
-        searchPanel: '',
-        contentHtml: '',
-        feedHtml: '',
+        authFormHtml: '',
+        searchPanelHtml: '',
+        galleryContentHtml: '',
+        galleryFeedHtml: '',
         leaderboardHtml: '',
         tagsHtml: '',
         tag: { name: 'Design', slug: 'design' },
-        rowsHtml: '',
+        settingsRowsHtml: '',
         playlistHtml: '',
         suggestionsHtml: '',
         sidebarAd: {},
@@ -114,7 +124,7 @@ function sampleContext() {
         coverInlineStyle: '',
         actionsHtml: '',
         viewToggleHtml: '',
-        tabHtml: '',
+        profileTabHtml: '',
         avatarHtml: '',
         thumbnailHtml: '',
         posterUrl: '',
@@ -128,6 +138,25 @@ function sampleContext() {
 }
 
 const templates = extractTemplates(html);
+const broadRawFragments = new Set([
+    'cards',
+    'categoryPills',
+    'contentHtml',
+    'feedHtml',
+    'formHtml',
+    'items',
+    'labelHtml',
+    'rowsHtml',
+    'searchPanel',
+    'tabHtml'
+]);
+const rawFragments = extractRawTemplateFragments(js);
+const unsafeRawFragments = rawFragments.filter(name => broadRawFragments.has(name));
+const templateExpressions = extractTemplateExpressions(html);
+const unapprovedHtmlFragments = templateExpressions.filter(expression => {
+    if (!/Html$/.test(expression)) return false;
+    return !rawFragments.includes(expression);
+});
 const sandbox = createSandbox(templates);
 vm.createContext(sandbox);
 vm.runInContext(`${js}\nglobalThis.__app = app;`, sandbox);
@@ -147,11 +176,45 @@ for (const id of Object.keys(templates)) {
     }
 }
 
+const xssPayload = '<img src=x onerror=alert(1)>';
+const renderedXssChecks = [
+    app.renderTemplate('partial-video-card', {
+        v: { id: 'v_xss', title: xssPayload, username: xssPayload, duration: 1, views: 0 },
+        thumbnailHtml: ''
+    }),
+    app.renderTemplate('partial-comment', {
+        c: { id: 'c_xss', username: xssPayload, body: xssPayload, created_at: 'now', votes_sum: 0, user_vote: '' },
+        isReply: false,
+        replyLineHtml: '',
+        replyButtonHtml: '',
+        replyBoxHtml: '',
+        repliesHtml: ''
+    }),
+    app.renderTemplate('partial-profile-about', {
+        u: { bio: xssPayload }
+    })
+];
+const unsafeRenderedPayload = renderedXssChecks.find(output =>
+    output.includes('<img src=x')
+);
+
 if (missingActions.length) {
     console.error(`Missing data-action handlers: ${missingActions.join(', ')}`);
 }
 
-if (missingActions.length || failedTemplates) {
+if (unsafeRawFragments.length) {
+    console.error(`Unsafe broad raw template fragments: ${unsafeRawFragments.join(', ')}`);
+}
+
+if (unapprovedHtmlFragments.length) {
+    console.error(`Raw HTML template expressions missing whitelist entry: ${unapprovedHtmlFragments.join(', ')}`);
+}
+
+if (unsafeRenderedPayload) {
+    console.error('Template escaping smoke check failed: raw XSS payload was rendered.');
+}
+
+if (missingActions.length || failedTemplates || unsafeRawFragments.length || unapprovedHtmlFragments.length || unsafeRenderedPayload) {
     process.exit(1);
 }
 
