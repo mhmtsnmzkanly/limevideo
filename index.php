@@ -1200,6 +1200,387 @@ final class LimeVideo
         $this->jsonResponse(["error" => "Method not allowed"], 405);
     }
 
+    // --- API Handlers ---
+
+    /**
+     * Returns the current user profile, CSRF token and background job status.
+     * Input: session state.
+     * Output: JSON user object or guest state.
+     */
+    public function handleApiMe(): void
+    {
+        $this->jsonResponse(
+            isset($_SESSION["user"])
+                ? array_merge(
+                    $this->getUser($_SESSION["user"]["id"]) ?? [],
+                    [
+                        "csrf" => $this->csrfToken(),
+                        "jobs" => $this->hasRunnableJobs(),
+                    ],
+                )
+                : ["csrf" => $this->csrfToken(), "jobs" => false],
+        );
+    }
+
+    /**
+     * Returns public site configuration for frontend initialization.
+     * Input: none.
+     * Output: JSON site config.
+     */
+    public function handleApiSiteConfig(): void
+    {
+        $this->jsonResponse([
+            "domain" => (string) $this->cfg("app.site_domain"),
+            "https" => (bool) $this->cfg("app.site_https"),
+            "base_url" => (string) $this->cfg("app.site_base_url"),
+            "dev_mode" => (bool) $this->cfg("app.dev_mode"),
+            "captcha" => $this->captchaPublicConfig(),
+        ]);
+    }
+
+    /**
+     * Returns a list of active video tags.
+     * Input: none.
+     * Output: JSON tag list.
+     */
+    public function handleApiTags(): void
+    {
+        $this->jsonResponse($this->fetch("tags"));
+    }
+
+    /**
+     * Returns global platform statistics.
+     * Input: none.
+     * Output: JSON stats object.
+     */
+    public function handleApiStats(): void
+    {
+        $this->jsonResponse($this->getStats());
+    }
+
+    /**
+     * Returns the currently trending public videos.
+     * Input: none.
+     * Output: JSON video list.
+     */
+    public function handleApiTrending(): void
+    {
+        $this->getTrending();
+    }
+
+    /**
+     * Returns active ad placements and their configuration.
+     * Input: none.
+     * Output: JSON ad config.
+     */
+    public function handleApiAds(): void
+    {
+        $this->getAds();
+    }
+
+    /**
+     * Performs a discovery search for videos.
+     * Input: query parameters q, cat, sort, cursor, limit.
+     * Output: JSON search result object.
+     */
+    public function handleApiSearch(): void
+    {
+        $this->search(
+            $this->validate($_GET["q"] ?? "", "text", ["max" => 100]),
+            $this->validate($_GET["cat"] ?? "all", "text", ["max" => 50]),
+            $this->validate($_GET["sort"] ?? "newest", "enum", [
+                "allowed" => ["newest", "popular", "duration"],
+            ]) ?? "newest",
+            $this->validate($_GET["cursor"] ?? null, "text", [
+                "max" => 500,
+            ]),
+            (int) ($_GET["limit"] ?? 24),
+        );
+    }
+
+    /**
+     * Returns detailed metadata for a specific video.
+     * Input: video id.
+     * Output: JSON video object.
+     */
+    public function handleApiVideo(): void
+    {
+        $this->jsonResponse(
+            $this->getVideoDetail(
+                $this->validate($_GET["id"] ?? "", "id"),
+            ),
+        );
+    }
+
+    /**
+     * Returns a paginated list of comments for a video.
+     * Input: video_id, before timestamp, sort mode.
+     * Output: JSON comment list.
+     */
+    public function handleApiComments(): void
+    {
+        $this->getComments(
+            $this->validate($_GET["video_id"] ?? "", "id"),
+            $this->validate($_GET["before"] ?? null, "text", ["max" => 40]),
+            $this->validate($_GET["sort"] ?? "new", "enum", [
+                "allowed" => ["new", "top"],
+                "default" => "new",
+            ]) ?? "new",
+        );
+    }
+
+    /**
+     * Returns a user profile with associated videos and stats.
+     * Input: user id, tab mode.
+     * Output: JSON profile object.
+     */
+    public function handleApiProfile(): void
+    {
+        $this->getProfile(
+            $this->validate($_GET["id"] ?? "", "id"),
+            $this->validate($_GET["tab"] ?? "videos", "enum", [
+                "allowed" => [
+                    "videos",
+                    "saved",
+                    "liked",
+                    "comments",
+                    "about",
+                    "all",
+                ],
+                "default" => "videos",
+            ]) ?? "videos",
+        );
+    }
+
+    /**
+     * Returns recent notifications for the authenticated user.
+     * Input: session state.
+     * Output: JSON notification list.
+     */
+    public function handleApiNotifications(): void
+    {
+        $this->getNotifications();
+    }
+
+    /**
+     * Returns the current user's preferences.
+     * Input: session state.
+     * Output: JSON settings object.
+     */
+    public function handleApiSettingsGet(): void
+    {
+        $this->getSettings();
+    }
+
+    /**
+     * Returns all video lists owned by the authenticated user.
+     * Input: session state.
+     * Output: JSON list collection.
+     */
+    public function handleApiLists(): void
+    {
+        $this->getLists();
+    }
+
+    /**
+     * Records a vote for a video or comment.
+     * Input: target_id, type (up/down), target_type (video/comment).
+     * Output: JSON success status.
+     */
+    public function handleApiVote(array $input): void
+    {
+        $this->vote(
+            $this->validate($input["target_id"] ?? "", "id"),
+            $this->validate($input["type"] ?? "up", "enum", [
+                "allowed" => ["up", "down"],
+            ]),
+            $this->validate($input["target_type"] ?? "video", "enum", [
+                "allowed" => ["video", "comment"],
+                "default" => "video",
+            ]) ?? "video",
+        );
+    }
+
+    /**
+     * Toggles following status for a target user.
+     * Input: user_id.
+     * Output: JSON status (followed/unfollowed).
+     */
+    public function handleApiFollow(array $input): void
+    {
+        $this->toggleFollow(
+            $this->validate($input["user_id"] ?? "", "id"),
+        );
+    }
+
+    /**
+     * Toggles a video in the user's saved collection.
+     * Input: video_id.
+     * Output: JSON status (saved/unsaved).
+     */
+    public function handleApiSave(array $input): void
+    {
+        $this->toggleSave(
+            $this->validate($input["video_id"] ?? "", "id"),
+        );
+    }
+
+    /**
+     * Toggles a video in the user's "Watch Later" list.
+     * Input: video_id.
+     * Output: JSON status (added/removed).
+     */
+    public function handleApiWatchLater(array $input): void
+    {
+        $this->toggleWatchLater(
+            $this->validate($input["video_id"] ?? "", "id"),
+        );
+    }
+
+    /**
+     * Marks all unread notifications for the current user as read.
+     * Input: session state.
+     * Output: JSON success status.
+     */
+    public function handleApiReadNotifications(): void
+    {
+        $this->markNotificationsRead();
+    }
+
+    /**
+     * Updates user-specific platform settings.
+     * Input: configuration fields.
+     * Output: JSON success status and updated values.
+     */
+    public function handleApiSettingsPost(array $input): void
+    {
+        $this->updateSettings($input);
+    }
+
+    /**
+     * Reads or posts global chat messages.
+     * Input: request method, body input and optional after query param.
+     * Output: JSON message list or created-message status.
+     */
+    public function handleApiChatMessages(string $method, array $input): void
+    {
+        if ($method === "POST") {
+            $this->postChatMessage($input["body"] ?? "");
+            return;
+        }
+
+        $this->getChatMessages(
+            $this->validate($_GET["after"] ?? null, "text", [
+                "max" => 40,
+            ]),
+        );
+    }
+
+    /**
+     * Creates a video comment or reply.
+     * Input: video_id, body and optional parent_id.
+     * Output: JSON success status.
+     */
+    public function handleApiComment(array $input): void
+    {
+        $this->comment(
+            $this->validate($input["video_id"] ?? "", "id"),
+            $this->validate($input["body"] ?? "", "text", ["max" => 1000]),
+            $this->validate($input["parent_id"] ?? null, "id"),
+        );
+    }
+
+    /**
+     * Destroys the authenticated session.
+     * Input: session state.
+     * Output: JSON success status.
+     */
+    public function handleApiLogout(): void
+    {
+        $_SESSION = [];
+        session_destroy();
+        $this->jsonResponse(["success" => true]);
+    }
+
+    /**
+     * Returns configured advertisement services.
+     * Input: none.
+     * Output: JSON ad service list.
+     */
+    public function handleApiAdServices(): void
+    {
+        $this->listAdServices();
+    }
+
+    /**
+     * Creates a content report.
+     * Input: target_type, target_id, reason and details.
+     * Output: JSON success status.
+     */
+    public function handleApiReport(array $input): void
+    {
+        $this->createReport($input);
+    }
+
+    /**
+     * Creates an externally hosted video entry.
+     * Input: external video metadata.
+     * Output: JSON success status and video id.
+     */
+    public function handleApiExternalVideo(array $input): void
+    {
+        $this->createExternalVideo($input);
+    }
+
+    /**
+     * Updates the authenticated user's public profile fields.
+     * Input: display_name, bio, avatar_url and cover_url.
+     * Output: JSON success status.
+     */
+    public function handleApiUpdateProfile(array $input): void
+    {
+        $this->updateProfile($input);
+    }
+
+    /**
+     * Authenticates a user and rotates the session CSRF token on success.
+     * Input: user, pass and captcha token field.
+     * Output: JSON success status and CSRF token.
+     */
+    public function handleApiLogin(array $input): void
+    {
+        $this->login(
+            $input["user"] ?? "",
+            $input["pass"] ?? "",
+            $this->captchaTokenFromInput($input),
+        );
+    }
+
+    /**
+     * Registers a user account.
+     * Input: user, email, pass and captcha token field.
+     * Output: JSON success status and user id.
+     */
+    public function handleApiRegister(array $input): void
+    {
+        $this->register(
+            $input["user"] ?? "",
+            $input["email"] ?? "",
+            $input["pass"] ?? "",
+            $this->captchaTokenFromInput($input),
+        );
+    }
+
+    /**
+     * Runs one queued background job for an authenticated user.
+     * Input: session state.
+     * Output: HTTP 204 on accepted tick.
+     */
+    public function handleApiJobs(): void
+    {
+        $this->runPublicJobTick();
+    }
+
     public function fetch(string $name): mixed
     {
         return match ($name) {
@@ -3793,128 +4174,40 @@ if (str_starts_with($uri, "/api/")) {
                 (int) ($_GET["limit"] ?? 10),
                 $_GET["token"] ?? null,
             ),
-            "jobs" => $App->runPublicJobTick(),
-            "stats" => $App->jsonResponse($App->getStats()),
-            "tags" => $App->jsonResponse($App->fetch("tags")),
-            "site_config" => $App->jsonResponse([
-                "domain" => (string) $App->cfg("app.site_domain"),
-                "https" => (bool) $App->cfg("app.site_https"),
-                "base_url" => (string) $App->cfg("app.site_base_url"),
-                "dev_mode" => (bool) $App->cfg("app.dev_mode"),
-                "captcha" => $App->captchaPublicConfig(),
-            ]),
-            "trending" => $App->getTrending(),
-            "search" => $App->search(
-                $App->validate($_GET["q"] ?? "", "text", ["max" => 100]),
-                $App->validate($_GET["cat"] ?? "all", "text", ["max" => 50]),
-                $App->validate($_GET["sort"] ?? "newest", "enum", [
-                    "allowed" => ["newest", "popular", "duration"],
-                ]) ?? "newest",
-                $App->validate($_GET["cursor"] ?? null, "text", [
-                    "max" => 500,
-                ]),
-                (int) ($_GET["limit"] ?? 24),
-            ),
-            "video" => $App->jsonResponse(
-                $App->getVideoDetail(
-                    $App->validate($_GET["id"] ?? "", "id"),
-                ),
-            ),
-            "comments" => $App->getComments(
-                $App->validate($_GET["video_id"] ?? "", "id"),
-                $App->validate($_GET["before"] ?? null, "text", ["max" => 40]),
-                $App->validate($_GET["sort"] ?? "new", "enum", [
-                    "allowed" => ["new", "top"],
-                ]) ?? "new",
-            ),
-            "chat/messages" => $method === "POST"
-                ? $App->postChatMessage($input["body"] ?? "")
-                : $App->getChatMessages(
-                    $App->validate($_GET["after"] ?? null, "text", [
-                        "max" => 40,
-                    ]),
-                ),
-            "profile" => $App->getProfile(
-                $App->validate($_GET["id"] ?? "", "id"),
-                $App->validate($_GET["tab"] ?? "videos", "enum", [
-                    "allowed" => [
-                        "videos",
-                        "saved",
-                        "liked",
-                        "comments",
-                        "about",
-                        "all",
-                    ],
-                ]),
-            ),
-            "me" => $App->jsonResponse(
-                isset($_SESSION["user"])
-                    ? array_merge(
-                        $App->getUser($_SESSION["user"]["id"]) ?? [],
-                        [
-                            "csrf" => $App->csrfToken(),
-                            "jobs" => $App->hasRunnableJobs(),
-                        ],
-                    )
-                    : ["csrf" => $App->csrfToken(), "jobs" => false],
-            ),
-            "vote" => $App->vote(
-                $App->validate($input["target_id"] ?? "", "id"),
-                $App->validate($input["type"] ?? "up", "enum", [
-                    "allowed" => ["up", "down"],
-                ]),
-                $App->validate($input["target_type"] ?? "video", "enum", [
-                    "allowed" => ["video", "comment"],
-                ]) ?? "video",
-            ),
-            "follow" => $App->toggleFollow(
-                $App->validate($input["user_id"] ?? "", "id"),
-            ),
-            "comment" => $App->comment(
-                $App->validate($input["video_id"] ?? "", "id"),
-                $App->validate($input["body"] ?? "", "text", ["max" => 1000]),
-                $App->validate($input["parent_id"] ?? null, "id"),
-            ),
-            "update_profile" => $App->updateProfile($input),
-            "login" => $App->login(
-                $input["user"] ?? "",
-                $input["pass"] ?? "",
-                $App->captchaTokenFromInput($input),
-            ),
-            "register" => $App->register(
-                $input["user"] ?? "",
-                $input["email"] ?? "",
-                $input["pass"] ?? "",
-                $App->captchaTokenFromInput($input),
-            ),
-            "logout" => (function () use ($App, $method) {
-                if ($method !== "POST") {
-                    $App->jsonResponse(["error" => "Method not allowed"], 405);
-                }
-                $_SESSION = [];
-                session_destroy();
-                $App->jsonResponse(["success" => true]);
-            })(),
-            "notifications" => $App->getNotifications(),
-            "read_notifications" => $App->markNotificationsRead(),
-            "save" => $App->toggleSave(
-                $App->validate($input["video_id"] ?? "", "id"),
-            ),
+            "jobs" => $App->handleApiJobs(),
+            "stats" => $App->handleApiStats(),
+            "tags" => $App->handleApiTags(),
+            "site_config" => $App->handleApiSiteConfig(),
+            "trending" => $App->handleApiTrending(),
+            "search" => $App->handleApiSearch(),
+            "video" => $App->handleApiVideo(),
+            "comments" => $App->handleApiComments(),
+            "chat/messages" => $App->handleApiChatMessages($method, $input),
+            "profile" => $App->handleApiProfile(),
+            "me" => $App->handleApiMe(),
+            "vote" => $App->handleApiVote($input),
+            "follow" => $App->handleApiFollow($input),
+            "comment" => $App->handleApiComment($input),
+            "update_profile" => $App->handleApiUpdateProfile($input),
+            "login" => $App->handleApiLogin($input),
+            "register" => $App->handleApiRegister($input),
+            "logout" => $App->handleApiLogout(),
+            "notifications" => $App->handleApiNotifications(),
+            "read_notifications" => $App->handleApiReadNotifications(),
+            "save" => $App->handleApiSave($input),
             "settings" => $method === "POST"
-                ? $App->updateSettings($input)
-                : $App->getSettings(),
-            "report" => $App->createReport($input),
-            "ads" => $App->getAds(),
-            "ad_services" => $App->listAdServices(),
-            "external_video" => $App->createExternalVideo($input),
+                ? $App->handleApiSettingsPost($input)
+                : $App->handleApiSettingsGet(),
+            "report" => $App->handleApiReport($input),
+            "ads" => $App->handleApiAds(),
+            "ad_services" => $App->handleApiAdServices(),
+            "external_video" => $App->handleApiExternalVideo($input),
             "provider_webhook" => $App->providerWebhook(
                 $App->validate($_GET["provider"] ?? "", "text", ["max" => 50]),
                 $input,
             ),
-            "lists" => $App->getLists(),
-            "watch_later" => $App->toggleWatchLater(
-                $App->validate($input["video_id"] ?? "", "id"),
-            ),
+            "lists" => $App->handleApiLists(),
+            "watch_later" => $App->handleApiWatchLater($input),
             "analytics" => $App->recordAnalytics($input),
             default => $App->jsonResponse(
                 ["error" => "API endpoint not found"],
