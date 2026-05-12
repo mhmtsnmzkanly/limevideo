@@ -3175,7 +3175,6 @@ final class LimeVideo
         if (empty($_SESSION["user"])) {
             $this->jsonResponse(["error" => "Auth required"], 401);
         }
-        $this->visibleVideoOrFail($videoId);
         $uid = $_SESSION["user"]["id"];
         $fields = [
             "autoplay",
