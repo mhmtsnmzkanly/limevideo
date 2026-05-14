@@ -13,41 +13,31 @@ define("LIMEVIDEO", true);
 
 final class LimeVideo
 {
-    private array $config = [];
+    public readonly array $app;
+    public readonly array $chat;
+    public readonly array $analytics;
+    public readonly array $csrf;
+    public readonly array $ads;
+
+    private readonly array $database;
+    private readonly array $cron;
+    private readonly array $captcha;
+
     private ?PDO $pdo = null;
     private string $cacheDir;
 
     public function __construct()
     {
-        $defaultsFile = __DIR__ . "/config.example.php";
-        if (!is_file($defaultsFile)) {
-            throw new RuntimeException("config.example.php is required.");
-        }
-        $defaults = require $defaultsFile;
-        if (!is_array($defaults)) {
-            throw new RuntimeException("config.example.php must return an array.");
-        }
-        $this->assertModernConfig($defaults, "config.example.php");
-        $this->config = $defaults;
+        $config = $this->loadConfig();
 
-        $configFile = __DIR__ . "/config.php";
-        if (is_file($configFile)) {
-            $override = require $configFile;
-            if (!is_array($override)) {
-                throw new RuntimeException("config.php must return an array.");
-            }
-            $this->assertModernConfig($override, "config.php");
-            $this->config = array_replace_recursive($this->config, $override);
-        }
-
-        $domain = preg_replace(
-            "#^https?://#",
-            "",
-            rtrim((string) $this->cfg("app.site_domain"), "/"),
-        );
-        $scheme = (bool) $this->cfg("app.site_https") ? "https" : "http";
-        $this->config["app"]["site_base_url"] = $scheme . "://" . $domain;
-        $this->validateConfig();
+        $this->app = $config["app"];
+        $this->database = $config["database"];
+        $this->chat = $config["chat"];
+        $this->cron = $config["cron"];
+        $this->analytics = $config["analytics"];
+        $this->csrf = $config["csrf"];
+        $this->captcha = $config["captcha"];
+        $this->ads = $config["ads"];
 
         $this->cacheDir = __DIR__ . "/cache";
         if (!is_dir($this->cacheDir)) {
@@ -55,36 +45,20 @@ final class LimeVideo
         }
     }
 
-    /**
-     * Reads a dot-path configuration key.
-     * Input: $key config path, $default fallback when missing.
-     * Output: configured value or fallback value.
-     */
-    public function cfg(string $key, mixed $default = null): mixed
+    private function loadConfig(): array
     {
-        $value = $this->config;
-        foreach (explode(".", $key) as $part) {
-            if (!is_array($value) || !array_key_exists($part, $value)) {
-                return $default;
-            }
-            $value = $value[$part];
+        $configFile = __DIR__ . "/config.php";
+        if (!is_file($configFile)) {
+            throw new RuntimeException(
+                "Missing config.php. Copy config.example.php to config.php and update values.",
+            );
         }
-        return $value;
-    }
 
-    private function assertModernConfig(array $config, string $file): void
-    {
-        foreach (array_keys($config) as $key) {
-            if (is_string($key) && preg_match("/^[A-Z0-9_]+$/", $key)) {
-                throw new RuntimeException(
-                    "{$file} uses the old flat uppercase format. Copy config.example.php and update values.",
-                );
-            }
+        $config = require $configFile;
+        if (!is_array($config)) {
+            throw new RuntimeException("config.php must return an array.");
         }
-    }
 
-    private function validateConfig(): void
-    {
         foreach (
             [
                 "app",
@@ -98,63 +72,70 @@ final class LimeVideo
             ]
             as $group
         ) {
-            if (!isset($this->config[$group]) || !is_array($this->config[$group])) {
+            if (!isset($config[$group]) || !is_array($config[$group])) {
                 throw new RuntimeException("Missing config group: {$group}");
             }
         }
 
-        foreach (
-            [
-                "app.dev_mode",
-                "app.site_domain",
-                "app.site_https",
-                "database.host",
-                "database.port",
-                "database.name",
-                "database.user",
-                "database.password",
-                "database.charset",
-                "cron.token",
-                "captcha.enabled",
-                "captcha.provider",
-            ]
-            as $path
-        ) {
-            if ($this->cfg($path, null) === null) {
-                throw new RuntimeException("Missing config value: {$path}");
+        $requiredKeys = [
+            "app" => ["dev_mode", "site_domain", "site_https"],
+            "database" => [
+                "host",
+                "port",
+                "name",
+                "user",
+                "password",
+                "charset",
+            ],
+            "cron" => ["token"],
+            "captcha" => ["enabled", "provider"],
+        ];
+        foreach ($requiredKeys as $group => $keys) {
+            foreach ($keys as $key) {
+                if (!array_key_exists($key, $config[$group])) {
+                    throw new RuntimeException(
+                        "Missing config key: {$group}.{$key}",
+                    );
+                }
             }
         }
 
-        if (!(bool) $this->cfg("app.dev_mode", false)) {
-            $this->assertConfigNotPlaceholder(
-                "database.password",
-                ["CHANGE_ME", ""],
-            );
-            $this->assertConfigNotPlaceholder(
-                "cron.token",
-                ["CHANGE_ME_LONG_RANDOM_SECRET", ""],
-            );
-            if ((bool) $this->cfg("captcha.enabled", false)) {
-                $this->assertConfigNotPlaceholder("captcha.private_key", [
-                    "CHANGE_ME_PRIVATE_KEY",
-                    "",
-                ]);
+        $domain = preg_replace(
+            "#^https?://#",
+            "",
+            rtrim((string) $config["app"]["site_domain"], "/"),
+        );
+        $scheme = (bool) $config["app"]["site_https"] ? "https" : "http";
+        $config["app"]["site_base_url"] = $scheme . "://" . $domain;
+
+        if (!(bool) $config["app"]["dev_mode"]) {
+            if ((string) $config["database"]["password"] === "CHANGE_ME") {
+                throw new RuntimeException(
+                    "Invalid production placeholder: database.password",
+                );
+            }
+            if ((string) $config["cron"]["token"] === "CHANGE_ME_LONG_RANDOM_SECRET") {
+                throw new RuntimeException(
+                    "Invalid production placeholder: cron.token",
+                );
+            }
+            if ((bool) $config["captcha"]["enabled"]) {
+                if (
+                    (string) ($config["captcha"]["private_key"] ?? "") ===
+                    "CHANGE_ME_PRIVATE_KEY"
+                ) {
+                    throw new RuntimeException(
+                        "Invalid production placeholder: captcha.private_key",
+                    );
+                }
             }
         }
+
+        return $config;
     }
 
-    private function assertConfigNotPlaceholder(
-        string $path,
-        array $placeholders,
-    ): void {
-        if (in_array((string) $this->cfg($path, ""), $placeholders, true)) {
-            throw new RuntimeException("Production config value is not set: {$path}");
-        }
-    }
-
-    private function configList(string $path): array
+    private function normalizeConfigList(mixed $value): array
     {
-        $value = $this->cfg($path, []);
         if (is_string($value)) {
             $value = explode(",", $value);
         }
@@ -193,29 +174,28 @@ final class LimeVideo
         }
         $dsn =
             "mysql:host=" .
-            $this->cfg("database.host") .
+            $this->database["host"] .
             ";port=" .
-            (int) $this->cfg("database.port", 3306) .
+            (int) ($this->database["port"] ?? 3306) .
             ";dbname=" .
-            $this->cfg("database.name") .
+            $this->database["name"] .
             ";charset=" .
-            $this->cfg("database.charset", "utf8mb4");
+            ($this->database["charset"] ?? "utf8mb4");
         $this->pdo = new PDO(
             $dsn,
-            $this->cfg("database.user"),
-            $this->cfg("database.password"),
+            $this->database["user"],
+            $this->database["password"],
             [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ],
         );
-        unset($this->config["database"]["password"]);
         return $this->pdo;
     }
 
     public function baseUrl(string $path = ""): string
     {
-        return rtrim((string) $this->cfg("app.site_base_url"), "/") .
+        return rtrim((string) $this->app["site_base_url"], "/") .
             "/" .
             ltrim($path, "/");
     }
@@ -601,7 +581,7 @@ final class LimeVideo
     {
         $urls = [["loc" => $this->baseUrl("/"), "lastmod" => null]];
         $chatVideoId = $this->chatVideoId();
-        $chatOwnerId = (string) $this->cfg("chat.owner_user_id", "u_system");
+        $chatOwnerId = (string) ($this->chat["owner_user_id"] ?? "u_system");
 
         $videoStmt = $this->db()->prepare(
             "SELECT v.id, COALESCE(v.updated_at, v.created_at) AS lastmod
@@ -711,7 +691,7 @@ final class LimeVideo
 
     public function regenerateSitemap(?string $token = null): void
     {
-        $expectedToken = trim((string) $this->cfg("cron.token", ""));
+        $expectedToken = trim((string) ($this->cron["token"] ?? ""));
         if ($expectedToken === "" || !hash_equals($expectedToken, (string) $token)) {
             $this->jsonResponse(["error" => "Invalid or missing cron token"], 403);
         }
@@ -740,7 +720,7 @@ final class LimeVideo
         $this->writeRuntimeFileAtomic($file, json_encode($data));
         if ($data["count"] > $limit) {
             $response = ["error" => "Rate limit exceeded"];
-            if ((bool) $this->cfg("app.dev_mode")) {
+            if ((bool) $this->app["dev_mode"]) {
                 $response["retry_after"] = $period - (time() - $data["start"]);
             }
             $this->jsonResponse($response, 429);
@@ -750,17 +730,17 @@ final class LimeVideo
     public function captchaPublicConfig(): array
     {
         return [
-            "enabled" => (bool) $this->cfg("captcha.enabled"),
-            "provider" => (string) $this->cfg("captcha.provider", "turnstile"),
-            "script_url" => (string) $this->cfg("captcha.script_url"),
-            "public_key" => (string) $this->cfg("captcha.public_key"),
-            "form_field_name" => (string) $this->cfg("captcha.form_field_name"),
+            "enabled" => (bool) $this->captcha["enabled"],
+            "provider" => (string) ($this->captcha["provider"] ?? "turnstile"),
+            "script_url" => (string) ($this->captcha["script_url"] ?? ""),
+            "public_key" => (string) ($this->captcha["public_key"] ?? ""),
+            "form_field_name" => (string) ($this->captcha["form_field_name"] ?? "captcha_token"),
         ];
     }
 
     public function captchaTokenFromInput(array $input): string
     {
-        $field = (string) $this->cfg("captcha.form_field_name");
+        $field = (string) ($this->captcha["form_field_name"] ?? "captcha_token");
         return trim(
             (string) ($input[$field] ??
                 $input["captcha_token"] ??
@@ -770,12 +750,12 @@ final class LimeVideo
 
     private function verifyCaptcha(string $token): void
     {
-        if (!(bool) $this->cfg("captcha.enabled")) {
+        if (!(bool) $this->captcha["enabled"]) {
             return;
         }
 
-        $secret = trim((string) $this->cfg("captcha.private_key"));
-        $verifyUrl = trim((string) $this->cfg("captcha.verify_url"));
+        $secret = trim((string) ($this->captcha["private_key"] ?? ""));
+        $verifyUrl = trim((string) ($this->captcha["verify_url"] ?? ""));
         if ($secret === "" || $verifyUrl === "") {
             $this->jsonResponse(["error" => "Captcha is not configured"], 503);
         }
@@ -805,7 +785,7 @@ final class LimeVideo
 
         if (!is_array($result) || empty($result["success"])) {
             $response = ["error" => "Captcha verification failed"];
-            if ((bool) $this->cfg("app.dev_mode")) {
+            if ((bool) $this->app["dev_mode"]) {
                 $response["captcha_errors"] = $result["error-codes"] ?? [];
             }
             $this->jsonResponse($response, 400);
@@ -866,7 +846,7 @@ final class LimeVideo
         if (file_put_contents($tmp, $payload) !== false) {
             if (!@rename($tmp, $file)) {
                 @unlink($tmp);
-                if ((bool) $this->cfg("app.dev_mode")) {
+                if ((bool) $this->app["dev_mode"]) {
                     error_log("Cache rename failed: {$tmp} -> {$file}");
                 }
             }
@@ -973,7 +953,7 @@ final class LimeVideo
 
     private function chatVideoId(): string
     {
-        return (string) $this->cfg("chat.video_id", "globalchat01");
+        return (string) ($this->chat["video_id"] ?? "globalchat01");
     }
 
     private function isChatVideoId(string $videoId): bool
@@ -984,7 +964,7 @@ final class LimeVideo
     private function ensureChatChannel(): void
     {
         $chatVideoId = $this->chatVideoId();
-        $ownerId = (string) $this->cfg("chat.owner_user_id", "u_system");
+        $ownerId = (string) ($this->chat["owner_user_id"] ?? "u_system");
 
         $exists = $this->db()->prepare(
             "SELECT 1 FROM videos WHERE id = ? LIMIT 1",
@@ -1114,7 +1094,7 @@ final class LimeVideo
 
     public function errorResponse(\Throwable $exception, int $code = 500): void
     {
-        if ((bool) $this->cfg("app.dev_mode")) {
+        if ((bool) $this->app["dev_mode"]) {
             $data = [
                 "error" => $exception->getMessage(),
                 "code" => $code,
@@ -1165,7 +1145,7 @@ final class LimeVideo
         if ($method !== "POST") {
             return;
         }
-        $exemptEndpoints = $this->cfg("csrf.exempt_endpoints", []);
+        $exemptEndpoints = $this->csrf["exempt_endpoints"] ?? [];
         if (is_string($exemptEndpoints)) {
             $exemptEndpoints = array_filter(
                 array_map("trim", explode(",", $exemptEndpoints)),
@@ -1230,10 +1210,10 @@ final class LimeVideo
     public function handleApiSiteConfig(): void
     {
         $this->jsonResponse([
-            "domain" => (string) $this->cfg("app.site_domain"),
-            "https" => (bool) $this->cfg("app.site_https"),
-            "base_url" => (string) $this->cfg("app.site_base_url"),
-            "dev_mode" => (bool) $this->cfg("app.dev_mode"),
+            "domain" => (string) $this->app["site_domain"],
+            "https" => (bool) $this->app["site_https"],
+            "base_url" => (string) $this->app["site_base_url"],
+            "dev_mode" => (bool) $this->app["dev_mode"],
             "captcha" => $this->captchaPublicConfig(),
         ]);
     }
@@ -1624,7 +1604,7 @@ final class LimeVideo
             }
             return $user;
         } catch (\PDOException $e) {
-            if ((bool) $this->cfg("app.dev_mode")) {
+            if ((bool) $this->app["dev_mode"]) {
                 error_log("[DB Error] getUser($id): " . $e->getMessage());
             }
             return null;
@@ -2090,13 +2070,13 @@ final class LimeVideo
 
     private function maybeScheduleAnalyticsJobs(): void
     {
-        if (!(bool) $this->cfg("analytics.rollup_enabled", true)) {
+        if (!(bool) ($this->analytics["rollup_enabled"] ?? true)) {
             return;
         }
 
         $interval = max(
             60,
-            (int) $this->cfg("analytics.auto_enqueue_min_interval", 300),
+            (int) ($this->analytics["auto_enqueue_min_interval"] ?? 300),
         );
         if ($this->markerRecentlyTouched("analytics_enqueue", $interval)) {
             return;
@@ -2110,10 +2090,7 @@ final class LimeVideo
             "analytics",
             $hourTarget,
             [
-                "lookback_hours" => (int) $this->cfg(
-                    "analytics.rollup_lookback_hours",
-                    48,
-                ),
+                "lookback_hours" => (int) ($this->analytics["rollup_lookback_hours"] ?? 48),
             ],
             -10,
         );
@@ -2122,10 +2099,7 @@ final class LimeVideo
             "analytics",
             $dayTarget,
             [
-                "lookback_days" => (int) $this->cfg(
-                    "analytics.rollup_lookback_days",
-                    14,
-                ),
+                "lookback_days" => (int) ($this->analytics["rollup_lookback_days"] ?? 14),
             ],
             -20,
         );
@@ -2134,10 +2108,7 @@ final class LimeVideo
             "analytics",
             "retention_" . gmdate("Ymd"),
             [
-                "retention_days" => (int) $this->cfg(
-                    "analytics.raw_retention_days",
-                    90,
-                ),
+                "retention_days" => (int) ($this->analytics["raw_retention_days"] ?? 90),
             ],
             -30,
         );
@@ -2146,16 +2117,16 @@ final class LimeVideo
 
     private function maybeAutoRunCronJobs(): void
     {
-        if (!(bool) $this->cfg("cron.auto_run_enabled", false)) {
+        if (!(bool) ($this->cron["auto_run_enabled"] ?? false)) {
             return;
         }
 
-        $interval = max(10, (int) $this->cfg("cron.auto_run_min_interval", 60));
+        $interval = max(10, (int) ($this->cron["auto_run_min_interval"] ?? 60));
         if ($this->markerRecentlyTouched("auto_run", $interval)) {
             return;
         }
         $this->touchCronMarker("auto_run");
-        $this->runCronJobBatch((int) $this->cfg("cron.auto_run_limit", 2));
+        $this->runCronJobBatch((int) ($this->cron["auto_run_limit"] ?? 2));
     }
 
     private function runCronJobBatch(int $limit = 10): array
@@ -2177,7 +2148,7 @@ final class LimeVideo
 
     public function runCronJobs(int $limit = 10, ?string $token = null): void
     {
-        $expectedToken = trim((string) $this->cfg("cron.token", ""));
+        $expectedToken = trim((string) ($this->cron["token"] ?? ""));
         if ($expectedToken === "" || !hash_equals($expectedToken, (string) $token)) {
             $this->jsonResponse(["error" => "Invalid or missing cron token"], 403);
         }
@@ -2372,7 +2343,7 @@ final class LimeVideo
                 min(
                     168,
                     (int) ($payload["lookback_hours"] ??
-                        $this->cfg("analytics.rollup_lookback_hours", 48)),
+                        ($this->analytics["rollup_lookback_hours"] ?? 48)),
                 ),
             )
             : max(
@@ -2380,7 +2351,7 @@ final class LimeVideo
                 min(
                     365,
                     (int) ($payload["lookback_days"] ??
-                        $this->cfg("analytics.rollup_lookback_days", 14)),
+                        ($this->analytics["rollup_lookback_days"] ?? 14)),
                 ),
             );
         $cutoff = (new DateTimeImmutable())
@@ -2447,7 +2418,7 @@ final class LimeVideo
         $retentionDays = max(
             1,
             (int) ($payload["retention_days"] ??
-                $this->cfg("analytics.raw_retention_days", 90)),
+                ($this->analytics["raw_retention_days"] ?? 90)),
         );
         $cutoff = (new DateTimeImmutable())
             ->modify("-{$retentionDays} days")
@@ -2594,7 +2565,7 @@ final class LimeVideo
     {
         $this->ensureChatChannel();
         $chatVideoId = $this->chatVideoId();
-        $limit = min(100, max(1, (int) $this->cfg("chat.message_limit", 50)));
+        $limit = min(100, max(1, (int) ($this->chat["message_limit"] ?? 50)));
         $params = [$chatVideoId];
         $sql = "SELECT c.id, c.user_id, c.body, c.created_at, u.username, u.display_name
                 FROM comments c
@@ -2620,7 +2591,7 @@ final class LimeVideo
         }
         $this->assertActionAllowed("chat");
         $body = $this->validate($body ?? "", "text", [
-            "max" => (int) $this->cfg("chat.message_max_length", 500),
+            "max" => (int) ($this->chat["message_max_length"] ?? 500),
         ]);
         if (!$body) {
             $this->jsonResponse(["error" => "Message is required"], 400);
@@ -3642,8 +3613,8 @@ final class LimeVideo
         $ads = $this->remember("ad_placements_v1", 300, function () {
             $ads = [];
             $services = [];
-            $serviceConfig = $this->cfg("ads.services", []);
-            foreach ($this->configList("ads.service_keys") as $service) {
+            $serviceConfig = $this->ads["services"] ?? [];
+            foreach ($this->normalizeConfigList($this->ads["service_keys"] ?? []) as $service) {
                 $data = is_array($serviceConfig[$service] ?? null)
                     ? $serviceConfig[$service]
                     : [];
@@ -3657,8 +3628,8 @@ final class LimeVideo
                     "settings" => $this->adConfigSettings($data),
                 ];
             }
-            $placementConfig = $this->cfg("ads.placements", []);
-            foreach ($this->configList("ads.placement_keys") as $placement) {
+            $placementConfig = $this->ads["placements"] ?? [];
+            foreach ($this->normalizeConfigList($this->ads["placement_keys"] ?? []) as $placement) {
                 $data = is_array($placementConfig[$placement] ?? null)
                     ? $placementConfig[$placement]
                     : [];
@@ -3733,8 +3704,8 @@ final class LimeVideo
     {
         $services = $this->remember("ad_services_v1", 300, function () {
             $services = [];
-            $serviceConfig = $this->cfg("ads.services", []);
-            foreach ($this->configList("ads.service_keys") as $service) {
+            $serviceConfig = $this->ads["services"] ?? [];
+            foreach ($this->normalizeConfigList($this->ads["service_keys"] ?? []) as $service) {
                 $data = is_array($serviceConfig[$service] ?? null)
                     ? $serviceConfig[$service]
                     : [];
@@ -4099,7 +4070,7 @@ session_save_path($App->cachePath());
 session_set_cookie_params([
     "lifetime" => 0,
     "path" => "/",
-    "secure" => (bool) $App->cfg("app.site_https"),
+    "secure" => (bool) $App->app["site_https"],
     "httponly" => true,
     "samesite" => "Lax",
 ]);
@@ -4216,7 +4187,7 @@ if (str_starts_with($uri, "/api/")) {
         };
     } catch (Throwable $e) {
         error_log("LimeVideo API error: " . $e->getMessage());
-        if ((bool) $App->cfg("app.dev_mode")) {
+        if ((bool) $App->app["dev_mode"]) {
             $App->errorResponse($e, 500);
         }
         $App->jsonResponse(["error" => "Server error"], 500);
@@ -4225,12 +4196,12 @@ if (str_starts_with($uri, "/api/")) {
 
 // --- SPA shell fallback ---
 // Every non-API path falls back to the shell selected by app.dev_mode.
-$shellPath = (bool) $App->cfg("app.dev_mode") 
+$shellPath = (bool) $App->app["dev_mode"] 
     ? __DIR__ . "/ui/index.html" 
     : __DIR__ . "/public/index.html";
 
 if (!file_exists($shellPath)) {
-    $errorMsg = (bool) $App->cfg("app.dev_mode")
+    $errorMsg = (bool) $App->app["dev_mode"]
         ? "Frontend shell missing at: " . $shellPath
         : "System maintenance. Please check back later.";
     

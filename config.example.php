@@ -4,9 +4,11 @@ declare(strict_types=1);
 defined("LIMEVIDEO") or exit();
 
 /*
- * LimeVideo configuration template.
+ * LimeVideo configuration template. This file is not loaded at runtime.
  *
  * Copy this file to config.php and change values for your environment.
+ * config.php is required at runtime and must not be committed.
+ * Use nested lowercase snake_case keys.
  * app.site_base_url is derived from app.site_domain and app.site_https.
  */
 
