@@ -1618,6 +1618,30 @@ body {
     background: #1c1c1c;
 }
 
+.upload-file-input {
+    width: 100%;
+    max-width: 420px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--lime-border);
+    background: #181818;
+    color: #ddd;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.upload-file-input::file-selector-button {
+    margin-right: 12px;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--lime-green);
+    color: #050505;
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
 .upload-radio-card {
     display: flex;
     flex-wrap: wrap;

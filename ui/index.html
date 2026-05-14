@@ -199,8 +199,13 @@
                             <div id="upload-local-source" class="upload-source-panel ${app.state.uploadSource === 'local' ? '' : 'hidden'}">
                                 <div class="upload-dropzone">
                                     <i class="fa-solid fa-cloud-arrow-up text-4xl text-white/20 mb-4"></i>
-                                    <p class="text-sm font-bold">Local upload pipeline is not active yet.</p>
-                                    <p class="text-[10px] text-gray-500 mt-2 font-semibold uppercase">Use External Source for now.</p>
+                                    <p class="text-sm font-bold">Upload a local video file</p>
+                                    <p class="text-[10px] text-gray-500 mt-2 font-semibold uppercase">MP4, WebM or MOV</p>
+                                    <input id="upload-video-file" name="video" type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" class="upload-file-input mt-5">
+                                </div>
+                                <div class="mt-4">
+                                    <label class="upload-label">Thumbnail Image (Optional)</label>
+                                    <input id="upload-thumbnail-file" name="thumbnail" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" class="upload-input">
                                 </div>
                             </div>
 

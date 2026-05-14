@@ -1601,13 +1601,17 @@ const app = {
       keepalive = false,
       raw = false,
     } = options;
+    const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
     const request = {
       method,
-      headers: this.apiHeaders(headers),
+      headers: isFormData
+        ? { "X-CSRF-Token": this.state.auth.csrfToken || "", ...headers }
+        : this.apiHeaders(headers),
       keepalive,
     };
     if (body !== null)
-      request.body = typeof body === "string" ? body : JSON.stringify(body);
+      request.body =
+        isFormData || typeof body === "string" ? body : JSON.stringify(body);
 
     const response = await fetch(url, request);
     const text = await response.text();
@@ -2972,14 +2976,6 @@ const app = {
       this.navigateTo("/auth");
       return;
     }
-    if (this.state.uploadSource === "local") {
-      this.showStatus(
-        "Local upload is not active yet. Use External Source.",
-        "error",
-      );
-      return;
-    }
-
     const title = document.getElementById("upload-title")?.value.trim() || "";
     const description =
       document.getElementById("upload-description")?.value.trim() || "";
@@ -3002,9 +2998,20 @@ const app = {
       : 0;
     const submitBtn = document.getElementById("upload-submit-btn");
 
-    if (!title || !playbackUrl) {
-      this.showStatus("Title and playback URL are required.", "error");
+    if (!title) {
+      this.showStatus("Title is required.", "error");
       return;
+    }
+    if (this.state.uploadSource === "external" && !playbackUrl) {
+      this.showStatus("Playback URL is required.", "error");
+      return;
+    }
+    if (this.state.uploadSource === "local") {
+      const videoFile = document.getElementById("upload-video-file")?.files?.[0];
+      if (!videoFile) {
+        this.showStatus("Choose a video file to upload.", "error");
+        return;
+      }
     }
 
     try {
@@ -3015,18 +3022,36 @@ const app = {
         '<i class="fa-solid fa-circle-notch fa-spin"></i><span>Publishing...</span>',
         "",
       );
-      const data = await this.apiPost("/api/external_video", {
-        provider: "manual_external",
-        title,
-        description,
-        playback_url: playbackUrl,
-        thumbnail_url: thumbnailUrl,
-        duration,
-        status,
-        is_sensitive: isSensitive,
-        disable_comments: disableComments,
-        tags: this.state.uploadSelectedTags,
-      });
+      let data;
+      if (this.state.uploadSource === "local") {
+        const formData = new FormData();
+        formData.append("title", title);
+        formData.append("description", description);
+        formData.append("duration", String(duration));
+        formData.append("status", status);
+        formData.append("is_sensitive", String(isSensitive));
+        formData.append("disable_comments", String(disableComments));
+        formData.append("tags", JSON.stringify(this.state.uploadSelectedTags));
+        const videoFile = document.getElementById("upload-video-file")?.files?.[0];
+        const thumbnailFile =
+          document.getElementById("upload-thumbnail-file")?.files?.[0];
+        formData.append("video", videoFile);
+        if (thumbnailFile) formData.append("thumbnail", thumbnailFile);
+        data = await this.apiPost("/api/upload_video", formData);
+      } else {
+        data = await this.apiPost("/api/external_video", {
+          provider: "manual_external",
+          title,
+          description,
+          playback_url: playbackUrl,
+          thumbnail_url: thumbnailUrl,
+          duration,
+          status,
+          is_sensitive: isSensitive,
+          disable_comments: disableComments,
+          tags: this.state.uploadSelectedTags,
+        });
+      }
       if (!data.success) {
         this.showStatus(data.error || "Video could not be published.", "error");
         return;

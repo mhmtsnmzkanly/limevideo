@@ -22,6 +22,7 @@ final class LimeVideo
     private readonly array $database;
     private readonly array $cron;
     private readonly array $captcha;
+    private readonly array $uploads;
 
     private ?PDO $pdo = null;
     private string $cacheDir;
@@ -38,6 +39,9 @@ final class LimeVideo
         $this->csrf = $config["csrf"];
         $this->captcha = $config["captcha"];
         $this->ads = $config["ads"];
+        $this->uploads = $this->defaultUploadConfig(
+            is_array($config["uploads"] ?? null) ? $config["uploads"] : [],
+        );
 
         $this->cacheDir = __DIR__ . "/cache";
         if (!is_dir($this->cacheDir)) {
@@ -132,6 +136,32 @@ final class LimeVideo
         }
 
         return $config;
+    }
+
+    private function defaultUploadConfig(array $uploads = []): array
+    {
+        $defaults = [
+            "video_dir" => "uploads/videos",
+            "thumbnail_dir" => "uploads/thumbnails",
+            "max_video_size_bytes" => 524288000,
+            "max_thumbnail_size_bytes" => 5242880,
+            "video_extensions" => ["mp4", "webm", "mov"],
+            "video_mime_types" => ["video/mp4", "video/webm", "video/quicktime"],
+            "thumbnail_extensions" => ["jpg", "jpeg", "png", "webp"],
+            "thumbnail_mime_types" => ["image/jpeg", "image/png", "image/webp"],
+        ];
+        return array_replace($defaults, $uploads);
+    }
+
+    private function uploadConfig(string $key, mixed $default): mixed
+    {
+        return $this->uploads[$key] ?? $default;
+    }
+
+    private function uploadListConfig(string $key, array $default): array
+    {
+        $value = $this->uploadConfig($key, $default);
+        return is_array($value) ? array_values($value) : $default;
     }
 
     private function normalizeConfigList(mixed $value): array
@@ -1032,6 +1062,126 @@ final class LimeVideo
         return "/" . ltrim($path, "/");
     }
 
+    private function uploadDirectory(string $relativePath): string
+    {
+        $path = trim(str_replace("\\", "/", $relativePath), "/");
+        if ($path === "" || str_contains($path, "..")) {
+            throw new RuntimeException("Invalid upload directory");
+        }
+
+        $absolutePath = __DIR__ . "/" . $path;
+        if (!is_dir($absolutePath) && !mkdir($absolutePath, 0775, true) && !is_dir($absolutePath)) {
+            throw new RuntimeException("Upload directory is not writable");
+        }
+        return $absolutePath;
+    }
+
+    private function relativeUploadPath(string $absolutePath): string
+    {
+        $root = realpath(__DIR__);
+        $real = realpath($absolutePath);
+        if (!$root || !$real || !str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
+            throw new RuntimeException("Invalid upload path");
+        }
+        return str_replace("\\", "/", substr($real, strlen($root) + 1));
+    }
+
+    private function fileUploadErrorMessage(int $error): string
+    {
+        return match ($error) {
+            UPLOAD_ERR_INI_SIZE,
+            UPLOAD_ERR_FORM_SIZE => "Uploaded file is too large",
+            UPLOAD_ERR_PARTIAL => "Uploaded file was incomplete",
+            UPLOAD_ERR_NO_FILE => "Uploaded file is required",
+            default => "Upload failed",
+        };
+    }
+
+    private function uploadedFileExtension(array $file): string
+    {
+        $name = (string) ($file["name"] ?? "");
+        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        $blocked = ["php", "phtml", "html", "htm", "svg", "js", "exe", "sh"];
+        if ($extension === "" || in_array($extension, $blocked, true)) {
+            $this->jsonResponse(["error" => "Unsupported file type"], 400);
+        }
+        return $extension;
+    }
+
+    private function uploadedFileMimeType(string $tmpName): string
+    {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if (!$finfo) {
+            throw new RuntimeException("File validation is unavailable");
+        }
+        try {
+            return (string) finfo_file($finfo, $tmpName);
+        } finally {
+            finfo_close($finfo);
+        }
+    }
+
+    private function validateUploadedFile(
+        array $file,
+        array $allowedExtensions,
+        array $allowedMimeTypes,
+        int $maxBytes,
+        bool $required = true,
+    ): ?array {
+        $error = (int) ($file["error"] ?? UPLOAD_ERR_NO_FILE);
+        if ($error === UPLOAD_ERR_NO_FILE && !$required) {
+            return null;
+        }
+        if ($error !== UPLOAD_ERR_OK) {
+            $this->jsonResponse(["error" => $this->fileUploadErrorMessage($error)], 400);
+        }
+
+        $tmpName = (string) ($file["tmp_name"] ?? "");
+        if ($tmpName === "" || !is_uploaded_file($tmpName)) {
+            $this->jsonResponse(["error" => "Invalid uploaded file"], 400);
+        }
+
+        $size = (int) ($file["size"] ?? 0);
+        if ($size <= 0 || $size > $maxBytes) {
+            $this->jsonResponse(["error" => "Uploaded file is too large"], 413);
+        }
+
+        $extension = $this->uploadedFileExtension($file);
+        $allowedExtensions = array_map("strtolower", $allowedExtensions);
+        if (!in_array($extension, $allowedExtensions, true)) {
+            $this->jsonResponse(["error" => "Unsupported file type"], 400);
+        }
+
+        $mimeType = $this->uploadedFileMimeType($tmpName);
+        if (!in_array($mimeType, $allowedMimeTypes, true)) {
+            $this->jsonResponse(["error" => "Unsupported file MIME type"], 400);
+        }
+
+        return [
+            "tmp_name" => $tmpName,
+            "extension" => $extension,
+            "mime_type" => $mimeType,
+            "size" => $size,
+        ];
+    }
+
+    private function moveValidatedUpload(array $validatedFile, string $directory, string $basename): string
+    {
+        $targetDir = $this->uploadDirectory($directory);
+        $target = $targetDir . DIRECTORY_SEPARATOR . $basename . "." . $validatedFile["extension"];
+        $realTargetDir = realpath($targetDir);
+        if (!$realTargetDir || realpath(dirname($target)) !== $realTargetDir) {
+            throw new RuntimeException("Invalid upload target");
+        }
+        if (file_exists($target)) {
+            throw new RuntimeException("Upload target already exists");
+        }
+        if (!move_uploaded_file($validatedFile["tmp_name"], $target)) {
+            throw new RuntimeException("Could not store uploaded file");
+        }
+        return $this->relativeUploadPath($target);
+    }
+
     /**
      * Chooses how the watch page should present a playback source.
      * Input: $url resolved playback URL.
@@ -1559,6 +1709,16 @@ final class LimeVideo
     public function handleApiJobs(): void
     {
         $this->runPublicJobTick();
+    }
+
+    /**
+     * Creates an internally hosted video from multipart upload fields.
+     * Input: video file, optional thumbnail file and metadata fields.
+     * Output: JSON success status and video id.
+     */
+    public function handleApiUploadVideo(): void
+    {
+        $this->uploadLocalVideo($_POST, $_FILES);
     }
 
     public function fetch(string $name): mixed
@@ -3014,6 +3174,177 @@ final class LimeVideo
         return $vid;
     }
 
+    private function uploadTagsFromInput(mixed $tags): array
+    {
+        if (is_string($tags)) {
+            $decoded = json_decode($tags, true);
+            $tags = is_array($decoded) ? $decoded : explode(",", $tags);
+        }
+        if (!is_array($tags)) {
+            return [];
+        }
+        return array_values(
+            array_unique(
+                array_filter(
+                    array_map(
+                        fn($tag) => $this->validate($tag, "text", ["max" => 50]),
+                        $tags,
+                    ),
+                ),
+            ),
+        );
+    }
+
+    public function uploadLocalVideo(array $input, array $files): void
+    {
+        if (empty($_SESSION["user"])) {
+            $this->jsonResponse(["error" => "Auth required"], 401);
+        }
+        $contentType = (string) ($_SERVER["CONTENT_TYPE"] ?? "");
+        if (!str_starts_with(strtolower($contentType), "multipart/form-data")) {
+            $this->jsonResponse(["error" => "Multipart form data is required"], 400);
+        }
+        $this->assertActionAllowed("video");
+
+        $title = $this->validate($input["title"] ?? "", "text", ["max" => 200]);
+        $description = $this->validate($input["description"] ?? "", "text", [
+            "max" => 1000,
+        ]);
+        $duration = max(0, (int) ($input["duration"] ?? 0));
+        $isSensitive = !empty($input["is_sensitive"]) ? 1 : 0;
+        $disableComments = !empty($input["disable_comments"]) ? 1 : 0;
+        $status =
+            $this->validate($input["status"] ?? "public", "enum", [
+                "allowed" => ["public", "private"],
+            ]) ?:
+            "public";
+        $tags = $this->uploadTagsFromInput($input["tags"] ?? []);
+
+        if (!$title) {
+            $this->jsonResponse(["error" => "Title is required"], 400);
+        }
+        if (empty($files["video"]) || !is_array($files["video"])) {
+            $this->jsonResponse(["error" => "Video file is required"], 400);
+        }
+
+        $videoFile = $this->validateUploadedFile(
+            $files["video"],
+            $this->uploadListConfig("video_extensions", ["mp4", "webm", "mov"]),
+            $this->uploadListConfig("video_mime_types", [
+                "video/mp4",
+                "video/webm",
+                "video/quicktime",
+            ]),
+            (int) $this->uploadConfig("max_video_size_bytes", 524288000),
+        );
+
+        $thumbnailFile = null;
+        if (!empty($files["thumbnail"]) && is_array($files["thumbnail"])) {
+            $thumbnailFile = $this->validateUploadedFile(
+                $files["thumbnail"],
+                $this->uploadListConfig("thumbnail_extensions", [
+                    "jpg",
+                    "jpeg",
+                    "png",
+                    "webp",
+                ]),
+                $this->uploadListConfig("thumbnail_mime_types", [
+                    "image/jpeg",
+                    "image/png",
+                    "image/webp",
+                ]),
+                (int) $this->uploadConfig("max_thumbnail_size_bytes", 5242880),
+                false,
+            );
+        }
+
+        $videoId = $this->generateId("v", 12);
+        $suffix = bin2hex(random_bytes(8));
+        $movedFiles = [];
+
+        try {
+            $filePath = $this->moveValidatedUpload(
+                $videoFile,
+                (string) $this->uploadConfig("video_dir", "uploads/videos"),
+                $videoId . "_" . $suffix,
+            );
+            $movedFiles[] = __DIR__ . "/" . $filePath;
+
+            $thumbnailPath = null;
+            if ($thumbnailFile) {
+                $thumbnailPath = $this->moveValidatedUpload(
+                    $thumbnailFile,
+                    (string) $this->uploadConfig("thumbnail_dir", "uploads/thumbnails"),
+                    $videoId . "_thumb_" . $suffix,
+                );
+                $movedFiles[] = __DIR__ . "/" . $thumbnailPath;
+            }
+
+            $this->db()
+                ->prepare(
+                    "INSERT INTO videos
+                (id, user_id, title, description, duration, is_sensitive, disable_comments, status, storage_type, file_path, thumbnail_path, playback_mode, processing_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'internal', ?, ?, 'direct', 'ready')",
+                )
+                ->execute([
+                    $videoId,
+                    $_SESSION["user"]["id"],
+                    $title,
+                    $description,
+                    $duration,
+                    $isSensitive,
+                    $disableComments,
+                    $status,
+                    $filePath,
+                    $thumbnailPath,
+                ]);
+
+            if ($tags) {
+                $allowedStmt = $this->db()->prepare(
+                    "SELECT slug FROM tags WHERE slug IN (" .
+                        implode(",", array_fill(0, count($tags), "?")) .
+                        ")",
+                );
+                $allowedStmt->execute($tags);
+                $allowedTags = $allowedStmt->fetchAll(PDO::FETCH_COLUMN);
+                foreach ($allowedTags as $tag) {
+                    $this->db()
+                        ->prepare(
+                            "INSERT IGNORE INTO video_tags (video_id, tag_slug) VALUES (?, ?)",
+                        )
+                        ->execute([$videoId, $tag]);
+                }
+            }
+
+            $this->invalidateDiscoveryCaches();
+            $userId = $_SESSION["user"]["id"];
+            $this->cacheDeletePrefix("profile_" . $userId . "_");
+            $this->cacheDelete("video_base_user_{$userId}_video_{$videoId}");
+            if ($status === "public") {
+                $this->enqueueSitemapRegeneration("local_video_uploaded", [
+                    "video_id" => $videoId,
+                    "user_id" => $userId,
+                ]);
+                $this->enqueueCronJob(
+                    "notification_video",
+                    "video",
+                    $videoId,
+                    ["user_id" => $userId],
+                    10,
+                );
+            }
+        } catch (Throwable $exception) {
+            foreach ($movedFiles as $file) {
+                if (is_file($file)) {
+                    @unlink($file);
+                }
+            }
+            throw $exception;
+        }
+
+        $this->jsonResponse(["success" => true, "id" => $videoId]);
+    }
+
     public function createExternalVideo(array $input): void
     {
         if (empty($_SESSION["user"])) {
@@ -4092,7 +4423,9 @@ if ($uri === "/sitemap.xml") {
 
 if (str_starts_with($uri, "/api/")) {
     $endpoint = substr($uri, 5);
-    $input = json_decode(file_get_contents("php://input"), true) ?? $_POST;
+    $input = $endpoint === "upload_video"
+        ? $_POST
+        : json_decode(file_get_contents("php://input"), true) ?? $_POST;
 
     try {
         $App->assertCsrf($endpoint, $method);
@@ -4108,6 +4441,7 @@ if (str_starts_with($uri, "/api/")) {
             "save",
             "report",
             "external_video",
+            "upload_video",
             "watch_later",
             "jobs",
             "analytics" => $App->requireMethod($method, ["POST"]),
@@ -4132,6 +4466,7 @@ if (str_starts_with($uri, "/api/")) {
                     10,
                     600,
                 ),
+                "upload_video" => $App->checkRateLimit("upload_video", 5, 600),
                 "analytics" => $App->checkRateLimit("analytics", 240, 60),
                 "jobs" => $App->checkRateLimit("jobs", 10, 60),
                 default => null,
@@ -4173,6 +4508,7 @@ if (str_starts_with($uri, "/api/")) {
             "ads" => $App->handleApiAds(),
             "ad_services" => $App->handleApiAdServices(),
             "external_video" => $App->handleApiExternalVideo($input),
+            "upload_video" => $App->handleApiUploadVideo(),
             "provider_webhook" => $App->providerWebhook(
                 $App->validate($_GET["provider"] ?? "", "text", ["max" => 50]),
                 $input,

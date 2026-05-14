@@ -72,6 +72,18 @@ return [
         "form_field_name" => "captcha_token",
     ],
 
+    // Optional local upload settings. If omitted from config.php, safe defaults are used.
+    "uploads" => [
+        "video_dir" => "uploads/videos",
+        "thumbnail_dir" => "uploads/thumbnails",
+        "max_video_size_bytes" => 524288000,
+        "max_thumbnail_size_bytes" => 5242880,
+        "video_extensions" => ["mp4", "webm", "mov"],
+        "video_mime_types" => ["video/mp4", "video/webm", "video/quicktime"],
+        "thumbnail_extensions" => ["jpg", "jpeg", "png", "webp"],
+        "thumbnail_mime_types" => ["image/jpeg", "image/png", "image/webp"],
+    ],
+
     // Ad services. Public display/script values are frontend-safe.
     "ads" => [
         "service_keys" => ["internal", "vast", "gam", "custom_js"],
