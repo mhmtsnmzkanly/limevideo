@@ -1,8 +1,23 @@
-/uploads/
-/cache/
+# Runtime uploads/cache contents
+/cache/*
+!/cache/.gitkeep
+
+/uploads/*
+!/uploads/.gitkeep
+!/uploads/videos/
+!/uploads/videos/.gitkeep
+!/uploads/thumbnails/
+!/uploads/thumbnails/.gitkeep
+
+# Local/private config
 /config.php
+
+# Generated runtime sitemap
 /sitemap.xml
 
+# Temp files
 *.tmp
+
+# Tool dependencies/temp
 /tools/node_modules/
 /tools/.tailwindcss.tmp

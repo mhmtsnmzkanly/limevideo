@@ -1,0 +1,1147 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>LimeVideo - Admin Console</title>
+        <style>
+            :root {
+                --lime: #00ff41;
+                --lime-muted: rgba(0, 255, 65, 0.15);
+                --bg: #050505;
+                --surface: #111111;
+                --surface-hover: #181818;
+                --border: rgba(255, 255, 255, 0.08);
+                --text-primary: #ffffff;
+                --text-secondary: #a0a0a0;
+                --text-muted: #555555;
+                --danger: #ff3e3e;
+                --warning: #ffab00;
+                --success: #00ff41;
+                --font:
+                    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                    Roboto, sans-serif;
+            }
+
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            body {
+                background-color: var(--bg);
+                color: var(--text-primary);
+                font-family: var(--font);
+                line-height: 1.5;
+                -webkit-font-smoothing: antialiased;
+                overflow-x: hidden;
+            }
+
+            /* --- Shell Layout --- */
+            .admin-wrapper {
+                max-width: 1300px;
+                margin: 0 auto;
+                padding: 2.5rem 1.5rem;
+                min-height: 100vh;
+            }
+
+            .header {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-end;
+                margin-bottom: 3rem;
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 1.5rem;
+            }
+
+            .header-titles h1 {
+                font-size: 1.85rem;
+                font-weight: 900;
+                text-transform: uppercase;
+                font-style: italic;
+                letter-spacing: -1.5px;
+                margin-bottom: 0.25rem;
+            }
+
+            .header-titles p {
+                color: var(--text-secondary);
+                font-size: 0.85rem;
+                font-weight: 500;
+            }
+
+            .role-badge {
+                background: var(--lime-muted);
+                color: var(--lime);
+                border: 1px solid rgba(0, 255, 65, 0.3);
+                padding: 4px 10px;
+                border-radius: 6px;
+                font-size: 10px;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+
+            /* --- Navigation --- */
+            .nav-container {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 2rem;
+                gap: 1rem;
+            }
+
+            .tabs {
+                display: flex;
+                gap: 0.5rem;
+                overflow-x: auto;
+                scrollbar-width: none;
+            }
+            .tabs::-webkit-scrollbar {
+                display: none;
+            }
+
+            .tab-btn {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                color: var(--text-secondary);
+                padding: 0.7rem 1.25rem;
+                border-radius: 8px;
+                font-size: 0.8rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                white-space: nowrap;
+            }
+
+            .tab-btn:hover {
+                color: white;
+                border-color: var(--text-muted);
+            }
+
+            .tab-btn.active {
+                background: var(--lime);
+                border-color: var(--lime);
+                color: var(--bg);
+            }
+
+            .refresh-btn {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                color: var(--text-secondary);
+                width: 40px;
+                height: 40px;
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .refresh-btn:hover {
+                color: white;
+                border-color: var(--lime);
+            }
+
+            /* --- Dashboard Stats --- */
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 1.5rem;
+                margin-bottom: 2.5rem;
+            }
+
+            .stat-card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                padding: 1.5rem;
+                border-radius: 16px;
+                position: relative;
+            }
+
+            .stat-card::after {
+                content: "";
+                position: absolute;
+                bottom: 0;
+                left: 1.5rem;
+                right: 1.5rem;
+                height: 2px;
+                background: var(--lime);
+                opacity: 0.2;
+            }
+
+            .stat-label {
+                font-size: 10px;
+                font-weight: 800;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                margin-bottom: 0.75rem;
+                display: block;
+            }
+
+            .stat-value {
+                font-size: 2.25rem;
+                font-weight: 900;
+                color: var(--text-primary);
+                line-height: 1;
+                margin-bottom: 0.5rem;
+            }
+
+            .stat-helper {
+                font-size: 11px;
+                color: var(--text-secondary);
+                font-weight: 600;
+            }
+
+            /* --- Panels & Tables --- */
+            .panel {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 16px;
+                overflow: hidden;
+            }
+
+            .filter-bar {
+                padding: 1.25rem;
+                background: rgba(255, 255, 255, 0.02);
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                gap: 1rem;
+                align-items: center;
+            }
+
+            .input-text,
+            .input-select {
+                background: var(--bg);
+                border: 1px solid var(--border);
+                color: white;
+                padding: 0.6rem 1rem;
+                border-radius: 8px;
+                font-size: 0.85rem;
+                font-family: inherit;
+            }
+            .input-text {
+                flex: 1;
+            }
+            .input-text:focus {
+                outline: none;
+                border-color: var(--lime);
+            }
+
+            .table-wrap {
+                overflow-x: auto;
+            }
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.85rem;
+            }
+
+            .data-table th {
+                text-align: left;
+                padding: 1rem 1.25rem;
+                background: rgba(0, 0, 0, 0.2);
+                font-size: 10px;
+                font-weight: 800;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .data-table td {
+                padding: 1rem 1.25rem;
+                border-bottom: 1px solid var(--border);
+                vertical-align: middle;
+            }
+
+            .data-table tr:hover {
+                background: var(--surface-hover);
+            }
+
+            /* --- Components --- */
+            .badge {
+                display: inline-block;
+                padding: 3px 8px;
+                border-radius: 4px;
+                font-size: 10px;
+                font-weight: 900;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                background: rgba(255, 255, 255, 0.05);
+                color: var(--text-secondary);
+            }
+            .badge-video {
+                color: #5bc0de;
+                background: rgba(91, 192, 222, 0.1);
+            }
+            .badge-comment {
+                color: #f0ad4e;
+                background: rgba(240, 173, 78, 0.1);
+            }
+            .badge-success {
+                color: var(--success);
+                background: rgba(0, 255, 65, 0.1);
+            }
+            .badge-danger {
+                color: var(--danger);
+                background: rgba(255, 62, 62, 0.1);
+            }
+            .badge-warning {
+                color: var(--warning);
+                background: rgba(255, 171, 0, 0.1);
+            }
+
+            .btn-action {
+                background: transparent;
+                border: 1px solid var(--border);
+                color: var(--text-secondary);
+                padding: 6px 12px;
+                border-radius: 6px;
+                font-size: 11px;
+                font-weight: 800;
+                text-transform: uppercase;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .btn-action:hover {
+                color: white;
+                border-color: var(--text-muted);
+            }
+            .btn-action-primary {
+                color: var(--lime);
+                border-color: var(--lime-muted);
+            }
+            .btn-action-primary:hover {
+                background: var(--lime);
+                color: var(--bg);
+                border-color: var(--lime);
+            }
+
+            .thumb-placeholder {
+                width: 64px;
+                aspect-ratio: 16/9;
+                background: #000;
+                border-radius: 4px;
+                border: 1px solid var(--border);
+            }
+
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                border-radius: 8px;
+                background: var(--surface-hover);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 900;
+                font-size: 12px;
+                color: var(--lime);
+                border: 1px solid var(--border);
+            }
+
+            /* --- Modals --- */
+            .modal-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.85);
+                backdrop-filter: blur(10px);
+                z-index: 1000;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+            }
+
+            .modal {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 24px;
+                width: 100%;
+                max-width: 560px;
+                box-shadow: 0 50px 100px rgba(0, 0, 0, 0.6);
+                overflow: hidden;
+                animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+
+            @keyframes modalPop {
+                from {
+                    opacity: 0;
+                    transform: scale(0.95) translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: scale(1) translateY(0);
+                }
+            }
+
+            .modal-header {
+                padding: 1.5rem 2rem;
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+            .modal-title {
+                font-weight: 900;
+                text-transform: uppercase;
+                font-style: italic;
+                letter-spacing: -0.5px;
+            }
+
+            .modal-body {
+                padding: 2rem;
+            }
+
+            .modal-footer {
+                padding: 1.5rem 2rem;
+                background: rgba(255, 255, 255, 0.02);
+                border-top: 1px solid var(--border);
+                display: flex;
+                justify-content: flex-end;
+                gap: 1rem;
+            }
+
+            .form-group {
+                margin-bottom: 1.5rem;
+            }
+            .form-label {
+                display: block;
+                font-size: 10px;
+                font-weight: 900;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                margin-bottom: 0.5rem;
+            }
+            .form-control {
+                width: 100%;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                color: white;
+                padding: 0.75rem 1rem;
+                border-radius: 10px;
+                font-size: 0.9rem;
+            }
+            .form-control:focus {
+                outline: none;
+                border-color: var(--lime);
+            }
+            textarea.form-control {
+                resize: none;
+                min-height: 100px;
+            }
+
+            /* --- Toasts --- */
+            #toast-container {
+                position: fixed;
+                bottom: 2rem;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 2000;
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            .toast {
+                background: white;
+                color: black;
+                padding: 12px 24px;
+                border-radius: 12px;
+                font-size: 0.8rem;
+                font-weight: 800;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+                animation: toastIn 0.3s ease;
+            }
+            @keyframes toastIn {
+                from {
+                    transform: translateY(100%);
+                    opacity: 0;
+                }
+            }
+
+            /* --- States --- */
+            .state-view {
+                padding: 5rem 2rem;
+                text-align: center;
+            }
+            .state-view h2 {
+                font-weight: 900;
+                text-transform: uppercase;
+                font-style: italic;
+                color: var(--danger);
+                margin-bottom: 1rem;
+            }
+            .state-view p {
+                color: var(--text-secondary);
+                margin-bottom: 2rem;
+            }
+
+            .loading-spinner {
+                width: 40px;
+                height: 40px;
+                border: 3px solid var(--lime-muted);
+                border-top-color: var(--lime);
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin: 0 auto 1.5rem;
+            }
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .hidden {
+                display: none !important;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="admin-wrapper">
+            <header class="header">
+                <div class="header-titles">
+                    <h1>Moderation</h1>
+                    <p>Review reports, videos, users, and system jobs.</p>
+                </div>
+                <div class="role-badge">Admin Privileges</div>
+            </header>
+
+            <!-- Access Denied State (Initially Hidden) -->
+            <div id="access-denied" class="state-view hidden">
+                <h2>Access Denied</h2>
+                <p>
+                    You do not have the required permissions to view this
+                    console.
+                </p>
+                <button
+                    class="tab-btn active"
+                    onclick="window.location.reload()"
+                >
+                    Return Home
+                </button>
+            </div>
+
+            <div id="main-interface">
+                <nav class="nav-container">
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="overview">
+                            Overview
+                        </button>
+                        <button class="tab-btn" data-tab="reports">
+                            Reports
+                        </button>
+                        <button class="tab-btn" data-tab="videos">
+                            Videos
+                        </button>
+                        <button class="tab-btn" data-tab="users">Users</button>
+                        <button class="tab-btn" data-tab="jobs">Jobs</button>
+                    </div>
+                    <button
+                        class="refresh-btn"
+                        id="global-refresh"
+                        title="Refresh Current Data"
+                    >
+                        <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path
+                                d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+                            />
+                        </svg>
+                    </button>
+                </nav>
+
+                <div id="view-loading" class="state-view hidden">
+                    <div class="loading-spinner"></div>
+                    <span class="stat-label">Synchronizing Database...</span>
+                </div>
+
+                <div id="view-content">
+                    <!-- Content injected via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Modals -->
+        <div id="modal-overlay" class="modal-overlay"></div>
+        <div id="toast-container"></div>
+
+        <script>
+            /**
+             * LIME VIDEO MODERATION CONSOLE
+             * Frontend-only implementation with Mock Logic.
+             *
+             * Note: Real production implementation must enforce permissions server-side.
+             * Frontend hiding is for UX only.
+             */
+
+            const escapeHtml = (str) => {
+                const div = document.createElement("div");
+                div.textContent = str;
+                return div.innerHTML;
+            };
+
+            const state = {
+                activeTab: "overview",
+                userRole: "admin", // Mock: moderator, admin, system
+                loading: false,
+                data: {
+                    stats: {
+                        reportsOpen: 14,
+                        videosPending: 5,
+                        usersActive: "2,420",
+                        jobsFailed: 3,
+                        reportsToday: 21,
+                        videosHidden: 82,
+                    },
+                    reports: [
+                        {
+                            id: "R-8821",
+                            target: "video",
+                            targetId: "v_901",
+                            reason: "Spam/Misleading",
+                            status: "open",
+                            reporter: "alex_dev",
+                            created: "2m ago",
+                            details: "Bot link found in description.",
+                        },
+                        {
+                            id: "R-8819",
+                            target: "comment",
+                            targetId: "c_44",
+                            reason: "Harassment",
+                            status: "reviewing",
+                            reporter: "jess_w",
+                            created: "1h ago",
+                            details: "Targeted toxicity against creator.",
+                        },
+                        {
+                            id: "R-8790",
+                            target: "user",
+                            targetId: "u_11",
+                            reason: "Impersonation",
+                            status: "resolved",
+                            reporter: "staff_1",
+                            created: "5h ago",
+                            details: "User pretending to be official support.",
+                        },
+                    ],
+                    videos: [
+                        {
+                            id: "vid_01",
+                            title: "2024 Design Trends",
+                            owner: "creative_cat",
+                            status: "public",
+                            proc: "ready",
+                            sensitive: false,
+                            views: "12K",
+                            created: "1d ago",
+                        },
+                        {
+                            id: "vid_02",
+                            title: "Secret Project Leak",
+                            owner: "leaker_99",
+                            status: "deleted",
+                            proc: "ready",
+                            sensitive: true,
+                            views: "450",
+                            created: "3h ago",
+                        },
+                        {
+                            id: "vid_03",
+                            title: "Processing Test",
+                            owner: "dev_user",
+                            status: "private",
+                            proc: "processing",
+                            sensitive: false,
+                            views: "0",
+                            created: "10m ago",
+                        },
+                    ],
+                    users: [
+                        {
+                            id: "usr_01",
+                            username: "creative_cat",
+                            display: "Sarah C.",
+                            role: "Creator",
+                            status: "active",
+                            joined: "Jan 2024",
+                        },
+                        {
+                            id: "usr_88",
+                            username: "spammer_x",
+                            display: "Get Rich Now",
+                            role: "User",
+                            status: "banned",
+                            joined: "May 2024",
+                        },
+                    ],
+                    jobs: [
+                        {
+                            id: "J-102",
+                            event: "video.transcode",
+                            target: "v_901",
+                            status: "ready",
+                            retries: "0/3",
+                            priority: 1,
+                            error: null,
+                        },
+                        {
+                            id: "J-105",
+                            event: "notify.email",
+                            target: "u_42",
+                            status: "failed",
+                            retries: "3/3",
+                            priority: 5,
+                            error: "SMTP Timeout: Connection lost",
+                        },
+                        {
+                            id: "J-106",
+                            event: "cleanup.tmp",
+                            target: "sys",
+                            status: "pending",
+                            retries: "0/1",
+                            priority: 10,
+                            error: null,
+                        },
+                    ],
+                },
+            };
+
+            // --- Core Application Logic ---
+
+            function init() {
+                // Check Permissions
+                if (
+                    !["admin", "moderator", "system"].includes(state.userRole)
+                ) {
+                    document
+                        .getElementById("main-interface")
+                        .classList.add("hidden");
+                    document
+                        .getElementById("access-denied")
+                        .classList.remove("hidden");
+                    return;
+                }
+
+                // Tab Navigation
+                document.querySelectorAll(".tab-btn").forEach((btn) => {
+                    btn.addEventListener("click", () =>
+                        switchTab(btn.dataset.tab),
+                    );
+                });
+
+                document
+                    .getElementById("global-refresh")
+                    .addEventListener("click", () => {
+                        showToast("Refreshing current dataset...");
+                        switchTab(state.activeTab);
+                    });
+
+                switchTab("overview");
+            }
+
+            async function switchTab(tab) {
+                state.activeTab = tab;
+                state.loading = true;
+                updateTabUI();
+                renderLoading(true);
+
+                // Mock network latency
+                await new Promise((r) => setTimeout(r, 400));
+
+                state.loading = false;
+                renderLoading(false);
+                renderContent();
+            }
+
+            function updateTabUI() {
+                document.querySelectorAll(".tab-btn").forEach((btn) => {
+                    btn.classList.toggle(
+                        "active",
+                        btn.dataset.tab === state.activeTab,
+                    );
+                });
+            }
+
+            function renderLoading(show) {
+                document
+                    .getElementById("view-loading")
+                    .classList.toggle("hidden", !show);
+                document
+                    .getElementById("view-content")
+                    .classList.toggle("hidden", show);
+            }
+
+            // --- View Logic: Video & Profiles ---
+
+            function viewVideo(id) {
+                if (!id) return;
+                showToast(`Opening video page for ${id}...`);
+                // Attempt navigation
+                window.location.href = `/video/${encodeURIComponent(id)}`;
+            }
+
+            function viewProfile(id) {
+                if (!id) return;
+                showToast(`Opening profile page for ${id}...`);
+                // Attempt navigation
+                window.location.href = `/profile/${encodeURIComponent(id)}`;
+            }
+
+            // --- Renderers ---
+
+            function renderContent() {
+                const container = document.getElementById("view-content");
+                container.innerHTML = "";
+
+                switch (state.activeTab) {
+                    case "overview":
+                        renderOverview(container);
+                        break;
+                    case "reports":
+                        renderReports(container);
+                        break;
+                    case "videos":
+                        renderVideos(container);
+                        break;
+                    case "users":
+                        renderUsers(container);
+                        break;
+                    case "jobs":
+                        renderJobs(container);
+                        break;
+                }
+            }
+
+            function renderOverview(container) {
+                const s = state.data.stats;
+                container.innerHTML = `
+                <div class="stats-grid">
+                    ${createStatCard("Open Reports", s.reportsOpen, "Needs immediate review")}
+                    ${createStatCard("Pending Review", s.videosPending, "Video processing queue")}
+                    ${createStatCard("Active Users", s.usersActive, "Total platform reach")}
+                    ${createStatCard("Failed Jobs", s.jobsFailed, "Critical system errors", true)}
+                    ${createStatCard("New Reports", s.reportsToday, "Received last 24h")}
+                    ${createStatCard("Hidden Content", s.videosHidden, "Successfully moderated")}
+                </div>
+                <div class="panel" style="padding: 3rem; text-align: center; color: var(--text-muted);">
+                    <p style="font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px;">No active system alerts.</p>
+                </div>
+            `;
+            }
+
+            function createStatCard(label, val, sub, isDanger = false) {
+                return `
+                <div class="stat-card">
+                    <span class="stat-label">${label}</span>
+                    <div class="stat-value" style="color: ${isDanger && val > 0 ? "var(--danger)" : "inherit"}">${val}</div>
+                    <div class="stat-helper">${sub}</div>
+                </div>
+            `;
+            }
+
+            function renderReports(container) {
+                container.innerHTML = `
+                <div class="panel">
+                    <div class="filter-bar">
+                        <input type="text" class="input-text" placeholder="Search by ID or user...">
+                        <select class="input-select"><option>All Status</option><option>Open</option></select>
+                        <select class="input-select"><option>All Targets</option></select>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Target</th>
+                                    <th>Reason</th>
+                                    <th>Status</th>
+                                    <th>Reporter</th>
+                                    <th>Created</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${state.data.reports
+                                    .map(
+                                        (r) => `
+                                    <tr>
+                                        <td style="font-family: monospace; color: var(--text-muted)">${r.id}</td>
+                                        <td><span class="badge badge-${r.target}">${r.target}</span></td>
+                                        <td style="font-weight: 700; max-width: 150px;" class="truncate">${escapeHtml(r.reason)}</td>
+                                        <td><span class="badge badge-${r.status === "open" ? "warning" : "success"}">${r.status}</span></td>
+                                        <td style="font-weight: 600">@${escapeHtml(r.reporter)}</td>
+                                        <td style="font-size: 11px; font-weight: 700; color: var(--text-muted)">${r.created}</td>
+                                        <td><button class="btn-action btn-action-primary" onclick="openReportModal('${r.id}')">Review</button></td>
+                                    </tr>
+                                `,
+                                    )
+                                    .join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            }
+
+            function renderVideos(container) {
+                container.innerHTML = `
+                <div class="panel">
+                    <div class="filter-bar">
+                        <input type="text" class="input-text" placeholder="Search title or owner...">
+                        <select class="input-select"><option>All Status</option></select>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Preview</th>
+                                    <th>Title</th>
+                                    <th>Owner</th>
+                                    <th>Status</th>
+                                    <th>Proc</th>
+                                    <th>Flags</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${state.data.videos
+                                    .map(
+                                        (v) => `
+                                    <tr>
+                                        <td><div class="thumb-placeholder"></div></td>
+                                        <td style="font-weight: 700; max-width: 200px" class="truncate">${escapeHtml(v.title)}</td>
+                                        <td style="font-weight: 700; color: var(--lime)">@${v.owner}</td>
+                                        <td><span class="badge ${v.status === "deleted" ? "badge-danger" : ""}">${v.status}</span></td>
+                                        <td><span class="badge ${v.proc === "processing" ? "badge-warning" : ""}">${v.proc}</span></td>
+                                        <td style="font-size: 14px;">
+                                            ${v.sensitive ? "⚠️" : ""}
+                                        </td>
+                                        <td style="white-space: nowrap">
+                                            <button type="button" class="btn-action" data-action="view-video" data-id="${v.id}">View</button>
+                                            <button type="button" class="btn-action">Edit</button>
+                                        </td>
+                                    </tr>
+                                `,
+                                    )
+                                    .join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+                wireActionButtons();
+            }
+
+            function renderUsers(container) {
+                container.innerHTML = `
+                <div class="panel">
+                    <div class="filter-bar">
+                        <input type="text" class="input-text" placeholder="Search usernames...">
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                    <th>Joined</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${state.data.users
+                                    .map(
+                                        (u) => `
+                                    <tr>
+                                        <td>
+                                            <div style="display: flex; align-items: center; gap: 12px;">
+                                                <div class="user-avatar">${u.username.charAt(0).toUpperCase()}</div>
+                                                <div>
+                                                    <div style="font-weight: 900;">@${u.username}</div>
+                                                    <div style="font-size: 11px; color: var(--text-muted)">${escapeHtml(u.display)}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td><span class="badge">${u.role}</span></td>
+                                        <td><span class="badge ${u.status === "banned" ? "badge-danger" : "badge-success"}">${u.status}</span></td>
+                                        <td style="font-size: 11px; font-weight: 700; color: var(--text-muted)">${u.joined}</td>
+                                        <td style="white-space: nowrap">
+                                            <button type="button" class="btn-action" data-action="view-profile" data-id="${u.id}">View Profile</button>
+                                            <button type="button" class="btn-action" onclick="openBanModal('${u.id}')">Ban</button>
+                                        </td>
+                                    </tr>
+                                `,
+                                    )
+                                    .join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+                wireActionButtons();
+            }
+
+            function renderJobs(container) {
+                container.innerHTML = `
+                <div class="panel">
+                    <div class="filter-bar" style="background: rgba(0, 255, 65, 0.03);">
+                        <p style="font-size: 10px; font-weight: 800; color: var(--lime); text-transform: uppercase;">Job payloads are hidden for safety.</p>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Event</th>
+                                    <th>Target</th>
+                                    <th>Status</th>
+                                    <th>Retries</th>
+                                    <th>Priority</th>
+                                    <th>Last Error</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${state.data.jobs
+                                    .map(
+                                        (j) => `
+                                    <tr>
+                                        <td style="font-family: monospace; color: var(--text-muted)">${j.id}</td>
+                                        <td style="font-weight: 800; font-size: 11px; text-transform: uppercase;">${j.event}</td>
+                                        <td style="color: var(--text-secondary)">${j.target}</td>
+                                        <td><span class="badge badge-${j.status === "failed" ? "danger" : "warning"}">${j.status}</span></td>
+                                        <td style="font-weight: 700;">${j.retries}</td>
+                                        <td>${j.priority}</td>
+                                        <td style="font-family: monospace; font-size: 10px; color: var(--danger); max-width: 120px" class="truncate">
+                                            ${j.error || "-"}
+                                        </td>
+                                    </tr>
+                                `,
+                                    )
+                                    .join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            }
+
+            // --- Modals & Global Handlers ---
+
+            function openReportModal(id) {
+                const report = state.data.reports.find((r) => r.id === id);
+                if (!report) return;
+
+                const overlay = document.getElementById("modal-overlay");
+                overlay.innerHTML = `
+                <div class="modal">
+                    <div class="modal-header">
+                        <span class="modal-title">Review Report ${report.id}</span>
+                        <button class="btn-action" onclick="closeModal()">Close</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <span class="form-label">Context</span>
+                            <p style="font-weight: 700; color: var(--lime)">Target ID: ${report.targetId}</p>
+                            <p style="font-size: 13px; color: var(--text-secondary)">Reporter: @${report.reporter}</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Details</label>
+                            <div style="background: var(--bg); padding: 1rem; border-radius: 12px; font-size: 13px; border: 1px solid var(--border)">
+                                ${escapeHtml(report.details)}
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Resolution Note</label>
+                            <textarea class="form-control" placeholder="Explain the outcome..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-action" onclick="closeModal()">Dismiss</button>
+                        <button class="btn-action btn-action-primary" onclick="showToast('Report marked resolved'); closeModal();">Resolve Report</button>
+                    </div>
+                </div>
+            `;
+                overlay.style.display = "flex";
+            }
+
+            function openBanModal(userId) {
+                const user = state.data.users.find((u) => u.id === userId);
+                if (!user) return;
+
+                const overlay = document.getElementById("modal-overlay");
+                overlay.innerHTML = `
+                <div class="modal">
+                    <div class="modal-header">
+                        <span class="modal-title">Ban User @${user.username}</span>
+                        <button class="btn-action" onclick="closeModal()">Close</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">Restriction Type</label>
+                            <select class="form-control">
+                                <option>General Platform Ban</option>
+                                <option>Comment Block</option>
+                                <option>Upload Restricted</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Reason</label>
+                            <textarea class="form-control" placeholder="Violation details..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-action" onclick="closeModal()">Cancel</button>
+                        <button class="btn-action btn-action-primary" style="background: var(--danger); color: white; border: none;" onclick="showToast('User has been banned'); closeModal();">Apply Ban</button>
+                    </div>
+                </div>
+            `;
+                overlay.style.display = "flex";
+            }
+
+            function closeModal() {
+                document.getElementById("modal-overlay").style.display = "none";
+            }
+
+            function wireActionButtons() {
+                document.querySelectorAll("[data-action]").forEach((btn) => {
+                    btn.addEventListener("click", (e) => {
+                        const action = btn.dataset.action;
+                        const id = btn.dataset.id;
+                        if (action === "view-video") viewVideo(id);
+                        if (action === "view-profile") viewProfile(id);
+                    });
+                });
+            }
+
+            function showToast(msg) {
+                const container = document.getElementById("toast-container");
+                const toast = document.createElement("div");
+                toast.className = "toast";
+                toast.textContent = msg;
+                container.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            }
+
+            // Boot
+            window.onload = init;
+            window.onclick = (e) => {
+                if (e.target.id === "modal-overlay") closeModal();
+            };
+        </script>
+    </body>
+</html>
