@@ -6,8 +6,8 @@
 !/uploads/.gitkeep
 !/uploads/videos/
 !/uploads/videos/.gitkeep
-!/uploads/thumbnails/
-!/uploads/thumbnails/.gitkeep
+!/uploads/thumbs/
+!/uploads/thumbs/.gitkeep
 
 # Local/private config
 /config.php
