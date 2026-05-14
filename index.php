@@ -1721,6 +1721,552 @@ final class LimeVideo
         $this->uploadLocalVideo($_POST, $_FILES);
     }
 
+    public function handleApiAdminSummary(): void
+    {
+        $this->requireModerator();
+        $stmt = $this->db()->query(
+            "SELECT
+                (SELECT COUNT(*) FROM users) AS users,
+                (SELECT COUNT(*) FROM videos) AS videos,
+                (SELECT COUNT(*) FROM reports WHERE status = 'open') AS open_reports,
+                (SELECT COUNT(*) FROM cron_jobs WHERE status = 'pending') AS pending_jobs,
+                (SELECT COUNT(*) FROM cron_jobs WHERE status = 'failed') AS failed_jobs,
+                (SELECT COUNT(*) FROM videos WHERE status IN ('private', 'deleted')) AS hidden_videos,
+                (SELECT COUNT(*) FROM reports WHERE created_at >= CURDATE()) AS new_reports_today",
+        );
+        $row = $stmt->fetch() ?: [];
+        $this->jsonResponse([
+            "users" => (int) ($row["users"] ?? 0),
+            "videos" => (int) ($row["videos"] ?? 0),
+            "open_reports" => (int) ($row["open_reports"] ?? 0),
+            "pending_jobs" => (int) ($row["pending_jobs"] ?? 0),
+            "failed_jobs" => (int) ($row["failed_jobs"] ?? 0),
+            "hidden_videos" => (int) ($row["hidden_videos"] ?? 0),
+            "new_reports_today" => (int) ($row["new_reports_today"] ?? 0),
+        ]);
+    }
+
+    public function handleApiAdminReports(): void
+    {
+        $this->requireModerator();
+        ["limit" => $limit, "offset" => $offset] = $this->adminPagination();
+        $where = [];
+        $params = [];
+
+        if (array_key_exists("status", $_GET) && (string) $_GET["status"] !== "") {
+            $status = $this->validate($_GET["status"], "enum", [
+                "allowed" => ["open", "reviewing", "resolved", "dismissed"],
+            ]);
+            if (!$status) {
+                $this->jsonResponse(["error" => "Invalid report status"], 400);
+            }
+            $where[] = "r.status = ?";
+            $params[] = $status;
+        }
+        if (array_key_exists("target_type", $_GET) && (string) $_GET["target_type"] !== "") {
+            $targetType = $this->validate($_GET["target_type"], "enum", [
+                "allowed" => ["video", "comment", "user"],
+            ]);
+            if (!$targetType) {
+                $this->jsonResponse(["error" => "Invalid report target type"], 400);
+            }
+            $where[] = "r.target_type = ?";
+            $params[] = $targetType;
+        }
+
+        $q = $this->validate($_GET["q"] ?? "", "text", ["max" => 100]);
+        if ($q !== "") {
+            $where[] = "(r.id LIKE ? OR r.target_id LIKE ? OR r.reason LIKE ? OR reporter.username LIKE ? OR reviewer.username LIKE ?)";
+            $like = "%{$q}%";
+            array_push($params, $like, $like, $like, $like, $like);
+        }
+
+        $sql = "SELECT r.*,
+                    reporter.id AS reporter_id_value,
+                    reporter.username AS reporter_username,
+                    reporter.display_name AS reporter_display_name,
+                    reviewer.id AS reviewer_id_value,
+                    reviewer.username AS reviewer_username,
+                    reviewer.display_name AS reviewer_display_name
+                FROM reports r
+                LEFT JOIN users reporter ON reporter.id = r.reporter_id
+                LEFT JOIN users reviewer ON reviewer.id = r.reviewed_by";
+        if ($where) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY r.created_at DESC, r.id DESC LIMIT " . ($limit + 1) . " OFFSET " . $offset;
+        $stmt = $this->db()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        $hasMore = count($rows) > $limit;
+        $items = array_slice($rows, 0, $limit);
+        $this->jsonResponse([
+            "items" => array_map([$this, "publicAdminReportProjection"], $items),
+            "pagination" => [
+                "limit" => $limit,
+                "offset" => $offset,
+                "has_more" => $hasMore,
+            ],
+        ]);
+    }
+
+    public function handleApiAdminVideos(): void
+    {
+        $this->requireModerator();
+        ["limit" => $limit, "offset" => $offset] = $this->adminPagination();
+        $where = [];
+        $params = [];
+
+        if (array_key_exists("status", $_GET) && (string) $_GET["status"] !== "") {
+            $status = $this->validate($_GET["status"], "enum", [
+                "allowed" => ["public", "private", "deleted"],
+            ]);
+            if (!$status) {
+                $this->jsonResponse(["error" => "Invalid video status"], 400);
+            }
+            $where[] = "v.status = ?";
+            $params[] = $status;
+        }
+        if (array_key_exists("processing_status", $_GET) && (string) $_GET["processing_status"] !== "") {
+            $processingStatus = $this->validate($_GET["processing_status"], "enum", [
+                "allowed" => ["pending", "processing", "ready", "failed"],
+            ]);
+            if (!$processingStatus) {
+                $this->jsonResponse(["error" => "Invalid processing status"], 400);
+            }
+            $where[] = "v.processing_status = ?";
+            $params[] = $processingStatus;
+        }
+
+        $q = $this->validate($_GET["q"] ?? "", "text", ["max" => 100]);
+        if ($q !== "") {
+            $where[] = "(v.id LIKE ? OR v.title LIKE ? OR u.username LIKE ? OR u.display_name LIKE ?)";
+            $like = "%{$q}%";
+            array_push($params, $like, $like, $like, $like);
+        }
+
+        $sql = "SELECT v.id, v.user_id, v.title, v.duration, v.views_count, v.is_sensitive,
+                    v.disable_comments, v.status, v.storage_type, v.processing_status,
+                    v.created_at, v.updated_at,
+                    u.username AS owner_username, u.display_name AS owner_display_name
+                FROM videos v
+                JOIN users u ON u.id = v.user_id";
+        if ($where) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY v.created_at DESC, v.id DESC LIMIT " . ($limit + 1) . " OFFSET " . $offset;
+        $stmt = $this->db()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        $hasMore = count($rows) > $limit;
+        $items = array_slice($rows, 0, $limit);
+        $this->jsonResponse([
+            "items" => array_map([$this, "publicAdminVideoProjection"], $items),
+            "pagination" => [
+                "limit" => $limit,
+                "offset" => $offset,
+                "has_more" => $hasMore,
+            ],
+        ]);
+    }
+
+    public function handleApiAdminUsers(): void
+    {
+        $this->requireModerator();
+        ["limit" => $limit, "offset" => $offset] = $this->adminPagination();
+        $where = [];
+        $params = [];
+
+        if (array_key_exists("role", $_GET) && (string) $_GET["role"] !== "") {
+            $role = $this->validate($_GET["role"], "enum", [
+                "allowed" => ["user", "moderator", "admin", "system"],
+            ]);
+            if (!$role) {
+                $this->jsonResponse(["error" => "Invalid user role"], 400);
+            }
+            $where[] = "role = ?";
+            $params[] = $role;
+        }
+        if (array_key_exists("status", $_GET) && (string) $_GET["status"] !== "") {
+            $status = $this->validate($_GET["status"], "enum", [
+                "allowed" => ["active", "pending", "disabled", "banned", "deleted"],
+            ]);
+            if (!$status) {
+                $this->jsonResponse(["error" => "Invalid user status"], 400);
+            }
+            $where[] = "status = ?";
+            $params[] = $status;
+        }
+
+        $q = $this->validate($_GET["q"] ?? "", "text", ["max" => 100]);
+        if ($q !== "") {
+            $where[] = "(id LIKE ? OR username LIKE ? OR display_name LIKE ?)";
+            $like = "%{$q}%";
+            array_push($params, $like, $like, $like);
+        }
+
+        $sql = "SELECT id, username, display_name, role, status, created_at, updated_at FROM users";
+        if ($where) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY created_at DESC, id DESC LIMIT " . ($limit + 1) . " OFFSET " . $offset;
+        $stmt = $this->db()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        $hasMore = count($rows) > $limit;
+        $items = array_slice($rows, 0, $limit);
+        $this->jsonResponse([
+            "items" => array_map([$this, "publicAdminUserProjection"], $items),
+            "pagination" => [
+                "limit" => $limit,
+                "offset" => $offset,
+                "has_more" => $hasMore,
+            ],
+        ]);
+    }
+
+    public function handleApiAdminJobs(): void
+    {
+        $this->requireModerator();
+        ["limit" => $limit, "offset" => $offset] = $this->adminPagination();
+        $where = [];
+        $params = [];
+
+        if (array_key_exists("status", $_GET) && (string) $_GET["status"] !== "") {
+            $status = $this->validate($_GET["status"], "enum", [
+                "allowed" => ["pending", "working", "completed", "failed", "cancelled"],
+            ]);
+            if (!$status) {
+                $this->jsonResponse(["error" => "Invalid job status"], 400);
+            }
+            $where[] = "status = ?";
+            $params[] = $status;
+        }
+        $eventType = $this->validate($_GET["event_type"] ?? "", "text", ["max" => 80]);
+        if ($eventType !== "") {
+            $where[] = "event_type = ?";
+            $params[] = $eventType;
+        }
+
+        $sql = "SELECT id, event_type, target_type, target_id, status, priority,
+                    attempts, max_attempts, available_at, locked_at, locked_until,
+                    started_at, completed_at, failed_at, last_error, created_at, updated_at
+                FROM cron_jobs";
+        if ($where) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
+        $sql .= " ORDER BY created_at DESC, id DESC LIMIT " . ($limit + 1) . " OFFSET " . $offset;
+        $stmt = $this->db()->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        $hasMore = count($rows) > $limit;
+        $items = array_slice($rows, 0, $limit);
+        $this->jsonResponse([
+            "items" => array_map([$this, "publicAdminJobProjection"], $items),
+            "pagination" => [
+                "limit" => $limit,
+                "offset" => $offset,
+                "has_more" => $hasMore,
+            ],
+        ]);
+    }
+
+    public function handleApiAdminReportStatus(array $input): void
+    {
+        $moderator = $this->requireModerator();
+        $id = $this->validate($input["id"] ?? "", "id");
+        $status = $this->validate($input["status"] ?? "", "enum", [
+            "allowed" => ["open", "reviewing", "resolved", "dismissed"],
+        ]);
+        $resolutionNote = $this->validate($input["resolution_note"] ?? null, "text", ["max" => 1000]);
+        if (!$id || !$status) {
+            $this->jsonResponse(["error" => "Invalid report status input"], 400);
+        }
+
+        $stmt = $this->db()->prepare("SELECT id FROM reports WHERE id = ? LIMIT 1");
+        $stmt->execute([$id]);
+        if (!$stmt->fetch()) {
+            $this->jsonResponse(["error" => "Report not found"], 404);
+        }
+
+        if (in_array($status, ["reviewing", "resolved", "dismissed"], true)) {
+            $update = $this->db()->prepare(
+                "UPDATE reports
+                SET status = ?, reviewed_by = ?, reviewed_at = NOW(), resolution_note = ?
+                WHERE id = ?",
+            );
+            $update->execute([$status, $moderator["id"], $resolutionNote, $id]);
+        } else {
+            $update = $this->db()->prepare(
+                "UPDATE reports
+                SET status = ?, reviewed_by = NULL, reviewed_at = NULL, resolution_note = ?
+                WHERE id = ?",
+            );
+            $update->execute([$status, $resolutionNote, $id]);
+        }
+
+        $this->logAdminAction($moderator["id"], "report", $id, "REPORT_STATUS", $status);
+        $this->jsonResponse([
+            "success" => true,
+            "report" => $this->fetchAdminReport($id),
+        ]);
+    }
+
+    public function handleApiAdminVideoStatus(array $input): void
+    {
+        $moderator = $this->requireModerator();
+        $id = $this->validate($input["id"] ?? "", "id");
+        if (!$id) {
+            $this->jsonResponse(["error" => "Invalid video id"], 400);
+        }
+
+        $stmt = $this->db()->prepare(
+            "SELECT v.id, v.user_id, v.status, u.username AS owner_username, u.display_name AS owner_display_name
+            FROM videos v
+            JOIN users u ON u.id = v.user_id
+            WHERE v.id = ? LIMIT 1",
+        );
+        $stmt->execute([$id]);
+        $current = $stmt->fetch();
+        if (!$current) {
+            $this->jsonResponse(["error" => "Video not found"], 404);
+        }
+
+        $sets = [];
+        $params = [];
+        $newStatus = null;
+        if (array_key_exists("status", $input)) {
+            $newStatus = $this->validate($input["status"], "enum", [
+                "allowed" => ["public", "private", "deleted"],
+            ]);
+            if (!$newStatus) {
+                $this->jsonResponse(["error" => "Invalid video status"], 400);
+            }
+            $sets[] = "status = ?";
+            $params[] = $newStatus;
+        }
+        if (array_key_exists("is_sensitive", $input)) {
+            $sets[] = "is_sensitive = ?";
+            $params[] = $this->truthyInput($input["is_sensitive"]) ? 1 : 0;
+        }
+        if (array_key_exists("disable_comments", $input)) {
+            $sets[] = "disable_comments = ?";
+            $params[] = $this->truthyInput($input["disable_comments"]) ? 1 : 0;
+        }
+        if (!$sets) {
+            $this->jsonResponse(["error" => "No video fields provided"], 400);
+        }
+
+        $params[] = $id;
+        $this->db()
+            ->prepare("UPDATE videos SET " . implode(", ", $sets) . " WHERE id = ?")
+            ->execute($params);
+
+        $this->invalidateDiscoveryCaches();
+        $this->invalidateVideoBaseCaches($current["user_id"]);
+        $this->cacheDeletePrefix("profile_" . $current["user_id"] . "_");
+        $this->cacheDeletePrefix("comments_" . $id . "_");
+        if ($newStatus !== null && $newStatus !== $current["status"]) {
+            $this->enqueueSitemapRegeneration("admin_video_status_changed", [
+                "video_id" => $id,
+                "old_status" => $current["status"],
+                "new_status" => $newStatus,
+            ]);
+        }
+        $this->logAdminAction($moderator["id"], "video", $id, "VIDEO_STATUS", $newStatus ?? "fields_updated");
+
+        $this->jsonResponse([
+            "success" => true,
+            "video" => $this->fetchAdminVideo($id),
+        ]);
+    }
+
+    public function handleApiAdminUserBan(array $input): void
+    {
+        $moderator = $this->requireModerator();
+        $userId = $this->validate($input["user_id"] ?? "", "id");
+        $type = $this->validate($input["type"] ?? "", "enum", [
+            "allowed" => ["general", "comment", "video", "chat"],
+        ]);
+        $reason = $this->validate($input["reason"] ?? "", "text", ["max" => 500]);
+        if (!$userId || !$type || !$reason) {
+            $this->jsonResponse(["error" => "Invalid ban input"], 400);
+        }
+        if ($userId === ($moderator["id"] ?? "")) {
+            $this->jsonResponse(["error" => "Cannot ban yourself"], 400);
+        }
+
+        $stmt = $this->db()->prepare(
+            "SELECT id, username, role, status FROM users WHERE id = ? LIMIT 1",
+        );
+        $stmt->execute([$userId]);
+        $target = $stmt->fetch();
+        if (!$target) {
+            $this->jsonResponse(["error" => "User not found"], 404);
+        }
+        if (
+            $this->currentUserRole() === "moderator" &&
+            in_array((string) $target["role"], ["admin", "system"], true)
+        ) {
+            $this->jsonResponse(["error" => "Cannot ban privileged users"], 403);
+        }
+
+        $endsAt = null;
+        if (array_key_exists("ends_at", $input) && trim((string) $input["ends_at"]) !== "") {
+            try {
+                $endsAt = (new DateTimeImmutable((string) $input["ends_at"]))->format("Y-m-d H:i:s");
+            } catch (Throwable) {
+                $this->jsonResponse(["error" => "Invalid ban end time"], 400);
+            }
+        }
+
+        $banId = $this->createBan(
+            $userId,
+            $type,
+            $reason,
+            $endsAt,
+            "user",
+            $moderator["id"],
+        );
+        $this->logAdminAction($moderator["id"], "user", $userId, "USER_BAN", $type);
+        $this->cacheDelete("user_" . $userId);
+        $this->cacheDeletePrefix("profile_" . $userId . "_");
+
+        $this->jsonResponse(["success" => true, "ban_id" => $banId]);
+    }
+
+    private function truthyInput(mixed $value): bool
+    {
+        return in_array($value, [true, 1, "1", "true", "on", "yes"], true);
+    }
+
+    private function publicAdminUserProjection(array $user): array
+    {
+        return [
+            "id" => (string) ($user["id"] ?? ""),
+            "username" => (string) ($user["username"] ?? ""),
+            "display_name" => $user["display_name"] ?? null,
+            "role" => (string) ($user["role"] ?? "user"),
+            "status" => (string) ($user["status"] ?? "active"),
+            "created_at" => $user["created_at"] ?? null,
+            "updated_at" => $user["updated_at"] ?? null,
+        ];
+    }
+
+    private function publicAdminVideoProjection(array $video): array
+    {
+        return [
+            "id" => (string) ($video["id"] ?? ""),
+            "title" => (string) ($video["title"] ?? ""),
+            "status" => (string) ($video["status"] ?? ""),
+            "processing_status" => (string) ($video["processing_status"] ?? ""),
+            "storage_type" => (string) ($video["storage_type"] ?? ""),
+            "user_id" => (string) ($video["user_id"] ?? ""),
+            "owner" => [
+                "id" => (string) ($video["user_id"] ?? ""),
+                "username" => (string) ($video["owner_username"] ?? ""),
+                "display_name" => $video["owner_display_name"] ?? null,
+            ],
+            "duration" => (int) ($video["duration"] ?? 0),
+            "views_count" => (int) ($video["views_count"] ?? 0),
+            "is_sensitive" => (int) ($video["is_sensitive"] ?? 0),
+            "disable_comments" => (int) ($video["disable_comments"] ?? 0),
+            "created_at" => $video["created_at"] ?? null,
+            "updated_at" => $video["updated_at"] ?? null,
+        ];
+    }
+
+    private function publicAdminReportProjection(array $report): array
+    {
+        $reporterId = $report["reporter_id"] ?? $report["reporter_id_value"] ?? null;
+        $reviewerId = $report["reviewed_by"] ?? $report["reviewer_id_value"] ?? null;
+        return [
+            "id" => (string) ($report["id"] ?? ""),
+            "target_type" => (string) ($report["target_type"] ?? ""),
+            "target_id" => (string) ($report["target_id"] ?? ""),
+            "reason" => (string) ($report["reason"] ?? ""),
+            "details" => $report["details"] ?? null,
+            "status" => (string) ($report["status"] ?? ""),
+            "reporter" => $reporterId ? [
+                "id" => (string) $reporterId,
+                "username" => (string) ($report["reporter_username"] ?? ""),
+                "display_name" => $report["reporter_display_name"] ?? null,
+            ] : null,
+            "reviewer" => $reviewerId ? [
+                "id" => (string) $reviewerId,
+                "username" => (string) ($report["reviewer_username"] ?? ""),
+                "display_name" => $report["reviewer_display_name"] ?? null,
+            ] : null,
+            "reviewed_at" => $report["reviewed_at"] ?? null,
+            "resolution_note" => $report["resolution_note"] ?? null,
+            "created_at" => $report["created_at"] ?? null,
+        ];
+    }
+
+    private function publicAdminJobProjection(array $job): array
+    {
+        $lastError = $job["last_error"] ?? null;
+        return [
+            "id" => (string) ($job["id"] ?? ""),
+            "event_type" => (string) ($job["event_type"] ?? ""),
+            "target_type" => (string) ($job["target_type"] ?? ""),
+            "target_id" => (string) ($job["target_id"] ?? ""),
+            "status" => (string) ($job["status"] ?? ""),
+            "priority" => (int) ($job["priority"] ?? 0),
+            "attempts" => (int) ($job["attempts"] ?? 0),
+            "max_attempts" => (int) ($job["max_attempts"] ?? 0),
+            "available_at" => $job["available_at"] ?? null,
+            "locked_at" => $job["locked_at"] ?? null,
+            "locked_until" => $job["locked_until"] ?? null,
+            "started_at" => $job["started_at"] ?? null,
+            "completed_at" => $job["completed_at"] ?? null,
+            "failed_at" => $job["failed_at"] ?? null,
+            "last_error" => $lastError === null ? null : mb_substr((string) $lastError, 0, 300),
+        ];
+    }
+
+    private function fetchAdminReport(string $id): array
+    {
+        $stmt = $this->db()->prepare(
+            "SELECT r.*,
+                reporter.id AS reporter_id_value,
+                reporter.username AS reporter_username,
+                reporter.display_name AS reporter_display_name,
+                reviewer.id AS reviewer_id_value,
+                reviewer.username AS reviewer_username,
+                reviewer.display_name AS reviewer_display_name
+            FROM reports r
+            LEFT JOIN users reporter ON reporter.id = r.reporter_id
+            LEFT JOIN users reviewer ON reviewer.id = r.reviewed_by
+            WHERE r.id = ? LIMIT 1",
+        );
+        $stmt->execute([$id]);
+        $report = $stmt->fetch();
+        if (!$report) {
+            $this->jsonResponse(["error" => "Report not found"], 404);
+        }
+        return $this->publicAdminReportProjection($report);
+    }
+
+    private function fetchAdminVideo(string $id): array
+    {
+        $stmt = $this->db()->prepare(
+            "SELECT v.id, v.user_id, v.title, v.duration, v.views_count, v.is_sensitive,
+                v.disable_comments, v.status, v.storage_type, v.processing_status,
+                v.created_at, v.updated_at,
+                u.username AS owner_username, u.display_name AS owner_display_name
+            FROM videos v
+            JOIN users u ON u.id = v.user_id
+            WHERE v.id = ? LIMIT 1",
+        );
+        $stmt->execute([$id]);
+        $video = $stmt->fetch();
+        if (!$video) {
+            $this->jsonResponse(["error" => "Video not found"], 404);
+        }
+        return $this->publicAdminVideoProjection($video);
+    }
+
     public function fetch(string $name): mixed
     {
         return match ($name) {
@@ -2105,6 +2651,37 @@ final class LimeVideo
             ["moderator", "admin", "system"],
             true,
         );
+    }
+
+    /**
+     * Requires an authenticated moderator-level user for admin APIs.
+     * Input: session state.
+     * Output: current session user array.
+     */
+    private function requireModerator(): array
+    {
+        if (empty($_SESSION["user"]) || !is_array($_SESSION["user"])) {
+            $this->jsonResponse(["error" => "Auth required"], 401);
+        }
+        if (!$this->canModerateVideos()) {
+            $this->jsonResponse(["error" => "Forbidden"], 403);
+        }
+        return $_SESSION["user"];
+    }
+
+    /**
+     * Normalizes admin list pagination.
+     * Input: optional limit/offset query params.
+     * Output: [limit, offset].
+     */
+    private function adminPagination(int $default = 25, int $max = 100): array
+    {
+        $limit = (int) ($_GET["limit"] ?? $default);
+        $offset = (int) ($_GET["offset"] ?? 0);
+        return [
+            "limit" => min(max(1, $max), max(1, $limit)),
+            "offset" => max(0, $offset),
+        ];
     }
 
     /**
@@ -4445,8 +5022,16 @@ if (str_starts_with($uri, "/api/")) {
             "watch_later",
             "jobs",
             "analytics" => $App->requireMethod($method, ["POST"]),
+            "admin/report_status",
+            "admin/video_status",
+            "admin/user_ban" => $App->requireMethod($method, ["POST"]),
             // TODO: CSRF exemption is safe only with separate provider authentication or signature validation.
             "provider_webhook" => $App->requireMethod($method, ["POST"]),
+            "admin/summary",
+            "admin/reports",
+            "admin/videos",
+            "admin/users",
+            "admin/jobs" => $App->requireMethod($method, ["GET"]),
             "chat/messages",
             "settings" => $App->requireMethod($method, ["GET", "POST"]),
             default => null,
@@ -4469,6 +5054,9 @@ if (str_starts_with($uri, "/api/")) {
                 "upload_video" => $App->checkRateLimit("upload_video", 5, 600),
                 "analytics" => $App->checkRateLimit("analytics", 240, 60),
                 "jobs" => $App->checkRateLimit("jobs", 10, 60),
+                "admin/report_status",
+                "admin/video_status",
+                "admin/user_ban" => $App->checkRateLimit("admin_action", 60, 60),
                 default => null,
             };
         }
@@ -4509,6 +5097,14 @@ if (str_starts_with($uri, "/api/")) {
             "ad_services" => $App->handleApiAdServices(),
             "external_video" => $App->handleApiExternalVideo($input),
             "upload_video" => $App->handleApiUploadVideo(),
+            "admin/summary" => $App->handleApiAdminSummary(),
+            "admin/reports" => $App->handleApiAdminReports(),
+            "admin/videos" => $App->handleApiAdminVideos(),
+            "admin/users" => $App->handleApiAdminUsers(),
+            "admin/jobs" => $App->handleApiAdminJobs(),
+            "admin/report_status" => $App->handleApiAdminReportStatus($input),
+            "admin/video_status" => $App->handleApiAdminVideoStatus($input),
+            "admin/user_ban" => $App->handleApiAdminUserBan($input),
             "provider_webhook" => $App->providerWebhook(
                 $App->validate($_GET["provider"] ?? "", "text", ["max" => 50]),
                 $input,
