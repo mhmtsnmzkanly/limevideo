@@ -4766,7 +4766,20 @@ final class LimeVideo
         return [$input];
     }
 
-    private function insertAnalyticsEvent(array $input): void
+    private function analyticsUserId(): ?string
+    {
+        $userId = $this->currentUserId();
+        if ($userId === null) {
+            return null;
+        }
+
+        $stmt = $this->db()->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+        $stmt->execute([$userId]);
+
+        return $stmt->fetchColumn() ? $userId : null;
+    }
+
+    private function insertAnalyticsEvent(array $input, ?string $userId): void
     {
         $eventType = $this->validate($input["event_type"] ?? "", "text", [
             "max" => 50,
@@ -4797,7 +4810,7 @@ final class LimeVideo
 
         $stmt->execute([
             $sessionId,
-            $_SESSION["user"]["id"] ?? null,
+            $userId,
             $eventType,
             $this->validate($input["page"] ?? null, "text", ["max" => 50]),
             $this->validate($input["route"] ?? null, "text", ["max" => 255]),
@@ -4841,9 +4854,10 @@ final class LimeVideo
         }
 
         try {
+            $userId = $this->analyticsUserId();
             $this->db()->beginTransaction();
             foreach ($events as $event) {
-                $this->insertAnalyticsEvent($event);
+                $this->insertAnalyticsEvent($event, $userId);
             }
             $this->db()->commit();
         } catch (InvalidArgumentException $exception) {
