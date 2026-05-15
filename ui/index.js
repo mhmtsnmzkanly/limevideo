@@ -1130,6 +1130,9 @@ const app = {
       return;
 
     const action = this.actionValue(target, "action");
+    const handler = handlers[action];
+    if (!handler) return;
+
     const stop = this.actionBool(target, "stop", false);
     const prevent = this.actionBool(
       target,
@@ -1139,8 +1142,7 @@ const app = {
     if (prevent) event.preventDefault();
     if (stop) event.stopPropagation();
 
-    const handler = handlers[action];
-    if (handler) handler.call(this, target, event);
+    handler.call(this, target, event);
   },
 
   handleActionClick(event) {
