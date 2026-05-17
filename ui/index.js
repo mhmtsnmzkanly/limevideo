@@ -1483,7 +1483,16 @@ const app = {
     }
 
     let script = document.getElementById("captcha-script");
-    if (script && script.getAttribute("src") === config.script_url) return;
+    if (script && script.getAttribute("src") === config.script_url) {
+      if (window.turnstile && typeof window.turnstile.render === "function") {
+        this.renderCaptchaWidgets();
+      } else {
+        script.addEventListener("load", () => this.renderCaptchaWidgets(), {
+          once: true,
+        });
+      }
+      return;
+    }
     if (script) script.remove();
 
     script = document.createElement("script");
@@ -1491,7 +1500,7 @@ const app = {
     script.src = config.script_url;
     script.async = true;
     script.defer = true;
-    script.onload = () => window.limevideoCaptchaReady?.();
+    script.onload = () => this.renderCaptchaWidgets();
     document.head.appendChild(script);
   },
 
