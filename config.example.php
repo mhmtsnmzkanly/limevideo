@@ -75,7 +75,7 @@ return [
     // Optional local upload settings. If omitted from config.php, safe defaults are used.
     "uploads" => [
         "video_dir" => "uploads/videos",
-        "thumbnail_dir" => "uploads/thumbnails",
+        "thumbnail_dir" => "uploads/thumbs",
         "max_video_size_bytes" => 524288000,
         "max_thumbnail_size_bytes" => 5242880,
         "video_extensions" => ["mp4", "webm", "mov"],

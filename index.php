@@ -142,7 +142,7 @@ final class LimeVideo
     {
         $defaults = [
             "video_dir" => "uploads/videos",
-            "thumbnail_dir" => "uploads/thumbnails",
+            "thumbnail_dir" => "uploads/thumbs",
             "max_video_size_bytes" => 524288000,
             "max_thumbnail_size_bytes" => 5242880,
             "video_extensions" => ["mp4", "webm", "mov"],
@@ -3853,7 +3853,7 @@ final class LimeVideo
             if ($thumbnailFile) {
                 $thumbnailPath = $this->moveValidatedUpload(
                     $thumbnailFile,
-                    (string) $this->uploadConfig("thumbnail_dir", "uploads/thumbnails"),
+                    (string) $this->uploadConfig("thumbnail_dir", "uploads/thumbs"),
                     $videoId . "_thumb_" . $suffix,
                 );
                 $movedFiles[] = __DIR__ . "/" . $thumbnailPath;
