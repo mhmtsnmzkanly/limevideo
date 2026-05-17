@@ -882,10 +882,12 @@ final class LimeVideo
             );
         }
 
+        // Turnstile remoteip is optional. Do not send REMOTE_ADDR because
+        // production may be behind a proxy/CDN and a proxy IP can reject a
+        // otherwise valid token.
         $payload = http_build_query([
             "secret" => $secret,
             "response" => $token,
-            "remoteip" => $_SERVER["REMOTE_ADDR"] ?? "",
         ]);
         $context = stream_context_create([
             "http" => [
@@ -903,9 +905,16 @@ final class LimeVideo
         $result = $raw ? json_decode($raw, true) : null;
 
         if (!is_array($result) || empty($result["success"])) {
+            $errors = is_array($result)
+                ? ($result["error-codes"] ?? [])
+                : ["no-response"];
+            error_log(
+                "LimeVideo captcha verification failed: " .
+                    implode(",", array_map("strval", (array) $errors)),
+            );
             $response = ["error" => "Captcha verification failed"];
             if ((bool) $this->app["dev_mode"]) {
-                $response["captcha_errors"] = $result["error-codes"] ?? [];
+                $response["captcha_errors"] = $errors;
             }
             $this->jsonResponse($response, 400);
         }
