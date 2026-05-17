@@ -96,6 +96,7 @@ const app = {
     popunderTriggered: false,
     adTimer: 5,
     adInterval: null,
+    prerollShownVideoId: null,
     isCaptchaVerified: false,
     replyParentId: null,
     autoplay: true,
@@ -519,6 +520,10 @@ const app = {
         const data = await this.apiPost("/api/follow", { user_id: id });
         if (data.status === "followed") this.showStatus("Followed.");
         else this.showStatus("Unfollowed.");
+        if (this.activePage === "watch") {
+          this.updateWatchFollowUi(id, data.status === "followed");
+          return;
+        }
         if (this.activePage === "user") this.route();
       } catch (e) {
         this.showStatus(this.getFriendlyErrorMessage(e), "error");
@@ -541,7 +546,7 @@ const app = {
           target_type: "video",
           type: value,
         });
-        this.route();
+        this.updateWatchVoteUi(value);
       } catch (e) {
         this.showStatus(this.getFriendlyErrorMessage(e), "error");
       }
@@ -829,7 +834,8 @@ const app = {
     },
     "share-profile"(target) {
       const id = this.actionValue(target, "id");
-      const url = `${window.location.origin}/profile/${id}`;
+      const username = this.actionValue(target, "username", id);
+      const url = `${window.location.origin}/profile/${encodeURIComponent(username)}`;
       navigator.clipboard?.writeText(url);
       this.trackAnalytics("profile_share", {
         target_type: "user",
@@ -1771,7 +1777,9 @@ const app = {
       description =
         this.normalizeSeoText(data?.bio, 155) ||
         `Public LimeVideo profile for ${name}.`;
-      canonicalPath = data?.id ? `/profile/${encodeURIComponent(data.id)}` : "/gallery";
+      canonicalPath = data?.username
+        ? `/profile/${encodeURIComponent(data.username)}`
+        : "/gallery";
       if (data?.error) robots = "noindex,nofollow";
     } else if (page === "auth") {
       const hash = window.location.hash || "#login";
@@ -2455,7 +2463,7 @@ const app = {
         this.currentProfile = bootstrap.data.profile;
         return bootstrap.data.profile;
       }
-      const url = `/api/profile?id=${id}${tab ? `&tab=${tab}` : ""}`;
+      const url = `/api/profile?id=${encodeURIComponent(id)}${tab ? `&tab=${encodeURIComponent(tab)}` : ""}`;
       const data = await this.apiGet(url);
       this.currentProfile = data;
       return data;
@@ -2715,6 +2723,53 @@ const app = {
     });
   },
 
+  updateWatchFollowUi(userId, followed) {
+    if (!this.currentWatch || this.currentWatch.user_id !== userId) return;
+    const previous = Number(this.currentWatch.is_following) === 1;
+    this.currentWatch.is_following = followed ? 1 : 0;
+    const followers = Number(this.currentWatch.followers_count || 0);
+    if (followed !== previous) {
+      this.currentWatch.followers_count = Math.max(
+        0,
+        followers + (followed ? 1 : -1),
+      );
+    }
+
+    document.querySelectorAll('[data-action="follow-profile"]').forEach((button) => {
+      if (this.actionValue(button, "id") === userId) {
+        this.setText(button, followed ? "Following" : "Subscribe");
+      }
+    });
+    const subscriberLabel = document.getElementById("watch-subscriber-count");
+    if (subscriberLabel) {
+      this.setText(
+        subscriberLabel,
+        `${this.currentWatch.followers_count || 0} Subscribers`,
+      );
+    }
+  },
+
+  updateWatchVoteUi(voteType) {
+    if (!this.currentWatch) return;
+    const previous = this.currentWatch.user_vote || "";
+    if (previous === voteType) return;
+
+    const currentScore = Number(this.currentWatch.votes_sum || 0);
+    const previousDelta = previous === "up" ? -1 : previous === "down" ? 1 : 0;
+    const nextDelta = voteType === "up" ? 1 : voteType === "down" ? -1 : 0;
+    this.currentWatch.user_vote = voteType;
+    this.currentWatch.votes_sum = currentScore + previousDelta + nextDelta;
+
+    document.querySelectorAll('[data-action="vote-video"]').forEach((button) => {
+      button.classList.toggle(
+        "active",
+        this.actionValue(button, "value") === voteType,
+      );
+    });
+    const count = document.getElementById("watch-vote-count");
+    if (count) this.setText(count, this.currentWatch.votes_sum || 0);
+  },
+
   renderThumbnail(video = {}, className = "") {
     const url = this.thumbnailUrl(video);
     return url
@@ -2819,6 +2874,11 @@ const app = {
 
   startPrerollAd() {
     if (
+      this.lastWatchedId &&
+      this.state.prerollShownVideoId === this.lastWatchedId
+    )
+      return;
+    if (
       this.state.settings &&
       Number(this.state.settings.show_preroll_ads) !== 1
     )
@@ -2828,6 +2888,7 @@ const app = {
     const skipBtn = document.getElementById("skip-btn");
     if (!overlay || !timerText || !skipBtn) return;
     this.state.adTimer = 5;
+    this.state.prerollShownVideoId = this.lastWatchedId || "unknown";
     this.setText(timerText, "Video will start in 5 seconds...");
     skipBtn.style.display = "none";
     overlay.classList.add("active");

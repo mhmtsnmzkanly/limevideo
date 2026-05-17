@@ -19,7 +19,7 @@
     <script id="limevideo-bootstrap" type="application/json">__LIMEVIDEO_BOOTSTRAP__</script>
     
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/public/index.css?v=8173a4132e">
+    <link rel="stylesheet" href="/public/index.css?v=682b8bef22">
 </head>
 <body>
     <!-- Global Loading Screen: full-page boot loader shown before the app shell is ready -->
@@ -415,7 +415,7 @@
                     <p class="font-black text-sm italic">${me.username}</p>
                     <p class="text-[9px] text-gray-500 uppercase tracking-widest">User Profile</p>
                 </div>
-                <div class="dropdown-item cursor-pointer" data-action="navigate" data-to="/profile/${me.id}">
+                <div class="dropdown-item cursor-pointer" data-action="navigate" data-to="/profile/${app.safeAttr(me.username || me.id)}">
                     <i class="fa-solid fa-user"></i> My Profile
                 </div>
                 <div class="dropdown-item cursor-pointer" data-action="navigate" data-to="/settings">
@@ -661,7 +661,7 @@
 
     <!-- Template Engine: one profile user row -->
     <template id="tpl-partial-profile-user-item">
-        <div class="lime-card p-4 flex items-center gap-4 cursor-pointer hover:border-[#00ff41] transition-colors" data-action="navigate" data-to="/profile/${u.id}">
+        <div class="lime-card p-4 flex items-center gap-4 cursor-pointer hover:border-[#00ff41] transition-colors" data-action="navigate" data-to="/profile/${app.safeAttr(u.username || u.id)}">
             <div class="w-12 h-12 rounded-2xl bg-[#111] border border-white/5 overflow-hidden flex items-center justify-center">
                 ${avatarHtml}
             </div>
@@ -907,15 +907,17 @@
                         <h1 class="text-2xl font-bold mb-5 leading-tight tracking-tight">${v.title || 'Loading...'}</h1>
                         <div class="flex flex-wrap items-center justify-between gap-6 pb-6 border-b border-white/5">
                             <div class="flex flex-wrap items-center gap-4">
-                                <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">${avatarHtml}</div>
-                                <div>
+                                <div class="flex items-center gap-4 cursor-pointer group" data-action="navigate" data-to="/profile/${app.safeAttr(v.username || v.user_id)}">
+                                    <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden group-hover:border-[#00ff41] transition-colors">${avatarHtml}</div>
+                                    <div>
                                     <h3 class="text-sm font-bold flex items-center gap-1">${v.display_name || v.username || 'LimeVideo Creator'} <i class="fa-solid fa-circle-check text-[#00ff41] text-[10px]"></i></h3>
-                                    <p class="text-[10px] text-gray-500 font-black uppercase tracking-widest">${v.followers_count || 0} Subscribers</p>
+                                    <p id="watch-subscriber-count" class="text-[10px] text-gray-500 font-black uppercase tracking-widest">${v.followers_count || 0} Subscribers</p>
+                                    </div>
                                 </div>
-                                <button data-action="follow-profile" data-id="${v.user_id}" class="bg-white text-black px-6 py-2 rounded-xl text-xs font-black uppercase">${Number(v.is_following) ? 'Following' : 'Subscribe'}</button>
+                                <button data-action="follow-profile" data-id="${v.user_id}" class="bg-white text-black px-6 py-2 rounded-xl text-xs font-black uppercase ${app.state.auth.me?.id === v.user_id ? 'hidden' : ''}">${Number(v.is_following) ? 'Following' : 'Subscribe'}</button>
                             </div>
                             <div class="flex flex-wrap items-center gap-3">
-                                <div class="vote-pill-v2"><div class="vote-btn-v2 ${v.user_vote === 'up' ? 'active' : ''}" data-action="vote-video" data-value="up"><i class="fa-solid fa-arrow-up"></i></div><div class="vote-count-v2">${v.votes_sum || 0}</div><div class="vote-btn-v2 down ${v.user_vote === 'down' ? 'active' : ''}" data-action="vote-video" data-value="down"><i class="fa-solid fa-arrow-down"></i></div></div>
+                                <div class="vote-pill-v2"><div class="vote-btn-v2 ${v.user_vote === 'up' ? 'active' : ''}" data-action="vote-video" data-value="up"><i class="fa-solid fa-arrow-up"></i></div><div id="watch-vote-count" class="vote-count-v2">${v.votes_sum || 0}</div><div class="vote-btn-v2 down ${v.user_vote === 'down' ? 'active' : ''}" data-action="vote-video" data-value="down"><i class="fa-solid fa-arrow-down"></i></div></div>
                                 <button data-action="save-video" data-id="${v.id}" class="bg-white/5 border border-white/10 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider hover:border-[#00ff41] transition-all"><i class="${Number(v.is_saved) ? 'fa-solid' : 'fa-regular'} fa-bookmark mr-2"></i>${Number(v.is_saved) ? 'Saved' : 'Save'}</button>
                                 <button data-action="watch-later" data-id="${v.id}" class="bg-white/5 border border-white/10 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider hover:border-[#00ff41] transition-all"><i class="fa-regular fa-clock mr-2"></i>Later</button>
                                 <button data-action="share-video" data-id="${v.id}" class="bg-white/5 border border-white/10 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider hover:border-[#00ff41] transition-all"><i class="fa-solid fa-share-nodes mr-2"></i>Share</button>
@@ -1013,7 +1015,7 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-3 md:mb-1 justify-center md:justify-end">
-                            <button data-action="share-profile" data-id="${u.id}" class="bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.16em] hover:border-[#00ff41] transition-all">Share</button>
+                            <button data-action="share-profile" data-id="${u.id}" data-username="${app.safeAttr(u.username || u.id)}" class="bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.16em] hover:border-[#00ff41] transition-all">Share</button>
                             ${actionsHtml}
                         </div>
                     </div>
@@ -1077,6 +1079,6 @@
         </div>
     </template>
 
-    <script src="/public/index.js?v=a2e05c9625"></script>
+    <script src="/public/index.js?v=4c78e4fa0b"></script>
 </body>
 </html>

@@ -329,29 +329,30 @@ final class LimeVideo
     {
         $stmt = $this->db()->prepare(
             "SELECT id, username, display_name, bio, avatar_url, cover_url, created_at
-            FROM users WHERE id = ? AND status = 'active' LIMIT 1",
+            FROM users WHERE (id = ? OR username = ?) AND status = 'active' LIMIT 1",
         );
-        $stmt->execute([$id]);
+        $stmt->execute([$id, $id]);
         $user = $stmt->fetch();
         if (!$user) {
             return null;
         }
 
+        $userId = $user["id"];
         $chatVideoId = $this->chatVideoId();
         $stats = $this->db()->prepare("SELECT
             (SELECT COUNT(*) FROM videos WHERE user_id = ? AND status = 'public' AND processing_status = 'ready' AND id <> ?) AS videos,
             (SELECT COUNT(*) FROM follows WHERE followed_id = ?) AS followers,
             (SELECT COUNT(*) FROM follows WHERE follower_id = ?) AS following,
             (SELECT COUNT(*) FROM comments c JOIN videos v ON v.id = c.target_id WHERE c.user_id = ? AND c.status = 'active' AND v.status = 'public' AND v.processing_status = 'ready' AND c.target_id <> ?) AS comments,
-            (SELECT COALESCE(SUM(views_count), 0) FROM videos WHERE user_id = ? AND status = 'public' AND processing_status = 'ready' AND id <> ?) AS views");
+                (SELECT COALESCE(SUM(views_count), 0) FROM videos WHERE user_id = ? AND status = 'public' AND processing_status = 'ready' AND id <> ?) AS views");
         $stats->execute([
-            $id,
+            $userId,
             $chatVideoId,
-            $id,
-            $id,
-            $id,
+            $userId,
+            $userId,
+            $userId,
             $chatVideoId,
-            $id,
+            $userId,
             $chatVideoId,
         ]);
 
@@ -362,7 +363,7 @@ final class LimeVideo
             JOIN users u ON u.id = v.user_id
             WHERE v.user_id = ? AND v.status = 'public' AND v.processing_status = 'ready' AND v.id <> ?
             ORDER BY v.created_at DESC LIMIT 12");
-        $videos->execute([$id, $chatVideoId]);
+        $videos->execute([$userId, $chatVideoId]);
 
         return [
             "id" => $user["id"],
@@ -507,15 +508,15 @@ final class LimeVideo
                 return [
                     "route" => [
                         "type" => "profile",
-                        "id" => $id,
-                        "canonical" => $this->baseUrl("/profile/" . rawurlencode($id)),
+                        "id" => $profile["username"],
+                        "canonical" => $this->baseUrl("/profile/" . rawurlencode($profile["username"])),
                     ],
                     "seo" => [
                         "title" => "{$name} - LimeVideo",
                         "description" =>
                             $this->plainText($profile["bio"], 155) ?:
                             "Public LimeVideo profile for {$name}.",
-                        "canonical" => $this->baseUrl("/profile/" . rawurlencode($id)),
+                        "canonical" => $this->baseUrl("/profile/" . rawurlencode($profile["username"])),
                         "robots" => "index,follow",
                         "og_type" => "profile",
                         "image" => $profile["avatar_url"] ?: "",
@@ -641,7 +642,7 @@ final class LimeVideo
         }
 
         $userStmt = $this->db()->prepare(
-            "SELECT u.id, COALESCE(u.updated_at, u.created_at) AS lastmod
+            "SELECT u.id, u.username, COALESCE(u.updated_at, u.created_at) AS lastmod
             FROM users u
             WHERE u.status = 'active'
               AND u.id <> ?
@@ -658,7 +659,7 @@ final class LimeVideo
         $userStmt->execute([$chatOwnerId]);
         foreach ($userStmt->fetchAll() as $user) {
             $urls[] = [
-                "loc" => $this->baseUrl("/profile/" . rawurlencode($user["id"])),
+                "loc" => $this->baseUrl("/profile/" . rawurlencode($user["username"])),
                 "lastmod" => $this->sitemapLastmod($user["lastmod"] ?? null),
             ];
         }
@@ -2271,7 +2272,7 @@ final class LimeVideo
     {
         return match ($name) {
             // Active tag list used by UI category/tag selectors.
-            "tags" => $this->remember("portal_tags_v2", 3600, function () {
+            "tags" => $this->remember("portal_tags_v3", 3600, function () {
                 return $this->db()
                     ->query("SELECT name, slug FROM tags ORDER BY name ASC")
                     ->fetchAll() ?:
@@ -3582,17 +3583,12 @@ final class LimeVideo
     public function getProfile(string $id, string $tab = "videos"): void
     {
         $viewerId = $_SESSION["user"]["id"] ?? "guest";
-        $profileCacheKey = "profile_{$id}_{$viewerId}";
-        $cachedProfile = $this->cacheGet($profileCacheKey, 60);
-        if ($cachedProfile !== null) {
-            $this->jsonResponse($cachedProfile);
-        }
         $chatVideoId = $this->chatVideoId();
 
         $stmt = $this->db()->prepare(
-            "SELECT id, username, display_name, bio, avatar_url, cover_url, role, created_at, status FROM users WHERE id = ? LIMIT 1",
+            "SELECT id, username, display_name, bio, avatar_url, cover_url, role, created_at, status FROM users WHERE id = ? OR username = ? LIMIT 1",
         );
-        $stmt->execute([$id]);
+        $stmt->execute([$id, $id]);
         $user = $stmt->fetch();
 
         if (!$user || ($user["status"] ?? null) !== "active") {
@@ -3600,6 +3596,12 @@ final class LimeVideo
                 ["error" => "This profile is no longer available."],
                 404,
             );
+        }
+
+        $profileCacheKey = "profile_" . $user["id"] . "_{$viewerId}";
+        $cachedProfile = $this->cacheGet($profileCacheKey, 60);
+        if ($cachedProfile !== null) {
+            $this->jsonResponse($cachedProfile);
         }
 
         $canSeePrivateProfileVideos =
