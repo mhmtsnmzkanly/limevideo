@@ -3418,10 +3418,10 @@ final class LimeVideo
         $commentVideoId = null;
         if ($targetType === "comment") {
             $lookup = $this->db()->prepare(
-                "SELECT c.target_id, v.user_id, v.status
+                "SELECT c.target_id, c.status AS comment_status, v.user_id, v.status
                 FROM comments c
                 JOIN videos v ON v.id = c.target_id
-                WHERE c.id = ? LIMIT 1",
+                WHERE c.id = ? AND c.status = 'active' LIMIT 1",
             );
             $lookup->execute([$targetId]);
             $commentVideo = $lookup->fetch();
@@ -3436,15 +3436,30 @@ final class LimeVideo
             $this->visibleVideoOrFail($targetId);
         }
 
-        $this->db()
-            ->prepare(
-                "DELETE FROM votes WHERE voter_user_id = ? AND target_type = ? AND target_id = ?",
-            )
-            ->execute([$uid, $targetType, $targetId]);
-        $stmt = $this->db()->prepare(
-            "INSERT INTO votes (voter_user_id, target_type, target_id, vote_type) VALUES (?,?,?,?)",
+        $existingStmt = $this->db()->prepare(
+            "SELECT vote_type FROM votes WHERE voter_user_id = ? AND target_type = ? AND target_id = ? LIMIT 1",
         );
-        $stmt->execute([$uid, $targetType, $targetId, $type]);
+        $existingStmt->execute([$uid, $targetType, $targetId]);
+        $existingVote = $existingStmt->fetchColumn();
+
+        if ($existingVote === $type) {
+            $this->db()
+                ->prepare(
+                    "DELETE FROM votes WHERE voter_user_id = ? AND target_type = ? AND target_id = ?",
+                )
+                ->execute([$uid, $targetType, $targetId]);
+        } elseif ($existingVote) {
+            $this->db()
+                ->prepare(
+                    "UPDATE votes SET vote_type = ?, voted_at = NOW() WHERE voter_user_id = ? AND target_type = ? AND target_id = ?",
+                )
+                ->execute([$type, $uid, $targetType, $targetId]);
+        } else {
+            $stmt = $this->db()->prepare(
+                "INSERT INTO votes (voter_user_id, target_type, target_id, vote_type) VALUES (?,?,?,?)",
+            );
+            $stmt->execute([$uid, $targetType, $targetId, $type]);
+        }
 
         // Vote changes affect comment and profile-derived caches.
         if ($targetType === "comment" && $commentVideoId) {
@@ -3452,7 +3467,29 @@ final class LimeVideo
         }
         $this->cacheDeletePrefix("profile_");
 
-        $this->jsonResponse(["success" => true]);
+        $stateStmt = $this->db()->prepare(
+            "SELECT
+                COALESCE(SUM(CASE WHEN vote_type = 'up' THEN 1 ELSE -1 END), 0) AS votes_sum,
+                (SELECT vote_type FROM votes WHERE voter_user_id = ? AND target_type = ? AND target_id = ?) AS user_vote
+            FROM votes
+            WHERE target_type = ? AND target_id = ?",
+        );
+        $stateStmt->execute([
+            $uid,
+            $targetType,
+            $targetId,
+            $targetType,
+            $targetId,
+        ]);
+        $state = $stateStmt->fetch() ?: [];
+
+        $this->jsonResponse([
+            "success" => true,
+            "target_type" => $targetType,
+            "target_id" => $targetId,
+            "votes_sum" => (int) ($state["votes_sum"] ?? 0),
+            "user_vote" => $state["user_vote"] ?? null,
+        ]);
     }
 
     public function comment(

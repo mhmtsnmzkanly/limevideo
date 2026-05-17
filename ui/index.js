@@ -541,12 +541,12 @@ const app = {
           target_id: this.lastWatchedId,
           metadata: { vote_type: value },
         });
-        await this.apiPost("/api/vote", {
+        const data = await this.apiPost("/api/vote", {
           target_id: this.lastWatchedId,
           target_type: "video",
           type: value,
         });
-        this.updateWatchVoteUi(value);
+        this.updateWatchVoteUi(data);
       } catch (e) {
         this.showStatus(this.getFriendlyErrorMessage(e), "error");
       }
@@ -2749,25 +2749,21 @@ const app = {
     }
   },
 
-  updateWatchVoteUi(voteType) {
+  updateWatchVoteUi(voteState = {}) {
     if (!this.currentWatch) return;
-    const previous = this.currentWatch.user_vote || "";
-    if (previous === voteType) return;
-
-    const currentScore = Number(this.currentWatch.votes_sum || 0);
-    const previousDelta = previous === "up" ? -1 : previous === "down" ? 1 : 0;
-    const nextDelta = voteType === "up" ? 1 : voteType === "down" ? -1 : 0;
-    this.currentWatch.user_vote = voteType;
-    this.currentWatch.votes_sum = currentScore + previousDelta + nextDelta;
+    const userVote = voteState.user_vote || "";
+    const votesSum = Number(voteState.votes_sum || 0);
+    this.currentWatch.user_vote = userVote;
+    this.currentWatch.votes_sum = votesSum;
 
     document.querySelectorAll('[data-action="vote-video"]').forEach((button) => {
       button.classList.toggle(
         "active",
-        this.actionValue(button, "value") === voteType,
+        this.actionValue(button, "value") === userVote,
       );
     });
     const count = document.getElementById("watch-vote-count");
-    if (count) this.setText(count, this.currentWatch.votes_sum || 0);
+    if (count) this.setText(count, votesSum);
   },
 
   renderThumbnail(video = {}, className = "") {
