@@ -5335,9 +5335,11 @@ $method = $_SERVER["REQUEST_METHOD"];
 if ($uri === "/sitemap.xml") {
     header("Content-Type: application/xml; charset=utf-8");
     if (!is_file(__DIR__ . "/sitemap.xml")) {
-        http_response_code(404);
-        echo "sitemap.xml not generated";
-        exit();
+        if (!$App->generateSitemapXml() || !is_file(__DIR__ . "/sitemap.xml")) {
+            http_response_code(500);
+            echo "sitemap.xml generation failed";
+            exit();
+        }
     }
     readfile(__DIR__ . "/sitemap.xml");
     exit();
