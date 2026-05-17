@@ -109,8 +109,6 @@ const app = {
       captcha: {
         enabled: false,
         provider: "turnstile",
-        script_url:
-          "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
         public_key: "",
         form_field_name: "captcha_token",
       },
@@ -1451,9 +1449,6 @@ const app = {
     return {
       enabled: Boolean(config.enabled),
       provider: String(config.provider || "turnstile").toLowerCase(),
-      script_url:
-        String(config.script_url || "") ||
-        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
       public_key: String(config.public_key || ""),
       form_field_name: String(config.form_field_name || "captcha_token"),
     };
@@ -1476,32 +1471,28 @@ const app = {
 
   ensureCaptchaScript() {
     const config = this.captchaConfig();
-    if (!config.enabled || !config.script_url) return;
+    if (!config.enabled) return;
     if (!this.isSupportedCaptchaProvider(config)) {
       this.warnUnsupportedCaptchaProvider(config);
       return;
     }
 
-    let script = document.getElementById("captcha-script");
-    if (script && script.getAttribute("src") === config.script_url) {
-      if (window.turnstile && typeof window.turnstile.render === "function") {
-        this.renderCaptchaWidgets();
-      } else {
-        script.addEventListener("load", () => this.renderCaptchaWidgets(), {
-          once: true,
-        });
+    if (window.turnstile && typeof window.turnstile.render === "function") {
+      this.renderCaptchaWidgets();
+      return;
+    }
+
+    const script = document.querySelector('script[src*="turnstile"]');
+    if (!script) {
+      if (this.state.devMode) {
+        console.error("Captcha is enabled, but the Turnstile script was not injected into the shell.");
       }
       return;
     }
-    if (script) script.remove();
 
-    script = document.createElement("script");
-    script.id = "captcha-script";
-    script.src = config.script_url;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => this.renderCaptchaWidgets();
-    document.head.appendChild(script);
+    script.addEventListener("load", () => this.renderCaptchaWidgets(), {
+      once: true,
+    });
   },
 
   captchaPayload(purpose) {

@@ -61,11 +61,18 @@ return [
     ],
 
     // Captcha settings. v1 supports Turnstile / Turnstile-compatible captcha only.
-    // script_url must provide window.turnstile; verify_url and private_key are server-only.
+    // script is injected into the SPA shell as-is and must provide window.turnstile.
+    // verify_url and private_key are server-only.
     "captcha" => [
         "enabled" => false,
         "provider" => "turnstile",
-        "script_url" => "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
+        "script" => <<<'HTML'
+<script
+  src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+  async
+  defer
+></script>
+HTML,
         "public_key" => "CHANGE_ME_PUBLIC_KEY",
         "private_key" => "CHANGE_ME_PRIVATE_KEY",
         "verify_url" => "https://challenges.cloudflare.com/turnstile/v0/siteverify",

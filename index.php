@@ -636,10 +636,23 @@ final class LimeVideo
                 (string) ($seo["image"] ?? ""),
             ),
             "__LIMEVIDEO_BOOTSTRAP__" => $this->encodeBootstrapJson($bootstrap),
+            "__LIMEVIDEO_CAPTCHA_SCRIPT__" => $this->captchaScriptTag(),
         ];
 
         header("Content-Type: text/html; charset=utf-8");
         echo strtr($html, $replacements);
+    }
+
+    private function captchaScriptTag(): string
+    {
+        if (
+            empty($this->captcha["enabled"]) ||
+            ($this->captcha["provider"] ?? "turnstile") !== "turnstile"
+        ) {
+            return "";
+        }
+
+        return trim((string) ($this->captcha["script"] ?? ""));
     }
 
     private function xmlEscape(string $value): string
@@ -834,7 +847,6 @@ final class LimeVideo
         return [
             "enabled" => (bool) $this->captcha["enabled"],
             "provider" => (string) ($this->captcha["provider"] ?? "turnstile"),
-            "script_url" => (string) ($this->captcha["script_url"] ?? ""),
             "public_key" => (string) ($this->captcha["public_key"] ?? ""),
             "form_field_name" =>
                 (string) ($this->captcha["form_field_name"] ?? "captcha_token"),
