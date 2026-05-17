@@ -274,11 +274,14 @@ final class LimeVideo
         ];
     }
 
-    private function safeVideoSummary(array $video): array
+    private function publicVideoCard(array $video): array
     {
+        $thumbnail = (string) ($video["thumbnail_path"] ?? "");
+        if ($thumbnail === "") {
+            $thumbnail = (string) ($video["thumbnail_url"] ?? "");
+        }
         return [
             "id" => $video["id"] ?? "",
-            "user_id" => $video["user_id"] ?? "",
             "title" => $video["title"] ?? "",
             "description" => $video["description"] ?? "",
             "duration" => (int) ($video["duration"] ?? 0),
@@ -286,23 +289,89 @@ final class LimeVideo
             "views" => (int) ($video["views"] ?? $video["views_count"] ?? 0),
             "is_sensitive" => (int) ($video["is_sensitive"] ?? 0),
             "disable_comments" => (int) ($video["disable_comments"] ?? 0),
-            "status" => "public",
-            "storage_type" => $video["storage_type"] ?? "internal",
-            "provider" => $video["provider"] ?? null,
-            "file_path" => $video["file_path"] ?? null,
-            "playback_url" => $video["playback_url"] ?? null,
-            "thumbnail_path" => $video["thumbnail_path"] ?? "",
-            "thumbnail_url" => $video["thumbnail_url"] ?? null,
-            "playback_mode" => $video["playback_mode"] ?? "direct",
-            "processing_status" => "ready",
+            "thumbnail_url" => $thumbnail !== "" ? $thumbnail : null,
             "created_at" => $video["created_at"] ?? null,
             "updated_at" => $video["updated_at"] ?? null,
             "username" => $video["username"] ?? "",
             "display_name" => $video["display_name"] ?? ($video["username"] ?? ""),
             "avatar_url" => $video["avatar_url"] ?? "",
+        ];
+    }
+
+    private function publicVideoDetail(array $video): array
+    {
+        return array_merge($this->publicVideoCard($video), [
             "playback_source_url" => $video["playback_source_url"] ?? "",
             "player_mode" => $video["player_mode"] ?? "direct",
+            "votes_sum" => (int) ($video["votes_sum"] ?? 0),
+            "user_vote" => $video["user_vote"] ?? null,
+            "comments_count" => (int) ($video["comments_count"] ?? 0),
+            "is_saved" => (int) ($video["is_saved"] ?? 0),
+            "is_following" => (int) ($video["is_following"] ?? 0),
+            "followers_count" => (int) ($video["followers_count"] ?? 0),
+        ]);
+    }
+
+    private function publicProfileProjection(array $user): array
+    {
+        $projected = [
+            "id" => $user["id"] ?? "",
+            "username" => $user["username"] ?? "",
+            "display_name" => $user["display_name"] ?? ($user["username"] ?? ""),
+            "bio" => $user["bio"] ?? "",
+            "avatar_url" => $user["avatar_url"] ?? "",
+            "cover_url" => $user["cover_url"] ?? "",
+            "created_at" => $user["created_at"] ?? null,
+            "stats" => $user["stats"] ?? [],
+            "is_following" => (int) ($user["is_following"] ?? 0),
         ];
+
+        foreach (["videos", "saved", "liked"] as $key) {
+            $projected[$key] = array_map(
+                fn(array $video): array => $this->publicVideoCard($this->hydrateVideoPlayback($video)),
+                is_array($user[$key] ?? null) ? $user[$key] : [],
+            );
+        }
+
+        $projected["comments"] = array_map(
+            fn(array $comment): array => $this->publicCommentProjection($comment),
+            is_array($user["comments"] ?? null) ? $user["comments"] : [],
+        );
+        $projected["followers"] = is_array($user["followers"] ?? null) ? $user["followers"] : [];
+        $projected["following"] = is_array($user["following"] ?? null) ? $user["following"] : [];
+
+        return $projected;
+    }
+
+    private function publicCommentProjection(array $comment): array
+    {
+        $projected = [
+            "id" => $comment["id"] ?? "",
+            "target_id" => $comment["target_id"] ?? "",
+            "parent_id" => $comment["parent_id"] ?? null,
+            "body" => $comment["body"] ?? "",
+            "created_at" => $comment["created_at"] ?? null,
+            "username" => $comment["username"] ?? "",
+            "display_name" => $comment["display_name"] ?? ($comment["username"] ?? ""),
+            "avatar_url" => $comment["avatar_url"] ?? "",
+            "votes_sum" => (int) ($comment["votes_sum"] ?? 0),
+            "user_vote" => $comment["user_vote"] ?? null,
+        ];
+        if (array_key_exists("video_title", $comment)) {
+            $projected["video_title"] = $comment["video_title"];
+        }
+        if (is_array($comment["replies"] ?? null)) {
+            $projected["replies"] = array_map(
+                fn(array $reply): array => $this->publicCommentProjection($reply),
+                $comment["replies"],
+            );
+        }
+        return $projected;
+    }
+
+    private function safeVideoSummary(array $video): array
+    {
+        return $this->publicVideoCard($video);
     }
 
     private function publicVideoForBootstrap(string $id): ?array
@@ -322,7 +391,7 @@ final class LimeVideo
         if (!$stmt->fetchColumn()) {
             return null;
         }
-        return $this->safeVideoSummary($this->getVideoDetail($id, false));
+        return $this->publicVideoDetail($this->getVideoDetail($id, false));
     }
 
     private function publicProfileForBootstrap(string $id): ?array
@@ -475,7 +544,7 @@ final class LimeVideo
             $description =
                 $this->plainText($video["description"], 155) ?:
                 "Watch {$title} on LimeVideo.";
-            $image = $video["thumbnail_url"] ?: $video["thumbnail_path"];
+            $image = (string) ($video["thumbnail_url"] ?? "");
             if ($image && !preg_match("#^https?://#i", (string) $image)) {
                 $image = $this->baseUrl((string) $image);
             }
@@ -2318,6 +2387,16 @@ final class LimeVideo
         }
     }
 
+    private function resolveUserId(string $idOrUsername): ?string
+    {
+        $stmt = $this->db()->prepare(
+            "SELECT id FROM users WHERE id = ? OR username = ? LIMIT 1",
+        );
+        $stmt->execute([$idOrUsername, $idOrUsername]);
+        $id = $stmt->fetchColumn();
+        return $id ? (string) $id : null;
+    }
+
     /**
      * Calculates homepage/global counters with cache support.
      * Input: none.
@@ -3418,7 +3497,7 @@ final class LimeVideo
         $this->visibleVideoOrFail($videoId);
         $viewerId = $_SESSION["user"]["id"] ?? "guest";
         $cacheKey =
-            "comments_{$videoId}_{$viewerId}_{$sort}_" . sha1((string) $before);
+            "comments_v3_{$videoId}_{$viewerId}_{$sort}_" . sha1((string) $before);
         $cached = $this->cacheGet($cacheKey, 30);
         if ($cached !== null) {
             $this->jsonResponse($cached);
@@ -3470,6 +3549,10 @@ final class LimeVideo
             }
         }
 
+        $comments = array_map(
+            fn(array $comment): array => $this->publicCommentProjection($comment),
+            $comments,
+        );
         $this->cacheSet($cacheKey, $comments, 30);
         $this->jsonResponse($comments);
     }
@@ -3477,7 +3560,7 @@ final class LimeVideo
     public function getTrending(): void
     {
         $chatVideoId = $this->chatVideoId();
-        $videos = $this->remember("trending_public_v2", 60, function () use (
+        $videos = $this->remember("trending_public_v3", 60, function () use (
             $chatVideoId,
         ) {
             $stmt = $this->db()->prepare("SELECT v.*, u.username,
@@ -3489,7 +3572,14 @@ final class LimeVideo
             $stmt->execute([$chatVideoId]);
             return $stmt->fetchAll();
         });
-        $this->jsonResponse($videos);
+        $this->jsonResponse(
+            array_map(
+                fn(array $video): array => $this->publicVideoCard(
+                    $this->hydrateVideoPlayback($video),
+                ),
+                $videos,
+            ),
+        );
     }
 
     public function getVideoDetail(string $id, bool $increaseView = true): array
@@ -3577,7 +3667,7 @@ final class LimeVideo
             );
         }
 
-        return $video;
+        return $this->publicVideoDetail($video);
     }
 
     public function getProfile(string $id, string $tab = "videos"): void
@@ -3598,7 +3688,7 @@ final class LimeVideo
             );
         }
 
-        $profileCacheKey = "profile_" . $user["id"] . "_{$viewerId}";
+        $profileCacheKey = "profile_v3_" . $user["id"] . "_{$viewerId}";
         $cachedProfile = $this->cacheGet($profileCacheKey, 60);
         if ($cachedProfile !== null) {
             $this->jsonResponse($cachedProfile);
@@ -3691,8 +3781,9 @@ final class LimeVideo
         $followingStmt->execute([$user["id"]]);
         $user["following"] = $followingStmt->fetchAll();
 
-        $this->cacheSet($profileCacheKey, $user, 60);
-        $this->jsonResponse($user);
+        $profile = $this->publicProfileProjection($user);
+        $this->cacheSet($profileCacheKey, $profile, 60);
+        $this->jsonResponse($profile);
     }
 
     public function createVideo(
@@ -4121,6 +4212,10 @@ final class LimeVideo
         if (empty($_SESSION["user"])) {
             $this->jsonResponse(["error" => "Auth required"], 401);
         }
+        $targetUserId = $this->resolveUserId($targetUserId) ?? "";
+        if ($targetUserId === "") {
+            $this->jsonResponse(["error" => "User not found"], 404);
+        }
         $followerId = $_SESSION["user"]["id"];
         if ($followerId === $targetUserId) {
             $this->jsonResponse(["error" => "Cannot follow yourself"], 400);
@@ -4182,7 +4277,7 @@ final class LimeVideo
             : "newest";
         $limit = min(48, max(1, $limit));
         $cacheKey =
-            "search_" .
+            "search_v2_" .
             sha1(
                 $query .
                     "|" .
@@ -4271,7 +4366,12 @@ final class LimeVideo
         $items = array_slice($videos, 0, $limit);
         $last = $items ? $items[count($items) - 1] : null;
         $page = [
-            "items" => $items,
+            "items" => array_map(
+                fn(array $video): array => $this->publicVideoCard(
+                    $this->hydrateVideoPlayback($video),
+                ),
+                $items,
+            ),
             "next_cursor" => $hasMore && $last
                 ? $this->encodeSearchCursor($last, $sort)
                 : null,

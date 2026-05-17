@@ -907,14 +907,14 @@
                         <h1 class="text-2xl font-bold mb-5 leading-tight tracking-tight">${v.title || 'Loading...'}</h1>
                         <div class="flex flex-wrap items-center justify-between gap-6 pb-6 border-b border-white/5">
                             <div class="flex flex-wrap items-center gap-4">
-                                <div class="flex items-center gap-4 cursor-pointer group" data-action="navigate" data-to="/profile/${app.safeAttr(v.username || v.user_id)}">
+                                <div class="flex items-center gap-4 cursor-pointer group" data-action="navigate" data-to="/profile/${app.safeAttr(v.username)}">
                                     <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden group-hover:border-[#00ff41] transition-colors">${avatarHtml}</div>
                                     <div>
                                     <h3 class="text-sm font-bold flex items-center gap-1">${v.display_name || v.username || 'LimeVideo Creator'} <i class="fa-solid fa-circle-check text-[#00ff41] text-[10px]"></i></h3>
                                     <p id="watch-subscriber-count" class="text-[10px] text-gray-500 font-black uppercase tracking-widest">${v.followers_count || 0} Subscribers</p>
                                     </div>
                                 </div>
-                                <button data-action="follow-profile" data-id="${v.user_id}" class="bg-white text-black px-6 py-2 rounded-xl text-xs font-black uppercase ${app.state.auth.me?.id === v.user_id ? 'hidden' : ''}">${Number(v.is_following) ? 'Following' : 'Subscribe'}</button>
+                                <button data-action="follow-profile" data-id="${app.safeAttr(v.username)}" class="bg-white text-black px-6 py-2 rounded-xl text-xs font-black uppercase ${app.state.auth.me?.username === v.username ? 'hidden' : ''}">${Number(v.is_following) ? 'Following' : 'Subscribe'}</button>
                             </div>
                             <div class="flex flex-wrap items-center gap-3">
                                 <div class="vote-pill-v2"><div class="vote-btn-v2 ${v.user_vote === 'up' ? 'active' : ''}" data-action="vote-video" data-value="up"><i class="fa-solid fa-arrow-up"></i></div><div id="watch-vote-count" class="vote-count-v2">${v.votes_sum || 0}</div><div class="vote-btn-v2 down ${v.user_vote === 'down' ? 'active' : ''}" data-action="vote-video" data-value="down"><i class="fa-solid fa-arrow-down"></i></div></div>
@@ -1067,7 +1067,7 @@
 
     <!-- Template Engine: profile visitor action buttons -->
     <template id="tpl-partial-profile-visitor-actions">
-        <button data-action="follow-profile" data-id="${u.id}" class="lime-btn-primary px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.16em]">${Number(u.is_following) ? 'Following' : 'Follow'}</button>
+        <button data-action="follow-profile" data-id="${app.safeAttr(u.username)}" class="lime-btn-primary px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.16em]">${Number(u.is_following) ? 'Following' : 'Follow'}</button>
         <button data-action="toggle-report" data-state="open" data-type="user" data-id="${u.id}" data-label="${app.safeAttr(u.username || u.id)}" class="bg-white/5 border border-white/10 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.14em] hover:border-red-400 transition-all">Report</button>
     </template>
 
@@ -1079,6 +1079,6 @@
         </div>
     </template>
 
-    <script src="/public/index.js?v=4c78e4fa0b"></script>
+    <script src="/public/index.js?v=e74c67b502"></script>
 </body>
 </html>

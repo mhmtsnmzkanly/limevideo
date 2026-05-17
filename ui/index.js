@@ -2703,7 +2703,7 @@ const app = {
   },
 
   thumbnailUrl(video = {}) {
-    return this.safeUrl(video.thumbnail_url || video.thumbnail_path || "");
+    return this.safeUrl(video.thumbnail_url || "");
   },
 
   videoSourceUrl(video = {}) {
@@ -2723,8 +2723,8 @@ const app = {
     });
   },
 
-  updateWatchFollowUi(userId, followed) {
-    if (!this.currentWatch || this.currentWatch.user_id !== userId) return;
+  updateWatchFollowUi(username, followed) {
+    if (!this.currentWatch || this.currentWatch.username !== username) return;
     const previous = Number(this.currentWatch.is_following) === 1;
     this.currentWatch.is_following = followed ? 1 : 0;
     const followers = Number(this.currentWatch.followers_count || 0);
@@ -2736,7 +2736,7 @@ const app = {
     }
 
     document.querySelectorAll('[data-action="follow-profile"]').forEach((button) => {
-      if (this.actionValue(button, "id") === userId) {
+      if (this.actionValue(button, "id") === username) {
         this.setText(button, followed ? "Following" : "Subscribe");
       }
     });
