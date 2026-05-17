@@ -858,7 +858,9 @@ final class LimeVideo
         $field =
             (string) ($this->captcha["form_field_name"] ?? "captcha_token");
         return trim(
-            (string) ($input[$field] ?? ($input["captcha_token"] ?? "")),
+            (string) ($input[$field] ??
+                ($input["captcha_token"] ??
+                    ($input["cf-turnstile-response"] ?? ""))),
         );
     }
 

@@ -1498,7 +1498,33 @@ const app = {
   captchaPayload(purpose) {
     const config = this.captchaConfig();
     if (!config.enabled) return {};
-    return { [config.form_field_name]: this.state.captchaTokens[purpose] || "" };
+    const token =
+      this.state.captchaTokens[purpose] || this.captchaTokenFromDom(purpose);
+    return {
+      [config.form_field_name]: token,
+      "cf-turnstile-response": token,
+    };
+  },
+
+  captchaTokenFromDom(purpose) {
+    const config = this.captchaConfig();
+    const container = Array.from(
+      document.querySelectorAll("[data-captcha-widget]"),
+    ).find((node) => (node.dataset.purpose || "default") === purpose);
+    const root = container?.closest("form") || document;
+    const fieldNames = new Set([
+      config.form_field_name,
+      "captcha_token",
+      "cf-turnstile-response",
+    ]);
+
+    for (const field of root.querySelectorAll("input[name], textarea[name]")) {
+      if (fieldNames.has(field.name) && field.value.trim()) {
+        return field.value.trim();
+      }
+    }
+
+    return "";
   },
 
   requireCaptcha(purpose) {
@@ -1509,7 +1535,12 @@ const app = {
       this.showStatus("Captcha provider is not supported.", "error");
       return false;
     }
-    if (this.state.captchaTokens[purpose]) return true;
+    const token =
+      this.state.captchaTokens[purpose] || this.captchaTokenFromDom(purpose);
+    if (token) {
+      this.state.captchaTokens[purpose] = token;
+      return true;
+    }
     this.showStatus("Please complete the captcha challenge.", "error");
     return false;
   },
