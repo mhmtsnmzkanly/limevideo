@@ -18,18 +18,35 @@ final class LimeVideo
     public readonly array $analytics;
     public readonly array $csrf;
     public readonly array $ads;
+    public readonly string $cacheDir;
 
-    private readonly array $database;
     private readonly array $cron;
     private readonly array $captcha;
     private readonly array $uploads;
 
+    private array $database;
     private ?PDO $pdo = null;
-    private string $cacheDir;
 
     public function __construct()
     {
-        $config = $this->loadConfig();
+        $configFile = __DIR__ . "/config.php";
+        if (!is_file($configFile)) {
+            throw new RuntimeException("Missing config");
+        }
+
+        $config = require $configFile;
+        if (!is_array($config)) {
+            throw new RuntimeException("Wrong config");
+        }
+
+        $config["app"]["site_base_url"] =
+            ((bool) $config["app"]["site_https"] ? "https" : "http") .
+            "://" .
+            preg_replace(
+                "#^https?://#",
+                "",
+                rtrim((string) $config["app"]["site_domain"], "/"),
+            );
 
         $this->app = $config["app"];
         $this->database = $config["database"];
@@ -39,118 +56,33 @@ final class LimeVideo
         $this->csrf = $config["csrf"];
         $this->captcha = $config["captcha"];
         $this->ads = $config["ads"];
-        $this->uploads = $this->defaultUploadConfig(
+        $this->uploads = array_replace(
+            [
+                "video_dir" => "uploads/videos",
+                "thumbnail_dir" => "uploads/thumbs",
+                "max_video_size_bytes" => 524288000,
+                "max_thumbnail_size_bytes" => 5242880,
+                "video_extensions" => ["mp4", "webm", "mov"],
+                "video_mime_types" => [
+                    "video/mp4",
+                    "video/webm",
+                    "video/quicktime",
+                ],
+                "thumbnail_extensions" => ["jpg", "jpeg", "png", "webp"],
+                "thumbnail_mime_types" => [
+                    "image/jpeg",
+                    "image/png",
+                    "image/webp",
+                ],
+            ],
             is_array($config["uploads"] ?? null) ? $config["uploads"] : [],
         );
 
         $this->cacheDir = __DIR__ . "/cache";
+
         if (!is_dir($this->cacheDir)) {
             mkdir($this->cacheDir, 0775, true);
         }
-    }
-
-    private function loadConfig(): array
-    {
-        $configFile = __DIR__ . "/config.php";
-        if (!is_file($configFile)) {
-            throw new RuntimeException(
-                "Missing config.php. Copy config.example.php to config.php and update values.",
-            );
-        }
-
-        $config = require $configFile;
-        if (!is_array($config)) {
-            throw new RuntimeException("config.php must return an array.");
-        }
-
-        foreach (
-            [
-                "app",
-                "database",
-                "chat",
-                "cron",
-                "analytics",
-                "csrf",
-                "captcha",
-                "ads",
-            ]
-            as $group
-        ) {
-            if (!isset($config[$group]) || !is_array($config[$group])) {
-                throw new RuntimeException("Missing config group: {$group}");
-            }
-        }
-
-        $requiredKeys = [
-            "app" => ["dev_mode", "site_domain", "site_https"],
-            "database" => [
-                "host",
-                "port",
-                "name",
-                "user",
-                "password",
-                "charset",
-            ],
-            "cron" => ["token"],
-            "captcha" => ["enabled", "provider"],
-        ];
-        foreach ($requiredKeys as $group => $keys) {
-            foreach ($keys as $key) {
-                if (!array_key_exists($key, $config[$group])) {
-                    throw new RuntimeException(
-                        "Missing config key: {$group}.{$key}",
-                    );
-                }
-            }
-        }
-
-        $domain = preg_replace(
-            "#^https?://#",
-            "",
-            rtrim((string) $config["app"]["site_domain"], "/"),
-        );
-        $scheme = (bool) $config["app"]["site_https"] ? "https" : "http";
-        $config["app"]["site_base_url"] = $scheme . "://" . $domain;
-
-        if (!(bool) $config["app"]["dev_mode"]) {
-            if ((string) $config["database"]["password"] === "CHANGE_ME") {
-                throw new RuntimeException(
-                    "Invalid production placeholder: database.password",
-                );
-            }
-            if ((string) $config["cron"]["token"] === "CHANGE_ME_LONG_RANDOM_SECRET") {
-                throw new RuntimeException(
-                    "Invalid production placeholder: cron.token",
-                );
-            }
-            if ((bool) $config["captcha"]["enabled"]) {
-                if (
-                    (string) ($config["captcha"]["private_key"] ?? "") ===
-                    "CHANGE_ME_PRIVATE_KEY"
-                ) {
-                    throw new RuntimeException(
-                        "Invalid production placeholder: captcha.private_key",
-                    );
-                }
-            }
-        }
-
-        return $config;
-    }
-
-    private function defaultUploadConfig(array $uploads = []): array
-    {
-        $defaults = [
-            "video_dir" => "uploads/videos",
-            "thumbnail_dir" => "uploads/thumbs",
-            "max_video_size_bytes" => 524288000,
-            "max_thumbnail_size_bytes" => 5242880,
-            "video_extensions" => ["mp4", "webm", "mov"],
-            "video_mime_types" => ["video/mp4", "video/webm", "video/quicktime"],
-            "thumbnail_extensions" => ["jpg", "jpeg", "png", "webp"],
-            "thumbnail_mime_types" => ["image/jpeg", "image/png", "image/webp"],
-        ];
-        return array_replace($defaults, $uploads);
     }
 
     private function uploadConfig(string $key, mixed $default): mixed
@@ -174,7 +106,10 @@ final class LimeVideo
         }
         return array_values(
             array_filter(
-                array_map(static fn($item): string => trim((string) $item), $value),
+                array_map(
+                    static fn($item): string => trim((string) $item),
+                    $value,
+                ),
                 static fn(string $item): bool => $item !== "",
             ),
         );
@@ -192,34 +127,30 @@ final class LimeVideo
         );
     }
 
-    public function cachePath(): string
-    {
-        return $this->cacheDir;
-    }
-
     public function db(): PDO
     {
-        if ($this->pdo) {
-            return $this->pdo;
+        if ($this->pdo == null) {
+            $dsn =
+                "mysql:host=" .
+                $this->database["host"] .
+                ";port=" .
+                (int) ($this->database["port"] ?? 3306) .
+                ";dbname=" .
+                $this->database["name"] .
+                ";charset=" .
+                ($this->database["charset"] ?? "utf8mb4");
+            $this->pdo = new PDO(
+                $dsn,
+                $this->database["user"],
+                $this->database["password"],
+                [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                ],
+            );
+            unset($this->database);
         }
-        $dsn =
-            "mysql:host=" .
-            $this->database["host"] .
-            ";port=" .
-            (int) ($this->database["port"] ?? 3306) .
-            ";dbname=" .
-            $this->database["name"] .
-            ";charset=" .
-            ($this->database["charset"] ?? "utf8mb4");
-        $this->pdo = new PDO(
-            $dsn,
-            $this->database["user"],
-            $this->database["password"],
-            [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ],
-        );
+
         return $this->pdo;
     }
 
@@ -238,7 +169,9 @@ final class LimeVideo
     private function plainText(string $value, int $max = 160): string
     {
         $text = trim((string) preg_replace("/\s+/", " ", strip_tags($value)));
-        $length = function_exists("mb_strlen") ? mb_strlen($text) : strlen($text);
+        $length = function_exists("mb_strlen")
+            ? mb_strlen($text)
+            : strlen($text);
         if ($length <= $max) {
             return $text;
         }
@@ -258,15 +191,16 @@ final class LimeVideo
                 JSON_HEX_QUOT |
                 JSON_UNESCAPED_SLASHES |
                 JSON_UNESCAPED_UNICODE,
-        ) ?: "{}";
+        ) ?:
+            "{}";
     }
 
     private function defaultSeoMeta(): array
     {
-        $description = "Discover public videos, creators and tags on LimeVideo.";
         return [
             "title" => "LimeVideo",
-            "description" => $description,
+            "description" =>
+                "Discover public videos, creators and tags on LimeVideo.",
             "canonical" => $this->baseUrl("/"),
             "robots" => "index,follow",
             "og_type" => "website",
@@ -285,15 +219,17 @@ final class LimeVideo
             "title" => $video["title"] ?? "",
             "description" => $video["description"] ?? "",
             "duration" => (int) ($video["duration"] ?? 0),
-            "views_count" => (int) ($video["views_count"] ?? $video["views"] ?? 0),
-            "views" => (int) ($video["views"] ?? $video["views_count"] ?? 0),
+            "views_count" =>
+                (int) ($video["views_count"] ?? ($video["views"] ?? 0)),
+            "views" => (int) ($video["views"] ?? ($video["views_count"] ?? 0)),
             "is_sensitive" => (int) ($video["is_sensitive"] ?? 0),
             "disable_comments" => (int) ($video["disable_comments"] ?? 0),
             "thumbnail_url" => $thumbnail !== "" ? $thumbnail : null,
             "created_at" => $video["created_at"] ?? null,
             "updated_at" => $video["updated_at"] ?? null,
             "username" => $video["username"] ?? "",
-            "display_name" => $video["display_name"] ?? ($video["username"] ?? ""),
+            "display_name" =>
+                $video["display_name"] ?? ($video["username"] ?? ""),
             "avatar_url" => $video["avatar_url"] ?? "",
         ];
     }
@@ -317,7 +253,8 @@ final class LimeVideo
         $projected = [
             "id" => $user["id"] ?? "",
             "username" => $user["username"] ?? "",
-            "display_name" => $user["display_name"] ?? ($user["username"] ?? ""),
+            "display_name" =>
+                $user["display_name"] ?? ($user["username"] ?? ""),
             "bio" => $user["bio"] ?? "",
             "avatar_url" => $user["avatar_url"] ?? "",
             "cover_url" => $user["cover_url"] ?? "",
@@ -328,17 +265,25 @@ final class LimeVideo
 
         foreach (["videos", "saved", "liked"] as $key) {
             $projected[$key] = array_map(
-                fn(array $video): array => $this->publicVideoCard($this->hydrateVideoPlayback($video)),
+                fn(array $video): array => $this->publicVideoCard(
+                    $this->hydrateVideoPlayback($video),
+                ),
                 is_array($user[$key] ?? null) ? $user[$key] : [],
             );
         }
 
         $projected["comments"] = array_map(
-            fn(array $comment): array => $this->publicCommentProjection($comment),
+            fn(array $comment): array => $this->publicCommentProjection(
+                $comment,
+            ),
             is_array($user["comments"] ?? null) ? $user["comments"] : [],
         );
-        $projected["followers"] = is_array($user["followers"] ?? null) ? $user["followers"] : [];
-        $projected["following"] = is_array($user["following"] ?? null) ? $user["following"] : [];
+        $projected["followers"] = is_array($user["followers"] ?? null)
+            ? $user["followers"]
+            : [];
+        $projected["following"] = is_array($user["following"] ?? null)
+            ? $user["following"]
+            : [];
 
         return $projected;
     }
@@ -352,7 +297,8 @@ final class LimeVideo
             "body" => $comment["body"] ?? "",
             "created_at" => $comment["created_at"] ?? null,
             "username" => $comment["username"] ?? "",
-            "display_name" => $comment["display_name"] ?? ($comment["username"] ?? ""),
+            "display_name" =>
+                $comment["display_name"] ?? ($comment["username"] ?? ""),
             "avatar_url" => $comment["avatar_url"] ?? "",
             "votes_sum" => (int) ($comment["votes_sum"] ?? 0),
             "user_vote" => $comment["user_vote"] ?? null,
@@ -362,7 +308,9 @@ final class LimeVideo
         }
         if (is_array($comment["replies"] ?? null)) {
             $projected["replies"] = array_map(
-                fn(array $reply): array => $this->publicCommentProjection($reply),
+                fn(array $reply): array => $this->publicCommentProjection(
+                    $reply,
+                ),
                 $comment["replies"],
             );
         }
@@ -484,16 +432,18 @@ final class LimeVideo
         $last = $items ? $items[count($items) - 1] : null;
         return [
             "items" => $items,
-            "next_cursor" => count($items) === 24 && $last
-                ? $this->encodeSearchCursor($last, "newest")
-                : null,
+            "next_cursor" =>
+                count($items) === 24 && $last
+                    ? $this->encodeSearchCursor($last, "newest")
+                    : null,
             "has_more" => count($items) === 24,
         ];
     }
 
     private function publicTagForBootstrap(string $slug): ?array
     {
-        $stmt = $this->db()->prepare("SELECT t.name, t.slug, MAX(v.updated_at) AS lastmod
+        $stmt = $this->db()
+            ->prepare("SELECT t.name, t.slug, MAX(v.updated_at) AS lastmod
             FROM tags t
             JOIN video_tags vt ON vt.tag_slug = t.slug
             JOIN videos v ON v.id = vt.video_id
@@ -534,7 +484,8 @@ final class LimeVideo
                 $bootstrap["seo"] = [
                     ...$seo,
                     "title" => "Not Found - LimeVideo",
-                    "description" => "The requested LimeVideo page could not be found.",
+                    "description" =>
+                        "The requested LimeVideo page could not be found.",
                     "canonical" => $this->baseUrl($path),
                     "robots" => "noindex,nofollow",
                 ];
@@ -552,12 +503,16 @@ final class LimeVideo
                 "route" => [
                     "type" => "video",
                     "id" => $id,
-                    "canonical" => $this->baseUrl("/video/" . rawurlencode($id)),
+                    "canonical" => $this->baseUrl(
+                        "/video/" . rawurlencode($id),
+                    ),
                 ],
                 "seo" => [
                     "title" => "{$title} - LimeVideo",
                     "description" => $description,
-                    "canonical" => $this->baseUrl("/video/" . rawurlencode($id)),
+                    "canonical" => $this->baseUrl(
+                        "/video/" . rawurlencode($id),
+                    ),
                     "robots" => "index,follow",
                     "og_type" => "video.other",
                     "image" => $image ?: "",
@@ -578,14 +533,18 @@ final class LimeVideo
                     "route" => [
                         "type" => "profile",
                         "id" => $profile["username"],
-                        "canonical" => $this->baseUrl("/profile/" . rawurlencode($profile["username"])),
+                        "canonical" => $this->baseUrl(
+                            "/profile/" . rawurlencode($profile["username"]),
+                        ),
                     ],
                     "seo" => [
                         "title" => "{$name} - LimeVideo",
                         "description" =>
                             $this->plainText($profile["bio"], 155) ?:
                             "Public LimeVideo profile for {$name}.",
-                        "canonical" => $this->baseUrl("/profile/" . rawurlencode($profile["username"])),
+                        "canonical" => $this->baseUrl(
+                            "/profile/" . rawurlencode($profile["username"]),
+                        ),
                         "robots" => "index,follow",
                         "og_type" => "profile",
                         "image" => $profile["avatar_url"] ?: "",
@@ -604,12 +563,16 @@ final class LimeVideo
                     "route" => [
                         "type" => "tag",
                         "slug" => $slug,
-                        "canonical" => $this->baseUrl("/tag/" . rawurlencode($slug)),
+                        "canonical" => $this->baseUrl(
+                            "/tag/" . rawurlencode($slug),
+                        ),
                     ],
                     "seo" => [
                         "title" => "#{$label} - LimeVideo",
                         "description" => "Videos tagged #{$label} on LimeVideo.",
-                        "canonical" => $this->baseUrl("/tag/" . rawurlencode($slug)),
+                        "canonical" => $this->baseUrl(
+                            "/tag/" . rawurlencode($slug),
+                        ),
                         "robots" => "index,follow",
                         "og_type" => "website",
                         "image" => "",
@@ -623,7 +586,9 @@ final class LimeVideo
         }
 
         if ($path === "/" || $path === "/gallery") {
-            $bootstrap["data"] = ["gallery" => $this->publicGalleryForBootstrap()];
+            $bootstrap["data"] = [
+                "gallery" => $this->publicGalleryForBootstrap(),
+            ];
         }
 
         return $bootstrap;
@@ -636,17 +601,39 @@ final class LimeVideo
         $seo = array_replace($this->defaultSeoMeta(), $bootstrap["seo"] ?? []);
         $replacements = [
             "__LIMEVIDEO_TITLE__" => $this->htmlEscape((string) $seo["title"]),
-            "__LIMEVIDEO_META_DESCRIPTION__" => $this->htmlEscape((string) $seo["description"]),
-            "__LIMEVIDEO_ROBOTS__" => $this->htmlEscape((string) $seo["robots"]),
-            "__LIMEVIDEO_CANONICAL__" => $this->htmlEscape((string) $seo["canonical"]),
-            "__LIMEVIDEO_OG_TITLE__" => $this->htmlEscape((string) $seo["title"]),
-            "__LIMEVIDEO_OG_DESCRIPTION__" => $this->htmlEscape((string) $seo["description"]),
-            "__LIMEVIDEO_OG_URL__" => $this->htmlEscape((string) $seo["canonical"]),
-            "__LIMEVIDEO_OG_TYPE__" => $this->htmlEscape((string) $seo["og_type"]),
-            "__LIMEVIDEO_OG_IMAGE__" => $this->htmlEscape((string) ($seo["image"] ?? "")),
-            "__LIMEVIDEO_TWITTER_TITLE__" => $this->htmlEscape((string) $seo["title"]),
-            "__LIMEVIDEO_TWITTER_DESCRIPTION__" => $this->htmlEscape((string) $seo["description"]),
-            "__LIMEVIDEO_TWITTER_IMAGE__" => $this->htmlEscape((string) ($seo["image"] ?? "")),
+            "__LIMEVIDEO_META_DESCRIPTION__" => $this->htmlEscape(
+                (string) $seo["description"],
+            ),
+            "__LIMEVIDEO_ROBOTS__" => $this->htmlEscape(
+                (string) $seo["robots"],
+            ),
+            "__LIMEVIDEO_CANONICAL__" => $this->htmlEscape(
+                (string) $seo["canonical"],
+            ),
+            "__LIMEVIDEO_OG_TITLE__" => $this->htmlEscape(
+                (string) $seo["title"],
+            ),
+            "__LIMEVIDEO_OG_DESCRIPTION__" => $this->htmlEscape(
+                (string) $seo["description"],
+            ),
+            "__LIMEVIDEO_OG_URL__" => $this->htmlEscape(
+                (string) $seo["canonical"],
+            ),
+            "__LIMEVIDEO_OG_TYPE__" => $this->htmlEscape(
+                (string) $seo["og_type"],
+            ),
+            "__LIMEVIDEO_OG_IMAGE__" => $this->htmlEscape(
+                (string) ($seo["image"] ?? ""),
+            ),
+            "__LIMEVIDEO_TWITTER_TITLE__" => $this->htmlEscape(
+                (string) $seo["title"],
+            ),
+            "__LIMEVIDEO_TWITTER_DESCRIPTION__" => $this->htmlEscape(
+                (string) $seo["description"],
+            ),
+            "__LIMEVIDEO_TWITTER_IMAGE__" => $this->htmlEscape(
+                (string) ($seo["image"] ?? ""),
+            ),
             "__LIMEVIDEO_BOOTSTRAP__" => $this->encodeBootstrapJson($bootstrap),
         ];
 
@@ -668,11 +655,14 @@ final class LimeVideo
         return $time ? gmdate("Y-m-d", $time) : null;
     }
 
-    private function buildSitemapUrlEntry(string $loc, ?string $lastmod = null): string
-    {
+    private function buildSitemapUrlEntry(
+        string $loc,
+        ?string $lastmod = null,
+    ): string {
         $entry = "  <url>\n    <loc>" . $this->xmlEscape($loc) . "</loc>\n";
         if ($lastmod) {
-            $entry .= "    <lastmod>" . $this->xmlEscape($lastmod) . "</lastmod>\n";
+            $entry .=
+                "    <lastmod>" . $this->xmlEscape($lastmod) . "</lastmod>\n";
         }
         return $entry . "  </url>\n";
     }
@@ -728,7 +718,9 @@ final class LimeVideo
         $userStmt->execute([$chatOwnerId]);
         foreach ($userStmt->fetchAll() as $user) {
             $urls[] = [
-                "loc" => $this->baseUrl("/profile/" . rawurlencode($user["username"])),
+                "loc" => $this->baseUrl(
+                    "/profile/" . rawurlencode($user["username"]),
+                ),
                 "lastmod" => $this->sitemapLastmod($user["lastmod"] ?? null),
             ];
         }
@@ -769,9 +761,13 @@ final class LimeVideo
     public function generateSitemapXml(): bool
     {
         $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-        $xml .= "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
+        $xml .=
+            "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
         foreach ($this->getPublicSitemapUrls() as $url) {
-            $xml .= $this->buildSitemapUrlEntry($url["loc"], $url["lastmod"] ?? null);
+            $xml .= $this->buildSitemapUrlEntry(
+                $url["loc"],
+                $url["lastmod"] ?? null,
+            );
         }
         $xml .= "</urlset>\n";
 
@@ -792,8 +788,14 @@ final class LimeVideo
     public function regenerateSitemap(?string $token = null): void
     {
         $expectedToken = trim((string) ($this->cron["token"] ?? ""));
-        if ($expectedToken === "" || !hash_equals($expectedToken, (string) $token)) {
-            $this->jsonResponse(["error" => "Invalid or missing cron token"], 403);
+        if (
+            $expectedToken === "" ||
+            !hash_equals($expectedToken, (string) $token)
+        ) {
+            $this->jsonResponse(
+                ["error" => "Invalid or missing cron token"],
+                403,
+            );
         }
 
         $this->jsonResponse([
@@ -807,8 +809,7 @@ final class LimeVideo
     public function checkRateLimit(string $key, int $limit, int $period): void
     {
         $ip = hash("sha256", $_SERVER["REMOTE_ADDR"] ?? "127.0.0.1");
-        $file =
-            $this->cacheDir . "/ratelimit_" . sha1($key . $ip) . ".tmp";
+        $file = $this->cacheDir . "/ratelimit_" . sha1($key . $ip) . ".tmp";
         $data = file_exists($file)
             ? json_decode((string) file_get_contents($file), true)
             : null;
@@ -834,17 +835,17 @@ final class LimeVideo
             "provider" => (string) ($this->captcha["provider"] ?? "turnstile"),
             "script_url" => (string) ($this->captcha["script_url"] ?? ""),
             "public_key" => (string) ($this->captcha["public_key"] ?? ""),
-            "form_field_name" => (string) ($this->captcha["form_field_name"] ?? "captcha_token"),
+            "form_field_name" =>
+                (string) ($this->captcha["form_field_name"] ?? "captcha_token"),
         ];
     }
 
     public function captchaTokenFromInput(array $input): string
     {
-        $field = (string) ($this->captcha["form_field_name"] ?? "captcha_token");
+        $field =
+            (string) ($this->captcha["form_field_name"] ?? "captcha_token");
         return trim(
-            (string) ($input[$field] ??
-                $input["captcha_token"] ??
-                ""),
+            (string) ($input[$field] ?? ($input["captcha_token"] ?? "")),
         );
     }
 
@@ -860,7 +861,10 @@ final class LimeVideo
             $this->jsonResponse(["error" => "Captcha is not configured"], 503);
         }
         if ($token === "") {
-            $this->jsonResponse(["error" => "Captcha verification is required"], 400);
+            $this->jsonResponse(
+                ["error" => "Captcha verification is required"],
+                400,
+            );
         }
 
         $payload = http_build_query([
@@ -1109,7 +1113,10 @@ final class LimeVideo
     private function isDirectVideoUrl(string $url): bool
     {
         $path = parse_url($url, PHP_URL_PATH) ?: $url;
-        return (bool) preg_match("#\.(mp4|webm|ogg|ogv|mov|m4v|m3u8)(\?.*)?$#i", $path);
+        return (bool) preg_match(
+            "#\.(mp4|webm|ogg|ogv|mov|m4v|m3u8)(\?.*)?$#i",
+            $path,
+        );
     }
 
     /**
@@ -1140,7 +1147,11 @@ final class LimeVideo
         }
 
         $absolutePath = __DIR__ . "/" . $path;
-        if (!is_dir($absolutePath) && !mkdir($absolutePath, 0775, true) && !is_dir($absolutePath)) {
+        if (
+            !is_dir($absolutePath) &&
+            !mkdir($absolutePath, 0775, true) &&
+            !is_dir($absolutePath)
+        ) {
             throw new RuntimeException("Upload directory is not writable");
         }
         return $absolutePath;
@@ -1150,7 +1161,11 @@ final class LimeVideo
     {
         $root = realpath(__DIR__);
         $real = realpath($absolutePath);
-        if (!$root || !$real || !str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
+        if (
+            !$root ||
+            !$real ||
+            !str_starts_with($real, $root . DIRECTORY_SEPARATOR)
+        ) {
             throw new RuntimeException("Invalid upload path");
         }
         return str_replace("\\", "/", substr($real, strlen($root) + 1));
@@ -1160,7 +1175,8 @@ final class LimeVideo
     {
         return match ($error) {
             UPLOAD_ERR_INI_SIZE,
-            UPLOAD_ERR_FORM_SIZE => "Uploaded file is too large",
+            UPLOAD_ERR_FORM_SIZE
+                => "Uploaded file is too large",
             UPLOAD_ERR_PARTIAL => "Uploaded file was incomplete",
             UPLOAD_ERR_NO_FILE => "Uploaded file is required",
             default => "Upload failed",
@@ -1203,7 +1219,10 @@ final class LimeVideo
             return null;
         }
         if ($error !== UPLOAD_ERR_OK) {
-            $this->jsonResponse(["error" => $this->fileUploadErrorMessage($error)], 400);
+            $this->jsonResponse(
+                ["error" => $this->fileUploadErrorMessage($error)],
+                400,
+            );
         }
 
         $tmpName = (string) ($file["tmp_name"] ?? "");
@@ -1235,10 +1254,18 @@ final class LimeVideo
         ];
     }
 
-    private function moveValidatedUpload(array $validatedFile, string $directory, string $basename): string
-    {
+    private function moveValidatedUpload(
+        array $validatedFile,
+        string $directory,
+        string $basename,
+    ): string {
         $targetDir = $this->uploadDirectory($directory);
-        $target = $targetDir . DIRECTORY_SEPARATOR . $basename . "." . $validatedFile["extension"];
+        $target =
+            $targetDir .
+            DIRECTORY_SEPARATOR .
+            $basename .
+            "." .
+            $validatedFile["extension"];
         $realTargetDir = realpath($targetDir);
         if (!$realTargetDir || realpath(dirname($target)) !== $realTargetDir) {
             throw new RuntimeException("Invalid upload target");
@@ -1291,7 +1318,8 @@ final class LimeVideo
                     : "direct";
         }
         $video["playback_source_url"] = $sourceUrl;
-        $video["player_mode"] = $mode === "external_page" ? "external_page" : "direct";
+        $video["player_mode"] =
+            $mode === "external_page" ? "external_page" : "direct";
         return $video;
     }
 
@@ -1371,13 +1399,7 @@ final class LimeVideo
                 array_map("trim", explode(",", $exemptEndpoints)),
             );
         }
-        if (
-            in_array(
-                $endpoint,
-                array_values($exemptEndpoints),
-                true,
-            )
-        ) {
+        if (in_array($endpoint, array_values($exemptEndpoints), true)) {
             return;
         }
         $sent = $_SERVER["HTTP_X_CSRF_TOKEN"] ?? "";
@@ -1386,8 +1408,10 @@ final class LimeVideo
         }
     }
 
-    public function requireMethod(string $actualMethod, array $allowedMethods): void
-    {
+    public function requireMethod(
+        string $actualMethod,
+        array $allowedMethods,
+    ): void {
         $allowed = array_map(
             static fn(string $method): string => strtoupper($method),
             $allowedMethods,
@@ -1411,13 +1435,10 @@ final class LimeVideo
     {
         $this->jsonResponse(
             isset($_SESSION["user"])
-                ? array_merge(
-                    $this->getUser($_SESSION["user"]["id"]) ?? [],
-                    [
-                        "csrf" => $this->csrfToken(),
-                        "jobs" => $this->hasRunnableJobs(),
-                    ],
-                )
+                ? array_merge($this->getUser($_SESSION["user"]["id"]) ?? [], [
+                    "csrf" => $this->csrfToken(),
+                    "jobs" => $this->hasRunnableJobs(),
+                ])
                 : ["csrf" => $this->csrfToken(), "jobs" => false],
         );
     }
@@ -1506,9 +1527,7 @@ final class LimeVideo
     public function handleApiVideo(): void
     {
         $this->jsonResponse(
-            $this->getVideoDetail(
-                $this->validate($_GET["id"] ?? "", "id"),
-            ),
+            $this->getVideoDetail($this->validate($_GET["id"] ?? "", "id")),
         );
     }
 
@@ -1608,9 +1627,7 @@ final class LimeVideo
      */
     public function handleApiFollow(array $input): void
     {
-        $this->toggleFollow(
-            $this->validate($input["user_id"] ?? "", "id"),
-        );
+        $this->toggleFollow($this->validate($input["user_id"] ?? "", "id"));
     }
 
     /**
@@ -1620,9 +1637,7 @@ final class LimeVideo
      */
     public function handleApiSave(array $input): void
     {
-        $this->toggleSave(
-            $this->validate($input["video_id"] ?? "", "id"),
-        );
+        $this->toggleSave($this->validate($input["video_id"] ?? "", "id"));
     }
 
     /**
@@ -1823,7 +1838,10 @@ final class LimeVideo
         $where = [];
         $params = [];
 
-        if (array_key_exists("status", $_GET) && (string) $_GET["status"] !== "") {
+        if (
+            array_key_exists("status", $_GET) &&
+            (string) $_GET["status"] !== ""
+        ) {
             $status = $this->validate($_GET["status"], "enum", [
                 "allowed" => ["open", "reviewing", "resolved", "dismissed"],
             ]);
@@ -1833,12 +1851,18 @@ final class LimeVideo
             $where[] = "r.status = ?";
             $params[] = $status;
         }
-        if (array_key_exists("target_type", $_GET) && (string) $_GET["target_type"] !== "") {
+        if (
+            array_key_exists("target_type", $_GET) &&
+            (string) $_GET["target_type"] !== ""
+        ) {
             $targetType = $this->validate($_GET["target_type"], "enum", [
                 "allowed" => ["video", "comment", "user"],
             ]);
             if (!$targetType) {
-                $this->jsonResponse(["error" => "Invalid report target type"], 400);
+                $this->jsonResponse(
+                    ["error" => "Invalid report target type"],
+                    400,
+                );
             }
             $where[] = "r.target_type = ?";
             $params[] = $targetType;
@@ -1846,7 +1870,8 @@ final class LimeVideo
 
         $q = $this->validate($_GET["q"] ?? "", "text", ["max" => 100]);
         if ($q !== "") {
-            $where[] = "(r.id LIKE ? OR r.target_id LIKE ? OR r.reason LIKE ? OR reporter.username LIKE ? OR reviewer.username LIKE ?)";
+            $where[] =
+                "(r.id LIKE ? OR r.target_id LIKE ? OR r.reason LIKE ? OR reporter.username LIKE ? OR reviewer.username LIKE ?)";
             $like = "%{$q}%";
             array_push($params, $like, $like, $like, $like, $like);
         }
@@ -1864,14 +1889,21 @@ final class LimeVideo
         if ($where) {
             $sql .= " WHERE " . implode(" AND ", $where);
         }
-        $sql .= " ORDER BY r.created_at DESC, r.id DESC LIMIT " . ($limit + 1) . " OFFSET " . $offset;
+        $sql .=
+            " ORDER BY r.created_at DESC, r.id DESC LIMIT " .
+            ($limit + 1) .
+            " OFFSET " .
+            $offset;
         $stmt = $this->db()->prepare($sql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
         $hasMore = count($rows) > $limit;
         $items = array_slice($rows, 0, $limit);
         $this->jsonResponse([
-            "items" => array_map([$this, "publicAdminReportProjection"], $items),
+            "items" => array_map(
+                [$this, "publicAdminReportProjection"],
+                $items,
+            ),
             "pagination" => [
                 "limit" => $limit,
                 "offset" => $offset,
@@ -1887,7 +1919,10 @@ final class LimeVideo
         $where = [];
         $params = [];
 
-        if (array_key_exists("status", $_GET) && (string) $_GET["status"] !== "") {
+        if (
+            array_key_exists("status", $_GET) &&
+            (string) $_GET["status"] !== ""
+        ) {
             $status = $this->validate($_GET["status"], "enum", [
                 "allowed" => ["public", "private", "deleted"],
             ]);
@@ -1897,12 +1932,22 @@ final class LimeVideo
             $where[] = "v.status = ?";
             $params[] = $status;
         }
-        if (array_key_exists("processing_status", $_GET) && (string) $_GET["processing_status"] !== "") {
-            $processingStatus = $this->validate($_GET["processing_status"], "enum", [
-                "allowed" => ["pending", "processing", "ready", "failed"],
-            ]);
+        if (
+            array_key_exists("processing_status", $_GET) &&
+            (string) $_GET["processing_status"] !== ""
+        ) {
+            $processingStatus = $this->validate(
+                $_GET["processing_status"],
+                "enum",
+                [
+                    "allowed" => ["pending", "processing", "ready", "failed"],
+                ],
+            );
             if (!$processingStatus) {
-                $this->jsonResponse(["error" => "Invalid processing status"], 400);
+                $this->jsonResponse(
+                    ["error" => "Invalid processing status"],
+                    400,
+                );
             }
             $where[] = "v.processing_status = ?";
             $params[] = $processingStatus;
@@ -1910,7 +1955,8 @@ final class LimeVideo
 
         $q = $this->validate($_GET["q"] ?? "", "text", ["max" => 100]);
         if ($q !== "") {
-            $where[] = "(v.id LIKE ? OR v.title LIKE ? OR u.username LIKE ? OR u.display_name LIKE ?)";
+            $where[] =
+                "(v.id LIKE ? OR v.title LIKE ? OR u.username LIKE ? OR u.display_name LIKE ?)";
             $like = "%{$q}%";
             array_push($params, $like, $like, $like, $like);
         }
@@ -1924,7 +1970,11 @@ final class LimeVideo
         if ($where) {
             $sql .= " WHERE " . implode(" AND ", $where);
         }
-        $sql .= " ORDER BY v.created_at DESC, v.id DESC LIMIT " . ($limit + 1) . " OFFSET " . $offset;
+        $sql .=
+            " ORDER BY v.created_at DESC, v.id DESC LIMIT " .
+            ($limit + 1) .
+            " OFFSET " .
+            $offset;
         $stmt = $this->db()->prepare($sql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
@@ -1957,9 +2007,18 @@ final class LimeVideo
             $where[] = "role = ?";
             $params[] = $role;
         }
-        if (array_key_exists("status", $_GET) && (string) $_GET["status"] !== "") {
+        if (
+            array_key_exists("status", $_GET) &&
+            (string) $_GET["status"] !== ""
+        ) {
             $status = $this->validate($_GET["status"], "enum", [
-                "allowed" => ["active", "pending", "disabled", "banned", "deleted"],
+                "allowed" => [
+                    "active",
+                    "pending",
+                    "disabled",
+                    "banned",
+                    "deleted",
+                ],
             ]);
             if (!$status) {
                 $this->jsonResponse(["error" => "Invalid user status"], 400);
@@ -1975,11 +2034,16 @@ final class LimeVideo
             array_push($params, $like, $like, $like);
         }
 
-        $sql = "SELECT id, username, display_name, role, status, created_at, updated_at FROM users";
+        $sql =
+            "SELECT id, username, display_name, role, status, created_at, updated_at FROM users";
         if ($where) {
             $sql .= " WHERE " . implode(" AND ", $where);
         }
-        $sql .= " ORDER BY created_at DESC, id DESC LIMIT " . ($limit + 1) . " OFFSET " . $offset;
+        $sql .=
+            " ORDER BY created_at DESC, id DESC LIMIT " .
+            ($limit + 1) .
+            " OFFSET " .
+            $offset;
         $stmt = $this->db()->prepare($sql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
@@ -2002,9 +2066,18 @@ final class LimeVideo
         $where = [];
         $params = [];
 
-        if (array_key_exists("status", $_GET) && (string) $_GET["status"] !== "") {
+        if (
+            array_key_exists("status", $_GET) &&
+            (string) $_GET["status"] !== ""
+        ) {
             $status = $this->validate($_GET["status"], "enum", [
-                "allowed" => ["pending", "working", "completed", "failed", "cancelled"],
+                "allowed" => [
+                    "pending",
+                    "working",
+                    "completed",
+                    "failed",
+                    "cancelled",
+                ],
             ]);
             if (!$status) {
                 $this->jsonResponse(["error" => "Invalid job status"], 400);
@@ -2012,7 +2085,9 @@ final class LimeVideo
             $where[] = "status = ?";
             $params[] = $status;
         }
-        $eventType = $this->validate($_GET["event_type"] ?? "", "text", ["max" => 80]);
+        $eventType = $this->validate($_GET["event_type"] ?? "", "text", [
+            "max" => 80,
+        ]);
         if ($eventType !== "") {
             $where[] = "event_type = ?";
             $params[] = $eventType;
@@ -2025,7 +2100,11 @@ final class LimeVideo
         if ($where) {
             $sql .= " WHERE " . implode(" AND ", $where);
         }
-        $sql .= " ORDER BY created_at DESC, id DESC LIMIT " . ($limit + 1) . " OFFSET " . $offset;
+        $sql .=
+            " ORDER BY created_at DESC, id DESC LIMIT " .
+            ($limit + 1) .
+            " OFFSET " .
+            $offset;
         $stmt = $this->db()->prepare($sql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
@@ -2048,12 +2127,21 @@ final class LimeVideo
         $status = $this->validate($input["status"] ?? "", "enum", [
             "allowed" => ["open", "reviewing", "resolved", "dismissed"],
         ]);
-        $resolutionNote = $this->validate($input["resolution_note"] ?? null, "text", ["max" => 1000]);
+        $resolutionNote = $this->validate(
+            $input["resolution_note"] ?? null,
+            "text",
+            ["max" => 1000],
+        );
         if (!$id || !$status) {
-            $this->jsonResponse(["error" => "Invalid report status input"], 400);
+            $this->jsonResponse(
+                ["error" => "Invalid report status input"],
+                400,
+            );
         }
 
-        $stmt = $this->db()->prepare("SELECT id FROM reports WHERE id = ? LIMIT 1");
+        $stmt = $this->db()->prepare(
+            "SELECT id FROM reports WHERE id = ? LIMIT 1",
+        );
         $stmt->execute([$id]);
         if (!$stmt->fetch()) {
             $this->jsonResponse(["error" => "Report not found"], 404);
@@ -2075,7 +2163,13 @@ final class LimeVideo
             $update->execute([$status, $resolutionNote, $id]);
         }
 
-        $this->logAdminAction($moderator["id"], "report", $id, "REPORT_STATUS", $status);
+        $this->logAdminAction(
+            $moderator["id"],
+            "report",
+            $id,
+            "REPORT_STATUS",
+            $status,
+        );
         $this->jsonResponse([
             "success" => true,
             "report" => $this->fetchAdminReport($id),
@@ -2129,7 +2223,9 @@ final class LimeVideo
 
         $params[] = $id;
         $this->db()
-            ->prepare("UPDATE videos SET " . implode(", ", $sets) . " WHERE id = ?")
+            ->prepare(
+                "UPDATE videos SET " . implode(", ", $sets) . " WHERE id = ?",
+            )
             ->execute($params);
 
         $this->invalidateDiscoveryCaches();
@@ -2143,7 +2239,13 @@ final class LimeVideo
                 "new_status" => $newStatus,
             ]);
         }
-        $this->logAdminAction($moderator["id"], "video", $id, "VIDEO_STATUS", $newStatus ?? "fields_updated");
+        $this->logAdminAction(
+            $moderator["id"],
+            "video",
+            $id,
+            "VIDEO_STATUS",
+            $newStatus ?? "fields_updated",
+        );
 
         $this->jsonResponse([
             "success" => true,
@@ -2158,7 +2260,9 @@ final class LimeVideo
         $type = $this->validate($input["type"] ?? "", "enum", [
             "allowed" => ["general", "comment", "video", "chat"],
         ]);
-        $reason = $this->validate($input["reason"] ?? "", "text", ["max" => 500]);
+        $reason = $this->validate($input["reason"] ?? "", "text", [
+            "max" => 500,
+        ]);
         if (!$userId || !$type || !$reason) {
             $this->jsonResponse(["error" => "Invalid ban input"], 400);
         }
@@ -2178,13 +2282,21 @@ final class LimeVideo
             $this->currentUserRole() === "moderator" &&
             in_array((string) $target["role"], ["admin", "system"], true)
         ) {
-            $this->jsonResponse(["error" => "Cannot ban privileged users"], 403);
+            $this->jsonResponse(
+                ["error" => "Cannot ban privileged users"],
+                403,
+            );
         }
 
         $endsAt = null;
-        if (array_key_exists("ends_at", $input) && trim((string) $input["ends_at"]) !== "") {
+        if (
+            array_key_exists("ends_at", $input) &&
+            trim((string) $input["ends_at"]) !== ""
+        ) {
             try {
-                $endsAt = (new DateTimeImmutable((string) $input["ends_at"]))->format("Y-m-d H:i:s");
+                $endsAt = new DateTimeImmutable(
+                    (string) $input["ends_at"],
+                )->format("Y-m-d H:i:s");
             } catch (Throwable) {
                 $this->jsonResponse(["error" => "Invalid ban end time"], 400);
             }
@@ -2198,7 +2310,13 @@ final class LimeVideo
             "user",
             $moderator["id"],
         );
-        $this->logAdminAction($moderator["id"], "user", $userId, "USER_BAN", $type);
+        $this->logAdminAction(
+            $moderator["id"],
+            "user",
+            $userId,
+            "USER_BAN",
+            $type,
+        );
         $this->cacheDelete("user_" . $userId);
         $this->cacheDeletePrefix("profile_" . $userId . "_");
 
@@ -2248,8 +2366,10 @@ final class LimeVideo
 
     private function publicAdminReportProjection(array $report): array
     {
-        $reporterId = $report["reporter_id"] ?? $report["reporter_id_value"] ?? null;
-        $reviewerId = $report["reviewed_by"] ?? $report["reviewer_id_value"] ?? null;
+        $reporterId =
+            $report["reporter_id"] ?? ($report["reporter_id_value"] ?? null);
+        $reviewerId =
+            $report["reviewed_by"] ?? ($report["reviewer_id_value"] ?? null);
         return [
             "id" => (string) ($report["id"] ?? ""),
             "target_type" => (string) ($report["target_type"] ?? ""),
@@ -2257,16 +2377,20 @@ final class LimeVideo
             "reason" => (string) ($report["reason"] ?? ""),
             "details" => $report["details"] ?? null,
             "status" => (string) ($report["status"] ?? ""),
-            "reporter" => $reporterId ? [
-                "id" => (string) $reporterId,
-                "username" => (string) ($report["reporter_username"] ?? ""),
-                "display_name" => $report["reporter_display_name"] ?? null,
-            ] : null,
-            "reviewer" => $reviewerId ? [
-                "id" => (string) $reviewerId,
-                "username" => (string) ($report["reviewer_username"] ?? ""),
-                "display_name" => $report["reviewer_display_name"] ?? null,
-            ] : null,
+            "reporter" => $reporterId
+                ? [
+                    "id" => (string) $reporterId,
+                    "username" => (string) ($report["reporter_username"] ?? ""),
+                    "display_name" => $report["reporter_display_name"] ?? null,
+                ]
+                : null,
+            "reviewer" => $reviewerId
+                ? [
+                    "id" => (string) $reviewerId,
+                    "username" => (string) ($report["reviewer_username"] ?? ""),
+                    "display_name" => $report["reviewer_display_name"] ?? null,
+                ]
+                : null,
             "reviewed_at" => $report["reviewed_at"] ?? null,
             "resolution_note" => $report["resolution_note"] ?? null,
             "created_at" => $report["created_at"] ?? null,
@@ -2291,7 +2415,10 @@ final class LimeVideo
             "started_at" => $job["started_at"] ?? null,
             "completed_at" => $job["completed_at"] ?? null,
             "failed_at" => $job["failed_at"] ?? null,
-            "last_error" => $lastError === null ? null : mb_substr((string) $lastError, 0, 300),
+            "last_error" =>
+                $lastError === null
+                    ? null
+                    : mb_substr((string) $lastError, 0, 300),
         ];
     }
 
@@ -2348,9 +2475,7 @@ final class LimeVideo
                     [];
             }),
 
-            default => throw new RuntimeException(
-                "Unknown fetch: " . $name,
-            ),
+            default => throw new RuntimeException("Unknown fetch: " . $name),
         };
     }
 
@@ -2882,7 +3007,10 @@ final class LimeVideo
 
     private function touchCronMarker(string $name): void
     {
-        $this->writeRuntimeFileAtomic($this->cronMarkerFile($name), (string) time());
+        $this->writeRuntimeFileAtomic(
+            $this->cronMarkerFile($name),
+            (string) time(),
+        );
     }
 
     private function maybeScheduleAnalyticsJobs(): void
@@ -2907,7 +3035,8 @@ final class LimeVideo
             "analytics",
             $hourTarget,
             [
-                "lookback_hours" => (int) ($this->analytics["rollup_lookback_hours"] ?? 48),
+                "lookback_hours" =>
+                    (int) ($this->analytics["rollup_lookback_hours"] ?? 48),
             ],
             -10,
         );
@@ -2916,7 +3045,8 @@ final class LimeVideo
             "analytics",
             $dayTarget,
             [
-                "lookback_days" => (int) ($this->analytics["rollup_lookback_days"] ?? 14),
+                "lookback_days" =>
+                    (int) ($this->analytics["rollup_lookback_days"] ?? 14),
             ],
             -20,
         );
@@ -2925,7 +3055,8 @@ final class LimeVideo
             "analytics",
             "retention_" . gmdate("Ymd"),
             [
-                "retention_days" => (int) ($this->analytics["raw_retention_days"] ?? 90),
+                "retention_days" =>
+                    (int) ($this->analytics["raw_retention_days"] ?? 90),
             ],
             -30,
         );
@@ -2949,7 +3080,8 @@ final class LimeVideo
     private function runCronJobBatch(int $limit = 10): array
     {
         $limit = min(50, max(1, $limit));
-        $workerId = gethostname() . "-" . getmypid() . "-" . bin2hex(random_bytes(3));
+        $workerId =
+            gethostname() . "-" . getmypid() . "-" . bin2hex(random_bytes(3));
         $processed = [];
 
         for ($i = 0; $i < $limit; $i++) {
@@ -2966,8 +3098,14 @@ final class LimeVideo
     public function runCronJobs(int $limit = 10, ?string $token = null): void
     {
         $expectedToken = trim((string) ($this->cron["token"] ?? ""));
-        if ($expectedToken === "" || !hash_equals($expectedToken, (string) $token)) {
-            $this->jsonResponse(["error" => "Invalid or missing cron token"], 403);
+        if (
+            $expectedToken === "" ||
+            !hash_equals($expectedToken, (string) $token)
+        ) {
+            $this->jsonResponse(
+                ["error" => "Invalid or missing cron token"],
+                403,
+            );
         }
 
         $result = $this->runCronJobBatch($limit);
@@ -3046,11 +3184,21 @@ final class LimeVideo
     {
         try {
             $result = match ($job["event_type"]) {
-                "notification_video" => $this->processVideoNotificationJob($job),
+                "notification_video" => $this->processVideoNotificationJob(
+                    $job,
+                ),
                 "sitemap_regenerate" => $this->processSitemapRegenerationJob(),
-                "analytics_rollup_hourly" => $this->processAnalyticsRollupJob($job, "hour"),
-                "analytics_rollup_daily" => $this->processAnalyticsRollupJob($job, "day"),
-                "analytics_cleanup_raw" => $this->processAnalyticsCleanupJob($job),
+                "analytics_rollup_hourly" => $this->processAnalyticsRollupJob(
+                    $job,
+                    "hour",
+                ),
+                "analytics_rollup_daily" => $this->processAnalyticsRollupJob(
+                    $job,
+                    "day",
+                ),
+                "analytics_cleanup_raw" => $this->processAnalyticsCleanupJob(
+                    $job,
+                ),
                 default => throw new RuntimeException(
                     "Unknown cron event: " . $job["event_type"],
                 ),
@@ -3154,24 +3302,25 @@ final class LimeVideo
     private function processAnalyticsRollupJob(array $job, string $unit): array
     {
         $payload = json_decode((string) ($job["payload"] ?? "{}"), true) ?: [];
-        $lookback = $unit === "hour"
-            ? max(
-                1,
-                min(
-                    168,
-                    (int) ($payload["lookback_hours"] ??
-                        ($this->analytics["rollup_lookback_hours"] ?? 48)),
-                ),
-            )
-            : max(
-                1,
-                min(
-                    365,
-                    (int) ($payload["lookback_days"] ??
-                        ($this->analytics["rollup_lookback_days"] ?? 14)),
-                ),
-            );
-        $cutoff = (new DateTimeImmutable())
+        $lookback =
+            $unit === "hour"
+                ? max(
+                    1,
+                    min(
+                        168,
+                        (int) ($payload["lookback_hours"] ??
+                            ($this->analytics["rollup_lookback_hours"] ?? 48)),
+                    ),
+                )
+                : max(
+                    1,
+                    min(
+                        365,
+                        (int) ($payload["lookback_days"] ??
+                            ($this->analytics["rollup_lookback_days"] ?? 14)),
+                    ),
+                );
+        $cutoff = new DateTimeImmutable()
             ->modify("-{$lookback} " . ($unit === "hour" ? "hours" : "days"))
             ->format($unit === "hour" ? "Y-m-d H:00:00" : "Y-m-d 00:00:00");
         $bucketExpr =
@@ -3237,7 +3386,7 @@ final class LimeVideo
             (int) ($payload["retention_days"] ??
                 ($this->analytics["raw_retention_days"] ?? 90)),
         );
-        $cutoff = (new DateTimeImmutable())
+        $cutoff = new DateTimeImmutable()
             ->modify("-{$retentionDays} days")
             ->format("Y-m-d H:i:s");
         $stmt = $this->db()->prepare(
@@ -3245,7 +3394,10 @@ final class LimeVideo
         );
         $stmt->execute([$cutoff]);
 
-        return ["retention_days" => $retentionDays, "deleted" => $stmt->rowCount()];
+        return [
+            "retention_days" => $retentionDays,
+            "deleted" => $stmt->rowCount(),
+        ];
     }
 
     public function vote(
@@ -3275,7 +3427,10 @@ final class LimeVideo
             $commentVideo = $lookup->fetch();
             $commentVideoId = $commentVideo["target_id"] ?? null;
             if (!$commentVideo || !$this->canViewVideo($commentVideo)) {
-                $this->jsonResponse(["error" => "This video does not exist."], 404);
+                $this->jsonResponse(
+                    ["error" => "This video does not exist."],
+                    404,
+                );
             }
         } else {
             $this->visibleVideoOrFail($targetId);
@@ -3473,7 +3628,9 @@ final class LimeVideo
         $this->cacheDelete("user_" . $uid);
         $this->cacheDeletePrefix("profile_" . $uid . "_");
         $this->invalidateVideoBaseCaches($uid);
-        $this->enqueueSitemapRegeneration("profile_updated", ["user_id" => $uid]);
+        $this->enqueueSitemapRegeneration("profile_updated", [
+            "user_id" => $uid,
+        ]);
         $_SESSION["user"]["display_name"] = $displayName;
         $this->jsonResponse(["success" => true]);
     }
@@ -3497,7 +3654,8 @@ final class LimeVideo
         $this->visibleVideoOrFail($videoId);
         $viewerId = $_SESSION["user"]["id"] ?? "guest";
         $cacheKey =
-            "comments_v3_{$videoId}_{$viewerId}_{$sort}_" . sha1((string) $before);
+            "comments_v3_{$videoId}_{$viewerId}_{$sort}_" .
+            sha1((string) $before);
         $cached = $this->cacheGet($cacheKey, 30);
         if ($cached !== null) {
             $this->jsonResponse($cached);
@@ -3550,7 +3708,9 @@ final class LimeVideo
         }
 
         $comments = array_map(
-            fn(array $comment): array => $this->publicCommentProjection($comment),
+            fn(array $comment): array => $this->publicCommentProjection(
+                $comment,
+            ),
             $comments,
         );
         $this->cacheSet($cacheKey, $comments, 30);
@@ -3857,7 +4017,9 @@ final class LimeVideo
             array_unique(
                 array_filter(
                     array_map(
-                        fn($tag) => $this->validate($tag, "text", ["max" => 50]),
+                        fn($tag) => $this->validate($tag, "text", [
+                            "max" => 50,
+                        ]),
                         $tags,
                     ),
                 ),
@@ -3872,7 +4034,10 @@ final class LimeVideo
         }
         $contentType = (string) ($_SERVER["CONTENT_TYPE"] ?? "");
         if (!str_starts_with(strtolower($contentType), "multipart/form-data")) {
-            $this->jsonResponse(["error" => "Multipart form data is required"], 400);
+            $this->jsonResponse(
+                ["error" => "Multipart form data is required"],
+                400,
+            );
         }
         $this->assertActionAllowed("video");
 
@@ -3944,7 +4109,10 @@ final class LimeVideo
             if ($thumbnailFile) {
                 $thumbnailPath = $this->moveValidatedUpload(
                     $thumbnailFile,
-                    (string) $this->uploadConfig("thumbnail_dir", "uploads/thumbs"),
+                    (string) $this->uploadConfig(
+                        "thumbnail_dir",
+                        "uploads/thumbs",
+                    ),
                     $videoId . "_thumb_" . $suffix,
                 );
                 $movedFiles[] = __DIR__ . "/" . $thumbnailPath;
@@ -4033,11 +4201,9 @@ final class LimeVideo
         $thumbnailUrl = $this->validate($input["thumbnail_url"] ?? "", "url", [
             "max" => 500,
         ]);
-        $playbackMode = $this->validate(
-            $input["playback_mode"] ?? "",
-            "enum",
-            ["allowed" => ["direct", "external_page"]],
-        );
+        $playbackMode = $this->validate($input["playback_mode"] ?? "", "enum", [
+            "allowed" => ["direct", "external_page"],
+        ]);
         $duration = max(0, (int) ($input["duration"] ?? 0));
         $isSensitive = !empty($input["is_sensitive"]) ? 1 : 0;
         $disableComments = !empty($input["disable_comments"]) ? 1 : 0;
@@ -4063,13 +4229,13 @@ final class LimeVideo
         if (!$title || !$playbackUrl || $thumbnailUrl === null) {
             $this->jsonResponse(
                 [
-                    "error" =>
-                        "Title and valid playback_url are required",
+                    "error" => "Title and valid playback_url are required",
                 ],
                 400,
             );
         }
-        $playbackMode = $playbackMode ?: $this->detectPlaybackMode($playbackUrl);
+        $playbackMode =
+            $playbackMode ?: $this->detectPlaybackMode($playbackUrl);
 
         $videoId = $this->generateId("v", 12);
         $assetId = $this->validate(
@@ -4372,9 +4538,10 @@ final class LimeVideo
                 ),
                 $items,
             ),
-            "next_cursor" => $hasMore && $last
-                ? $this->encodeSearchCursor($last, $sort)
-                : null,
+            "next_cursor" =>
+                $hasMore && $last
+                    ? $this->encodeSearchCursor($last, $sort)
+                    : null,
             "has_more" => $hasMore,
         ];
         $this->cacheSet($cacheKey, $page, 60);
@@ -4600,7 +4767,10 @@ final class LimeVideo
             $commentStmt->execute([$targetId]);
             $commentVideo = $commentStmt->fetch();
             if (!$commentVideo || !$this->canViewVideo($commentVideo)) {
-                $this->jsonResponse(["error" => "This comment does not exist."], 404);
+                $this->jsonResponse(
+                    ["error" => "This comment does not exist."],
+                    404,
+                );
             }
         }
 
@@ -4624,14 +4794,18 @@ final class LimeVideo
             $ads = [];
             $services = [];
             $serviceConfig = $this->ads["services"] ?? [];
-            foreach ($this->normalizeConfigList($this->ads["service_keys"] ?? []) as $service) {
+            foreach (
+                $this->normalizeConfigList($this->ads["service_keys"] ?? [])
+                as $service
+            ) {
                 $data = is_array($serviceConfig[$service] ?? null)
                     ? $serviceConfig[$service]
                     : [];
                 $services[$service] = [
-                    "display_name" => (string) ($data["display_name"] ?? $service),
+                    "display_name" =>
+                        (string) ($data["display_name"] ?? $service),
                     "script_url" =>
-                        ($value = ($data["script_url"] ?? "")) === ""
+                        ($value = $data["script_url"] ?? "") === ""
                             ? null
                             : $value,
                     "enabled" => (bool) ($data["enabled"] ?? false),
@@ -4639,7 +4813,10 @@ final class LimeVideo
                 ];
             }
             $placementConfig = $this->ads["placements"] ?? [];
-            foreach ($this->normalizeConfigList($this->ads["placement_keys"] ?? []) as $placement) {
+            foreach (
+                $this->normalizeConfigList($this->ads["placement_keys"] ?? [])
+                as $placement
+            ) {
                 $data = is_array($placementConfig[$placement] ?? null)
                     ? $placementConfig[$placement]
                     : [];
@@ -4647,13 +4824,14 @@ final class LimeVideo
                     "source" => (string) ($data["source"] ?? "internal"),
                     "service" => (string) ($data["service"] ?? "internal"),
                     "external_zone_id" =>
-                        ($value = ($data["external_zone_id"] ?? "")) === ""
+                        ($value = $data["external_zone_id"] ?? "") === ""
                             ? null
                             : $value,
                     "label" => (string) ($data["label"] ?? "Sponsored"),
                     "title" => (string) ($data["title"] ?? "Advertisement"),
                     "body" => (string) ($data["body"] ?? ""),
-                    "cta_label" => (string) ($data["cta_label"] ?? "Learn More"),
+                    "cta_label" =>
+                        (string) ($data["cta_label"] ?? "Learn More"),
                     "cta_url" => (string) ($data["cta_url"] ?? "#"),
                     "enabled" => (bool) ($data["enabled"] ?? false),
                     "frequency" => (int) ($data["frequency"] ?? 1),
@@ -4715,15 +4893,19 @@ final class LimeVideo
         $services = $this->remember("ad_services_v1", 300, function () {
             $services = [];
             $serviceConfig = $this->ads["services"] ?? [];
-            foreach ($this->normalizeConfigList($this->ads["service_keys"] ?? []) as $service) {
+            foreach (
+                $this->normalizeConfigList($this->ads["service_keys"] ?? [])
+                as $service
+            ) {
                 $data = is_array($serviceConfig[$service] ?? null)
                     ? $serviceConfig[$service]
                     : [];
                 $services[] = [
                     "service" => $service,
-                    "display_name" => (string) ($data["display_name"] ?? $service),
+                    "display_name" =>
+                        (string) ($data["display_name"] ?? $service),
                     "script_url" =>
-                        ($value = ($data["script_url"] ?? "")) === ""
+                        ($value = $data["script_url"] ?? "") === ""
                             ? null
                             : $value,
                     "enabled" => (int) (bool) ($data["enabled"] ?? false),
@@ -4854,7 +5036,10 @@ final class LimeVideo
     {
         if (isset($input["events"]) && is_array($input["events"])) {
             return array_values(
-                array_filter($input["events"], static fn($event) => is_array($event)),
+                array_filter(
+                    $input["events"],
+                    static fn($event) => is_array($event),
+                ),
             );
         }
 
@@ -4875,7 +5060,9 @@ final class LimeVideo
             return null;
         }
 
-        $stmt = $this->db()->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+        $stmt = $this->db()->prepare(
+            "SELECT id FROM users WHERE id = ? LIMIT 1",
+        );
         $stmt->execute([$userId]);
 
         return $stmt->fetchColumn() ? $userId : null;
@@ -4978,8 +5165,11 @@ final class LimeVideo
         $this->jsonResponse(["success" => true, "count" => count($events)]);
     }
 
-    public function login(string $user, string $pass, string $captchaToken = ""): void
-    {
+    public function login(
+        string $user,
+        string $pass,
+        string $captchaToken = "",
+    ): void {
         $this->checkRateLimit("login", 8, 300);
         $this->verifyCaptcha($captchaToken);
         $stmt = $this->db()->prepare(
@@ -5082,7 +5272,9 @@ final class LimeVideo
             ->prepare("INSERT INTO user_settings (user_id) VALUES (?)")
             ->execute([$id]);
         $this->cacheDelete("global_stats");
-        $this->enqueueSitemapRegeneration("user_registered", ["user_id" => $id]);
+        $this->enqueueSitemapRegeneration("user_registered", [
+            "user_id" => $id,
+        ]);
         $this->jsonResponse(["success" => true, "id" => $id]);
     }
 }
@@ -5090,7 +5282,7 @@ final class LimeVideo
 // --- Runtime bootstrap and API router ---
 $App = new LimeVideo();
 ini_set("session.use_strict_mode", "1");
-session_save_path($App->cachePath());
+session_save_path($App->cacheDir);
 session_set_cookie_params([
     "lifetime" => 0,
     "path" => "/",
@@ -5116,9 +5308,10 @@ if ($uri === "/sitemap.xml") {
 
 if (str_starts_with($uri, "/api/")) {
     $endpoint = substr($uri, 5);
-    $input = $endpoint === "upload_video"
-        ? $_POST
-        : json_decode(file_get_contents("php://input"), true) ?? $_POST;
+    $input =
+        $endpoint === "upload_video"
+            ? $_POST
+            : json_decode(file_get_contents("php://input"), true) ?? $_POST;
 
     try {
         $App->assertCsrf($endpoint, $method);
@@ -5137,19 +5330,24 @@ if (str_starts_with($uri, "/api/")) {
             "upload_video",
             "watch_later",
             "jobs",
-            "analytics" => $App->requireMethod($method, ["POST"]),
+            "analytics"
+                => $App->requireMethod($method, ["POST"]),
             "admin/report_status",
             "admin/video_status",
-            "admin/user_ban" => $App->requireMethod($method, ["POST"]),
+            "admin/user_ban"
+                => $App->requireMethod($method, ["POST"]),
             // TODO: CSRF exemption is safe only with separate provider authentication or signature validation.
             "provider_webhook" => $App->requireMethod($method, ["POST"]),
             "admin/summary",
             "admin/reports",
             "admin/videos",
             "admin/users",
-            "admin/jobs" => $App->requireMethod($method, ["GET"]),
-            "chat/messages",
-            "settings" => $App->requireMethod($method, ["GET", "POST"]),
+            "admin/jobs"
+                => $App->requireMethod($method, ["GET"]),
+            "chat/messages", "settings" => $App->requireMethod($method, [
+                "GET",
+                "POST",
+            ]),
             default => null,
         };
         if ($method === "POST") {
@@ -5172,7 +5370,8 @@ if (str_starts_with($uri, "/api/")) {
                 "jobs" => $App->checkRateLimit("jobs", 10, 60),
                 "admin/report_status",
                 "admin/video_status",
-                "admin/user_ban" => $App->checkRateLimit("admin_action", 60, 60),
+                "admin/user_ban"
+                    => $App->checkRateLimit("admin_action", 60, 60),
                 default => null,
             };
         }
@@ -5244,15 +5443,15 @@ if (str_starts_with($uri, "/api/")) {
 
 // --- SPA shell fallback ---
 // Every non-API path falls back to the shell selected by app.dev_mode.
-$shellPath = (bool) $App->app["dev_mode"] 
-    ? __DIR__ . "/ui/index.html" 
+$shellPath = (bool) $App->app["dev_mode"]
+    ? __DIR__ . "/ui/index.html"
     : __DIR__ . "/public/index.html";
 
 if (!file_exists($shellPath)) {
     $errorMsg = (bool) $App->app["dev_mode"]
         ? "Frontend shell missing at: " . $shellPath
         : "System maintenance. Please check back later.";
-    
+
     header("Content-Type: text/plain");
     http_response_code(503);
     echo $errorMsg;
