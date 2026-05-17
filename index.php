@@ -2,6 +2,14 @@
 declare(strict_types=1);
 
 define("LIMEVIDEO", true);
+$clientIp = $_SERVER["REMOTE_ADDR"] ?? "127.0.0.1";
+if (
+    isset($_SERVER["HTTP_CF_CONNECTING_IP"]) &&
+    filter_var($_SERVER["HTTP_CF_CONNECTING_IP"], FILTER_VALIDATE_IP)
+) {
+    $clientIp = $_SERVER["HTTP_CF_CONNECTING_IP"];
+}
+define("CLIENT_IP", $clientIp);
 
 /**
  * LimeVideo Monolith
@@ -822,7 +830,7 @@ final class LimeVideo
 
     public function checkRateLimit(string $key, int $limit, int $period): void
     {
-        $ip = hash("sha256", $_SERVER["REMOTE_ADDR"] ?? "127.0.0.1");
+        $ip = hash("sha256", CLIENT_IP ?? "127.0.0.1");
         $file = $this->cacheDir . "/ratelimit_" . sha1($key . $ip) . ".tmp";
         $data = file_exists($file)
             ? json_decode((string) file_get_contents($file), true)
@@ -906,7 +914,7 @@ final class LimeVideo
 
         if (!is_array($result) || empty($result["success"])) {
             $errors = is_array($result)
-                ? ($result["error-codes"] ?? [])
+                ? $result["error-codes"] ?? []
                 : ["no-response"];
             error_log(
                 "LimeVideo captcha verification failed: " .
@@ -5085,8 +5093,8 @@ final class LimeVideo
         array $metadata = [],
     ): void {
         $context = [
-            "ip" => $_SERVER["REMOTE_ADDR"] ?? "127.0.0.1",
-            "hash" => hash("sha256", $_SERVER["REMOTE_ADDR"] ?? "127.0.0.1"),
+            "ip" => CLIENT_IP ?? "127.0.0.1",
+            "hash" => hash("sha256", CLIENT_IP ?? "127.0.0.1"),
             "ua" => $_SERVER["HTTP_USER_AGENT"] ?? null,
         ];
 
@@ -5223,7 +5231,7 @@ final class LimeVideo
             $this->validate($input["viewport"] ?? null, "text", ["max" => 40]),
             $this->validate($input["referrer"] ?? null, "text", ["max" => 255]),
             $metadata,
-            hash("sha256", $_SERVER["REMOTE_ADDR"] ?? "127.0.0.1"),
+            hash("sha256", CLIENT_IP ?? "127.0.0.1"),
             mb_substr((string) ($_SERVER["HTTP_USER_AGENT"] ?? ""), 0, 255),
         ]);
     }
