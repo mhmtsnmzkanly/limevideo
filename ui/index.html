@@ -680,7 +680,7 @@
                 <p class="text-xs text-gray-500 mt-1">${description}</p>
             </div>
             <label class="settings-switch">
-                <input type="checkbox" data-action="setting-toggle" data-field="${app.safeAttr(field)}" data-checked="${value ? '1' : '0'}">
+                <input type="checkbox" data-action="setting-toggle" data-field="${app.safeAttr(field)}" ${value ? 'checked' : ''}>
                 <span></span>
             </label>
         </div>

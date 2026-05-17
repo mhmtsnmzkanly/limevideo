@@ -2322,8 +2322,9 @@ const app = {
     try {
       const data = await this.apiGet("/api/settings");
       if (!data.error) {
-        this.state.settings = data;
-        this.state.autoplay = Number(data.autoplay) === 1;
+        const settings = this.normalizeSettingsResponse(data);
+        this.state.settings = settings;
+        this.state.autoplay = Number(settings.autoplay) === 1;
       }
     } catch (e) {
       console.error("Settings fetch failed");
@@ -2786,13 +2787,39 @@ const app = {
   async saveSettings(patch = {}) {
     if (!this.state.auth.me) return;
     const current = this.state.settings || {};
-    const next = { ...current, ...patch };
+    const next = this.normalizeSettings({ ...current, ...patch });
     try {
-      await this.apiPost("/api/settings", next);
-      this.state.settings = next;
+      const response = await this.apiPost("/api/settings", next);
+      const settings = this.normalizeSettingsResponse(response);
+      this.state.settings = settings;
+      this.state.autoplay = Number(settings.autoplay) === 1;
     } catch (e) {
       console.error("Settings save failed");
     }
+  },
+
+  normalizeSettingsResponse(response = {}) {
+    const settings =
+      response && typeof response === "object" && response.settings
+        ? response.settings
+        : response;
+    return this.normalizeSettings(settings);
+  },
+
+  normalizeSettings(settings = {}) {
+    const defaults = {
+      autoplay: 1,
+      show_preroll_ads: 1,
+      show_popunder_ads: 1,
+      notify_comments: 1,
+      notify_follows: 1,
+    };
+    return Object.fromEntries(
+      Object.entries(defaults).map(([key, defaultValue]) => [
+        key,
+        Number(settings?.[key] ?? defaultValue) === 1 ? 1 : 0,
+      ]),
+    );
   },
 
   renderNavbar(page) {

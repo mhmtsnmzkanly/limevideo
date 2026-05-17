@@ -210,10 +210,11 @@ final class LimeVideo
 
     private function publicVideoCard(array $video): array
     {
-        $thumbnail = (string) ($video["thumbnail_path"] ?? "");
-        if ($thumbnail === "") {
-            $thumbnail = (string) ($video["thumbnail_url"] ?? "");
+        $thumbnailSource = (string) ($video["thumbnail_url"] ?? "");
+        if ($thumbnailSource === "") {
+            $thumbnailSource = (string) ($video["thumbnail_path"] ?? "");
         }
+        $thumbnail = $this->publicThumbnailUrl($thumbnailSource);
         return [
             "id" => $video["id"] ?? "",
             "title" => $video["title"] ?? "",
@@ -1126,17 +1127,49 @@ final class LimeVideo
      */
     private function publicMediaUrl(?string $path): string
     {
+        return $this->publicStorageUrl($path, "uploads/videos");
+    }
+
+    private function publicThumbnailUrl(?string $path): string
+    {
+        return $this->publicStorageUrl($path, "uploads/thumbs");
+    }
+
+    /**
+     * Converts an internal storage value into a public uploads URL without exposing server paths.
+     * Input: raw storage path and default uploads subdirectory.
+     * Output: HTTP(S), /uploads/... or a canonical uploads URL based on basename.
+     */
+    private function publicStorageUrl(?string $path, string $defaultDir): string
+    {
         $path = trim((string) $path);
         if ($path === "") {
             return "";
         }
         if ($this->isAbsoluteMediaUrl($path) || str_starts_with($path, "/")) {
-            return $path;
+            if ($this->isAbsoluteMediaUrl($path)) {
+                return $path;
+            }
+            $normalized = str_replace("\\", "/", $path);
+            if (str_starts_with($normalized, "/uploads/")) {
+                return $normalized;
+            }
+            $filename = basename($normalized);
+            return $filename !== "" && $filename !== "." && $filename !== ".."
+                ? "/" . trim($defaultDir, "/") . "/" . $filename
+                : "";
+        }
+        $path = str_replace("\\", "/", $path);
+        if (str_starts_with($path, "uploads/")) {
+            return "/" . ltrim($path, "/");
         }
         if (!str_contains($path, "/")) {
-            return "/uploads/videos/" . $path;
+            return "/" . trim($defaultDir, "/") . "/" . $path;
         }
-        return "/" . ltrim($path, "/");
+        $filename = basename($path);
+        return $filename !== "" && $filename !== "." && $filename !== ".."
+            ? "/" . trim($defaultDir, "/") . "/" . $filename
+            : "";
     }
 
     private function uploadDirectory(string $relativePath): string
