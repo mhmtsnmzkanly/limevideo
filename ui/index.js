@@ -2650,8 +2650,11 @@ const app = {
       if (!container) return;
 
       const before = append ? container.dataset.last : "";
-      const comments = await this.apiGet(
+      const response = await this.apiGet(
         `/api/comments?video_id=${videoId}&before=${encodeURIComponent(before)}&sort=${this.state.commentSort}`,
+      );
+      const comments = this.normalizeComments(
+        Array.isArray(response) ? response : response?.comments || [],
       );
       const html = comments.map((c) => this.renderComment(c)).join("");
 
@@ -2678,7 +2681,7 @@ const app = {
   },
 
   renderComment(c, isReply = false) {
-    const replies = c.replies || [];
+    const replies = Array.isArray(c.replies) ? c.replies : [];
     return this.renderTemplate("partial-comment", {
       c,
       isReply,
@@ -2698,6 +2701,42 @@ const app = {
           ? this.renderTemplate("partial-comment-reply-box", { c })
           : "",
     });
+  },
+
+  normalizeComments(comments = []) {
+    const list = Array.isArray(comments) ? comments.filter(Boolean) : [];
+    const hasFlatReplies = list.some((comment) => comment.parent_id);
+    if (!hasFlatReplies) {
+      return list.map((comment) => ({
+        ...comment,
+        replies: this.normalizeComments(comment.replies || []),
+      }));
+    }
+
+    const byId = new Map();
+    list.forEach((comment) => {
+      byId.set(comment.id, {
+        ...comment,
+        replies: Array.isArray(comment.replies) ? [...comment.replies] : [],
+      });
+    });
+
+    const roots = [];
+    byId.forEach((comment) => {
+      if (comment.parent_id && byId.has(comment.parent_id)) {
+        const parent = byId.get(comment.parent_id);
+        if (!parent.replies.some((reply) => reply.id === comment.id)) {
+          parent.replies.push(comment);
+        }
+        return;
+      }
+      if (!comment.parent_id) roots.push(comment);
+    });
+
+    return roots.map((comment) => ({
+      ...comment,
+      replies: this.normalizeComments(comment.replies || []),
+    }));
   },
 
   applySearchSort() {

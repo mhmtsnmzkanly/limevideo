@@ -3585,6 +3585,20 @@ final class LimeVideo
             );
         }
 
+        if ($parentId) {
+            $parentStmt = $this->db()->prepare(
+                "SELECT id, parent_id FROM comments WHERE id = ? AND target_id = ? AND status = 'active' LIMIT 1",
+            );
+            $parentStmt->execute([$parentId, $videoId]);
+            $parent = $parentStmt->fetch();
+            if (!$parent) {
+                $this->jsonResponse(["error" => "Parent comment not found"], 404);
+            }
+            if ($parent["parent_id"] !== null) {
+                $this->jsonResponse(["error" => "Nested replies are not supported"], 400);
+            }
+        }
+
         $stmt = $this->db()->prepare(
             "INSERT INTO comments (id, user_id, target_id, parent_id, body) VALUES (?,?,?,?,?)",
         );
