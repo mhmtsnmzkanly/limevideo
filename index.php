@@ -1489,6 +1489,39 @@ final class LimeVideo
         }
     }
 
+    public function requestInputForEndpoint(string $endpoint): array
+    {
+        if ($endpoint === "upload_video") {
+            return $_POST;
+        }
+
+        $contentType = strtolower((string) ($_SERVER["CONTENT_TYPE"] ?? ""));
+        $raw = file_get_contents("php://input");
+        $raw = $raw === false ? "" : $raw;
+        $isJson =
+            str_contains($contentType, "application/json") ||
+            (bool) preg_match("/\\+json(?:\\s*;|$)/", $contentType);
+
+        if ($isJson || trim($raw) !== "") {
+            if (trim($raw) === "") {
+                return [];
+            }
+            $decoded = json_decode($raw, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $this->jsonResponse(["error" => "Invalid JSON body"], 400);
+            }
+            if (!is_array($decoded)) {
+                $this->jsonResponse(
+                    ["error" => "JSON body must be an object or array"],
+                    400,
+                );
+            }
+            return $decoded;
+        }
+
+        return $_POST;
+    }
+
     public function requireMethod(
         string $actualMethod,
         array $allowedMethods,
@@ -5451,10 +5484,7 @@ if ($uri === "/sitemap.xml") {
 
 if (str_starts_with($uri, "/api/")) {
     $endpoint = substr($uri, 5);
-    $input =
-        $endpoint === "upload_video"
-            ? $_POST
-            : json_decode(file_get_contents("php://input"), true) ?? $_POST;
+    $input = $App->requestInputForEndpoint($endpoint);
 
     try {
         $App->assertCsrf($endpoint, $method);
