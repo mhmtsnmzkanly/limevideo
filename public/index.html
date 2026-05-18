@@ -681,7 +681,7 @@
                 <p class="text-xs text-gray-500 mt-1">${description}</p>
             </div>
             <label class="settings-switch">
-                <input type="checkbox" data-action="setting-toggle" data-field="${app.safeAttr(field)}" ${value ? 'checked' : ''}>
+                <input type="checkbox" data-action="setting-toggle" data-setting-field data-field="${app.safeAttr(field)}">
                 <span></span>
             </label>
         </div>
@@ -1080,6 +1080,6 @@
         </div>
     </template>
 
-    <script src="/public/index.js?v=93263c3776"></script>
+    <script src="/public/index.js?v=8f878358ac"></script>
 </body>
 </html>

@@ -1401,7 +1401,9 @@ const app = {
       } else {
         this.setState("auth.me", null);
       }
-      if (data?.jobs === true) this.triggerJobs();
+      if (data?.jobs === true && this.state.auth.me && this.state.auth.csrfToken) {
+        this.triggerJobs();
+      }
     } catch (e) {
       console.error("Auth check failed");
     }
@@ -2557,7 +2559,8 @@ const app = {
     const searchSort = document.getElementById("search-sort-select");
     if (searchSort) searchSort.value = this.state.search.sort;
     document.querySelectorAll("[data-setting-field]").forEach((input) => {
-      input.checked = input.dataset.checked === "1";
+      const field = this.actionValue(input, "field");
+      input.checked = this.toBooleanSetting(this.state.settings?.[field], true);
     });
   },
 
@@ -2848,9 +2851,21 @@ const app = {
     return Object.fromEntries(
       Object.entries(defaults).map(([key, defaultValue]) => [
         key,
-        Number(settings?.[key] ?? defaultValue) === 1 ? 1 : 0,
+        this.toBooleanSetting(settings?.[key], this.toBooleanSetting(defaultValue))
+          ? 1
+          : 0,
       ]),
     );
+  },
+
+  toBooleanSetting(value, fallback = false) {
+    if (value === undefined || value === null || value === "") return Boolean(fallback);
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value === 1;
+    const normalized = String(value).trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) return true;
+    if (["0", "false", "no", "off"].includes(normalized)) return false;
+    return Boolean(fallback);
   },
 
   renderNavbar(page) {
@@ -3255,14 +3270,10 @@ const app = {
   },
 
   settingRow(label, field, description) {
-    const value = this.state.settings
-      ? Number(this.state.settings[field]) === 1
-      : true;
     return this.renderTemplate("partial-setting-row", {
       label,
       field,
       description,
-      value,
     });
   },
 
