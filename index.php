@@ -782,26 +782,38 @@ final class LimeVideo
 
     public function generateSitemapXml(): bool
     {
-        $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-        $xml .=
-            "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
-        foreach ($this->getPublicSitemapUrls() as $url) {
-            $xml .= $this->buildSitemapUrlEntry(
-                $url["loc"],
-                $url["lastmod"] ?? null,
-            );
-        }
-        $xml .= "</urlset>\n";
-
         $target = __DIR__ . "/sitemap.xml";
-        $tmp = $target . ".tmp";
+        $tmp = $target . "." . bin2hex(random_bytes(8)) . ".tmp";
+
+        try {
+            $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+            $xml .=
+                "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
+            foreach ($this->getPublicSitemapUrls() as $url) {
+                $xml .= $this->buildSitemapUrlEntry(
+                    $url["loc"],
+                    $url["lastmod"] ?? null,
+                );
+            }
+            $xml .= "</urlset>\n";
+        } catch (Throwable $e) {
+            error_log(
+                "LimeVideo sitemap build failed: " .
+                    get_class($e) .
+                    ": " .
+                    $e->getMessage(),
+            );
+            return false;
+        }
+
         if (file_put_contents($tmp, $xml, LOCK_EX) === false) {
-            error_log("LimeVideo sitemap write failed.");
+            error_log("LimeVideo sitemap write failed: temp file write failed.");
+            @unlink($tmp);
             return false;
         }
         if (!@rename($tmp, $target)) {
             @unlink($tmp);
-            error_log("LimeVideo sitemap rename failed.");
+            error_log("LimeVideo sitemap rename failed: temp file could not replace sitemap.xml.");
             return false;
         }
         return true;
@@ -820,10 +832,15 @@ final class LimeVideo
             );
         }
 
-        $this->jsonResponse([
-            "success" => $this->generateSitemapXml(),
-            "path" => "sitemap.xml",
-        ]);
+        $success = $this->generateSitemapXml();
+        if (!$success) {
+            $this->jsonResponse(
+                ["success" => false, "error" => "Sitemap generation failed"],
+                500,
+            );
+        }
+
+        $this->jsonResponse(["success" => true, "path" => "sitemap.xml"]);
     }
 
     // --- Security, rate limit and cache helpers ---
@@ -5413,11 +5430,9 @@ $method = $_SERVER["REQUEST_METHOD"];
 if ($uri === "/sitemap.xml") {
     header("Content-Type: application/xml; charset=utf-8");
     if (!is_file(__DIR__ . "/sitemap.xml")) {
-        if (!$App->generateSitemapXml() || !is_file(__DIR__ . "/sitemap.xml")) {
-            http_response_code(500);
-            echo "sitemap.xml generation failed";
-            exit();
-        }
+        http_response_code(404);
+        echo "sitemap.xml not generated";
+        exit();
     }
     readfile(__DIR__ . "/sitemap.xml");
     exit();
