@@ -117,6 +117,10 @@ function sampleContext() {
         tagsHtml: '',
         tag: { name: 'Design', slug: 'design' },
         settingsRowsHtml: '',
+        statsHtml: '',
+        trendingHtml: '',
+        listsHtml: '',
+        adServicesHtml: '',
         playlistHtml: '',
         suggestionsHtml: '',
         sidebarAd: {},
@@ -133,7 +137,10 @@ function sampleContext() {
         sourceUrl: 'https://example.test/video.mp4',
         className: 'video-thumb-img',
         commentFormHtml: '',
-        playerHtml: ''
+        playerHtml: '',
+        stat: { icon: 'fa-solid fa-play', label: 'Videos', value: '12' },
+        list: { name: 'Watch Later', item_count: 2, updated_at: 'now' },
+        service: { display_name: 'Internal Ads', service: 'internal', status: 'Enabled' }
     };
 }
 

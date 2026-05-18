@@ -20,7 +20,7 @@
     __LIMEVIDEO_CAPTCHA_SCRIPT__
     
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/public/index.css?v=682b8bef22">
+    <link rel="stylesheet" href="/public/index.css?v=991bbc8a19">
 </head>
 <body>
     <!-- Global Loading Screen: full-page boot loader shown before the app shell is ready -->
@@ -837,10 +837,48 @@
     <template id="tpl-page-gallery">
         <div class="p-4 animate-fade-in">
             <div class="max-w-6xl mx-auto">
+                ${statsHtml}
+                ${trendingHtml}
                 ${searchPanelHtml}
                 ${galleryContentHtml}
             </div>
         </div>
+    </template>
+
+    <!-- Template Engine: compact public platform statistics strip -->
+    <template id="tpl-partial-site-stats">
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            ${itemsHtml}
+        </section>
+    </template>
+
+    <!-- Template Engine: one public platform statistic -->
+    <template id="tpl-partial-site-stat-card">
+        <div class="lime-card p-5 flex items-center gap-4 border-[#00ff41]/10">
+            <div class="w-11 h-11 rounded-2xl bg-[#00ff41]/10 text-[#00ff41] flex items-center justify-center">
+                <i class="${app.safeAttr(stat.icon)}"></i>
+            </div>
+            <div>
+                <p class="text-[9px] font-black uppercase tracking-[0.24em] text-gray-500">${stat.label}</p>
+                <p class="text-2xl font-black tracking-tight">${stat.value}</p>
+            </div>
+        </div>
+    </template>
+
+    <!-- Template Engine: public trending video rail -->
+    <template id="tpl-partial-trending-section">
+        <section class="mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <p class="text-[10px] text-orange-400 font-black uppercase tracking-[0.25em]">Trending Now</p>
+                    <h2 class="text-xl font-black italic uppercase tracking-tighter">Hot on LimeVideo</h2>
+                </div>
+                <button type="button" data-action="navigate" data-to="/gallery?sort=popular" class="text-[10px] font-black uppercase tracking-widest text-[#00ff41]">View popular</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                ${itemsHtml}
+            </div>
+        </section>
     </template>
 
     <!-- Template Engine: gallery empty state -->
@@ -893,6 +931,61 @@
             <div class="space-y-4">
                 ${settingsRowsHtml}
             </div>
+            ${listsHtml}
+            ${adServicesHtml}
+        </div>
+    </template>
+
+    <!-- Template Engine: authenticated user library/list overview -->
+    <template id="tpl-partial-settings-lists">
+        <section class="lime-card p-6 mt-8">
+            <div class="flex items-center justify-between gap-4 mb-5">
+                <div>
+                    <p class="text-[10px] text-[#00ff41] font-black uppercase tracking-[0.25em]">Library</p>
+                    <h2 class="text-xl font-black tracking-tight">My Lists</h2>
+                </div>
+                <i class="fa-solid fa-list-check text-[#00ff41]"></i>
+            </div>
+            <div class="space-y-3">${itemsHtml}</div>
+        </section>
+    </template>
+
+    <!-- Template Engine: one saved/watch-later list row -->
+    <template id="tpl-partial-settings-list-item">
+        <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex items-center justify-between gap-4">
+            <div>
+                <p class="text-sm font-bold">${list.name}</p>
+                <p class="text-[10px] text-gray-500 uppercase font-black tracking-widest">${list.item_count} items</p>
+            </div>
+            <span class="text-[9px] text-gray-600 font-bold uppercase">${list.updated_at}</span>
+        </div>
+    </template>
+
+    <!-- Template Engine: small empty panel row -->
+    <template id="tpl-partial-settings-empty-panel">
+        <div class="rounded-2xl border border-dashed border-white/10 p-5 text-center text-xs font-bold text-gray-500">${message}</div>
+    </template>
+
+    <!-- Template Engine: configured advertisement service overview -->
+    <template id="tpl-partial-settings-ad-services">
+        <section class="lime-card p-6 mt-6">
+            <div class="flex items-center justify-between gap-4 mb-5">
+                <div>
+                    <p class="text-[10px] text-[#00ff41] font-black uppercase tracking-[0.25em]">Monetization</p>
+                    <h2 class="text-xl font-black tracking-tight">Ad Services</h2>
+                </div>
+                <i class="fa-solid fa-rectangle-ad text-[#00ff41]"></i>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2">${itemsHtml}</div>
+        </section>
+    </template>
+
+    <!-- Template Engine: one configured ad service row -->
+    <template id="tpl-partial-settings-ad-service-item">
+        <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p class="text-sm font-bold">${service.display_name}</p>
+            <p class="text-[10px] text-gray-500 uppercase font-black tracking-widest">${service.service}</p>
+            <span class="inline-flex mt-3 px-3 py-1 rounded-full text-[9px] font-black uppercase ${service.status === 'Enabled' ? 'bg-[#00ff41] text-black' : 'bg-white/10 text-gray-500'}">${service.status}</span>
         </div>
     </template>
 
@@ -1080,6 +1173,6 @@
         </div>
     </template>
 
-    <script src="/public/index.js?v=2150357ca1"></script>
+    <script src="/public/index.js?v=21e44607e2"></script>
 </body>
 </html>

@@ -118,6 +118,10 @@ const app = {
     captchaWidgets: {},
     captchaTokens: {},
     ads: {},
+    adServices: [],
+    lists: [],
+    stats: null,
+    trending: [],
     commentSort: "new",
     profileView: "grid",
     analyticsSessionId: "",
@@ -153,10 +157,12 @@ const app = {
     "categoryLabelHtml",
     "categoryPillsHtml",
     "commentFormHtml",
+    "adServicesHtml",
     "galleryContentHtml",
     "galleryFeedHtml",
     "itemsHtml",
     "leaderboardHtml",
+    "listsHtml",
     "notificationDotHtml",
     "playerHtml",
     "playlistHtml",
@@ -167,7 +173,9 @@ const app = {
     "searchPanelHtml",
     "settingsRowsHtml",
     "skeletonCardsHtml",
+    "statsHtml",
     "suggestionsHtml",
+    "trendingHtml",
     "profileTabHtml",
     "tagsHtml",
     "thumbnailHtml",
@@ -1280,7 +1288,7 @@ const app = {
           return this.loadGallery();
         },
       },
-      { re: /^\/settings$/, page: "settings", load: () => ({}) },
+      { re: /^\/settings$/, page: "settings", load: () => this.loadSettingsPage() },
       { re: /^\/auth$/, page: "auth", load: () => ({}) },
     ];
     const match = routes.find((r) => r.re.test(path)) || routes[0];
@@ -2364,6 +2372,24 @@ const app = {
     }
   },
 
+  async fetchStats() {
+    try {
+      const data = await this.apiGet("/api/stats");
+      this.state.stats = data && typeof data === "object" && !data.error ? data : null;
+    } catch (e) {
+      this.state.stats = null;
+    }
+  },
+
+  async fetchTrending() {
+    try {
+      const data = await this.apiGet("/api/trending");
+      this.state.trending = Array.isArray(data) ? data : [];
+    } catch (e) {
+      this.state.trending = [];
+    }
+  },
+
   async fetchAds() {
     try {
       this.state.ads = await this.apiGet("/api/ads");
@@ -2371,6 +2397,42 @@ const app = {
     } catch (e) {
       this.state.ads = {};
     }
+  },
+
+  async fetchAdServices() {
+    try {
+      const data = await this.apiGet("/api/ad_services");
+      this.state.adServices = Array.isArray(data) ? data : [];
+    } catch (e) {
+      this.state.adServices = [];
+    }
+  },
+
+  async fetchLists() {
+    if (!this.state.auth.me) {
+      this.state.lists = [];
+      return;
+    }
+    try {
+      const data = await this.apiGet("/api/lists");
+      this.state.lists = Array.isArray(data) ? data : [];
+    } catch (e) {
+      this.state.lists = [];
+    }
+  },
+
+  async ensureGallerySurfaces() {
+    await Promise.allSettled([this.fetchStats(), this.fetchTrending()]);
+  },
+
+  async loadSettingsPage() {
+    if (!this.state.auth.me) return {};
+    await Promise.allSettled([
+      this.fetchSettings(),
+      this.fetchLists(),
+      this.fetchAdServices(),
+    ]);
+    return {};
   },
 
   syncStaticAds() {
@@ -2395,6 +2457,7 @@ const app = {
 
   async loadGallery() {
     try {
+      const surfacesPromise = this.ensureGallerySurfaces();
       const tag = this.state.search.activeTag || "all";
       const bootstrap =
         !this.state.search.query && this.state.search.sort === "newest"
@@ -2404,20 +2467,26 @@ const app = {
           : null;
       const bootstrapPage = bootstrap?.data?.gallery;
       if (bootstrapPage && !this.state.search.galleryCursor) {
+        await surfacesPromise;
         const videos = Array.isArray(bootstrapPage.items) ? bootstrapPage.items : [];
         this.setState("search.videos", videos);
+        this.applySearchSort();
         this.setState("search.galleryCursor", bootstrapPage.next_cursor || "");
         this.setState("search.galleryHasMore", Boolean(bootstrapPage.has_more));
         return this.state.search.videos;
       }
 
-      const page = await this.fetchGalleryPage();
+      const [page] = await Promise.all([
+        this.fetchGalleryPage(),
+        surfacesPromise,
+      ]);
       const videos = Array.isArray(page.items)
         ? page.items
         : Array.isArray(page)
           ? page
           : [];
       this.setState("search.videos", videos);
+      this.applySearchSort();
       this.setState("search.galleryCursor", page.next_cursor || "");
       this.setState("search.galleryHasMore", Boolean(page.has_more));
       if (this.state.search.query || this.state.search.activeTag !== "all") {
@@ -2776,6 +2845,15 @@ const app = {
     return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   },
 
+  formatCompactNumber(value) {
+    const number = Number(value || 0);
+    if (!Number.isFinite(number)) return "0";
+    return new Intl.NumberFormat("en", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(number);
+  },
+
   thumbnailUrl(video = {}) {
     return this.safeUrl(video.thumbnail_url || "");
   },
@@ -3115,6 +3193,84 @@ const app = {
       .join("");
   },
 
+  renderStatsSection() {
+    const stats = this.state.stats;
+    if (!stats) return "";
+    const items = [
+      {
+        label: "Creators",
+        value: this.formatCompactNumber(stats.total_users),
+        icon: "fa-solid fa-users",
+      },
+      {
+        label: "Public Videos",
+        value: this.formatCompactNumber(stats.total_videos),
+        icon: "fa-solid fa-play",
+      },
+      {
+        label: "Total Views",
+        value: this.formatCompactNumber(stats.total_views),
+        icon: "fa-solid fa-chart-line",
+      },
+    ];
+    return this.renderTemplate("partial-site-stats", {
+      itemsHtml: items
+        .map((stat) => this.renderTemplate("partial-site-stat-card", { stat }))
+        .join(""),
+    });
+  },
+
+  renderTrendingSection() {
+    const videos = Array.isArray(this.state.trending)
+      ? this.state.trending.filter(Boolean).slice(0, 6)
+      : [];
+    if (!videos.length) return "";
+    return this.renderTemplate("partial-trending-section", {
+      itemsHtml: videos.map((video) => this.renderVideoCard(video)).join(""),
+    });
+  },
+
+  renderListsSection() {
+    if (!this.state.auth.me) return "";
+    const lists = Array.isArray(this.state.lists) ? this.state.lists : [];
+    const itemsHtml = lists.length
+      ? lists
+          .map((list) =>
+            this.renderTemplate("partial-settings-list-item", {
+              list: {
+                name: list.name || "Untitled list",
+                item_count: Number(list.item_count || 0),
+                updated_at: list.updated_at || list.created_at || "",
+              },
+            }),
+          )
+          .join("")
+      : this.renderTemplate("partial-settings-empty-panel", {
+          message: "No saved lists yet.",
+        });
+    return this.renderTemplate("partial-settings-lists", { itemsHtml });
+  },
+
+  renderAdServicesSection() {
+    const services = Array.isArray(this.state.adServices)
+      ? this.state.adServices
+      : [];
+    if (!services.length) return "";
+    return this.renderTemplate("partial-settings-ad-services", {
+      itemsHtml: services
+        .map((service) =>
+          this.renderTemplate("partial-settings-ad-service-item", {
+            service: {
+              display_name: service.display_name || service.service || "Ad service",
+              service: service.service || "",
+              status: Number(service.enabled) ? "Enabled" : "Disabled",
+            },
+          }),
+        )
+        .join(""),
+    });
+  },
+
   renderUploadTags() {
     return this.state.search.tags
       .filter((tag) => tag && tag.slug && tag.slug !== "all")
@@ -3419,6 +3575,8 @@ const app = {
       app.renderTemplate("page-gallery", {
         videos,
         searchPanelHtml: app.renderSearchPanel(videos),
+        statsHtml: app.renderStatsSection(),
+        trendingHtml: app.renderTrendingSection(),
         galleryContentHtml:
           videos.length === 0
             ? app.renderTemplate("partial-gallery-empty")
@@ -3459,6 +3617,8 @@ const app = {
                 "Keep follower notifications enabled.",
               ),
             ].join(""),
+            listsHtml: app.renderListsSection(),
+            adServicesHtml: app.renderAdServicesSection(),
           }),
 
     watch: (v = {}) => {
