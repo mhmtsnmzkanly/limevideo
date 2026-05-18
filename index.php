@@ -1689,6 +1689,7 @@ final class LimeVideo
      */
     public function handleApiVote(array $input): void
     {
+        $this->checkRateLimit("vote", 60, 60);
         $this->vote(
             $this->validate($input["target_id"] ?? "", "id"),
             $this->validate($input["type"] ?? "up", "enum", [
@@ -1761,6 +1762,7 @@ final class LimeVideo
     public function handleApiChatMessages(string $method, array $input): void
     {
         if ($method === "POST") {
+            $this->checkRateLimit("chat_messages", 20, 60);
             $this->postChatMessage($input["body"] ?? "");
             return;
         }
@@ -1779,6 +1781,7 @@ final class LimeVideo
      */
     public function handleApiComment(array $input): void
     {
+        $this->checkRateLimit("comment", 12, 60);
         $this->comment(
             $this->validate($input["video_id"] ?? "", "id"),
             $this->validate($input["body"] ?? "", "text", ["max" => 1000]),
@@ -1815,6 +1818,7 @@ final class LimeVideo
      */
     public function handleApiReport(array $input): void
     {
+        $this->checkRateLimit("report", 10, 600);
         $this->createReport($input);
     }
 
@@ -1825,6 +1829,7 @@ final class LimeVideo
      */
     public function handleApiExternalVideo(array $input): void
     {
+        $this->checkRateLimit("external_video", 10, 600);
         $this->createExternalVideo($input);
     }
 
@@ -1874,6 +1879,7 @@ final class LimeVideo
      */
     public function handleApiJobs(): void
     {
+        $this->checkRateLimit("jobs", 10, 60);
         $this->runPublicJobTick();
     }
 
@@ -1884,6 +1890,7 @@ final class LimeVideo
      */
     public function handleApiUploadVideo(): void
     {
+        $this->checkRateLimit("upload_video", 5, 600);
         $this->uploadLocalVideo($_POST, $_FILES);
     }
 
@@ -2203,6 +2210,7 @@ final class LimeVideo
 
     public function handleApiAdminReportStatus(array $input): void
     {
+        $this->checkRateLimit("admin_action", 60, 60);
         $moderator = $this->requireModerator();
         $id = $this->validate($input["id"] ?? "", "id");
         $status = $this->validate($input["status"] ?? "", "enum", [
@@ -2259,6 +2267,7 @@ final class LimeVideo
 
     public function handleApiAdminVideoStatus(array $input): void
     {
+        $this->checkRateLimit("admin_action", 60, 60);
         $moderator = $this->requireModerator();
         $id = $this->validate($input["id"] ?? "", "id");
         if (!$id) {
@@ -2336,6 +2345,7 @@ final class LimeVideo
 
     public function handleApiAdminUserBan(array $input): void
     {
+        $this->checkRateLimit("admin_action", 60, 60);
         $moderator = $this->requireModerator();
         $userId = $this->validate($input["user_id"] ?? "", "id");
         $type = $this->validate($input["type"] ?? "", "enum", [
@@ -5269,6 +5279,7 @@ final class LimeVideo
 
     public function recordAnalytics(array $input): void
     {
+        $this->checkRateLimit("analytics", 240, 60);
         $events = array_slice($this->analyticsInputList($input), 0, 25);
         if (!$events) {
             $this->jsonResponse(["error" => "Invalid analytics event"], 400);
@@ -5482,31 +5493,6 @@ if (str_starts_with($uri, "/api/")) {
             ]),
             default => null,
         };
-        if ($method === "POST") {
-            match ($endpoint) {
-                "vote" => $App->checkRateLimit("vote", 60, 60),
-                "comment" => $App->checkRateLimit("comment", 12, 60),
-                "chat/messages" => $App->checkRateLimit(
-                    "chat_messages",
-                    20,
-                    60,
-                ),
-                "report" => $App->checkRateLimit("report", 10, 600),
-                "external_video" => $App->checkRateLimit(
-                    "external_video",
-                    10,
-                    600,
-                ),
-                "upload_video" => $App->checkRateLimit("upload_video", 5, 600),
-                "analytics" => $App->checkRateLimit("analytics", 240, 60),
-                "jobs" => $App->checkRateLimit("jobs", 10, 60),
-                "admin/report_status",
-                "admin/video_status",
-                "admin/user_ban"
-                    => $App->checkRateLimit("admin_action", 60, 60),
-                default => null,
-            };
-        }
         match ($endpoint) {
             "sitemap/regenerate" => $App->regenerateSitemap(
                 $_GET["token"] ?? null,
