@@ -109,7 +109,6 @@ const app = {
       captcha: {
         enabled: false,
         site_key: "",
-        script_url: "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
         form_field_name: "captcha_token",
       },
     },
@@ -1459,10 +1458,6 @@ const app = {
     return {
       enabled: Boolean(config.enabled),
       site_key: String(config.site_key || ""),
-      script_url: String(
-        config.script_url ||
-          "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
-      ),
       form_field_name: String(config.form_field_name || "captcha_token"),
     };
   },
@@ -1482,25 +1477,9 @@ const app = {
 
     const script = document.querySelector('script[src*="turnstile"]');
     if (!script) {
-      const dynamicScript = document.createElement("script");
-      dynamicScript.src = config.script_url;
-      dynamicScript.async = true;
-      dynamicScript.defer = true;
-      const nonce = document.querySelector("script[nonce]")?.nonce;
-      if (nonce) dynamicScript.nonce = nonce;
-      dynamicScript.addEventListener("load", () => this.renderCaptchaWidgets(), {
-        once: true,
-      });
-      dynamicScript.addEventListener(
-        "error",
-        () => {
-          if (this.state.devMode) {
-            console.error("Turnstile script failed to load.");
-          }
-        },
-        { once: true },
-      );
-      document.head.appendChild(dynamicScript);
+      if (this.state.devMode) {
+        console.error("Captcha is enabled, but the Turnstile script tag is missing from the shell.");
+      }
       return;
     }
 

@@ -21,8 +21,6 @@ define("CLIENT_IP", $clientIp);
 
 final class LimeVideo
 {
-    private const TURNSTILE_SCRIPT_URL =
-        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
     private const TURNSTILE_VERIFY_URL =
         "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
@@ -651,7 +649,6 @@ final class LimeVideo
             ),
             "__LIMEVIDEO_BOOTSTRAP__" => $this->encodeBootstrapJson($bootstrap),
             "__LIMEVIDEO_CSP_NONCE__" => $this->htmlEscape($nonce),
-            "__LIMEVIDEO_CAPTCHA_SCRIPT__" => $this->captchaScriptTag($nonce),
         ];
 
         $this->sendHtmlSecurityHeaders($nonce);
@@ -688,19 +685,6 @@ final class LimeVideo
         ];
 
         header("Content-Security-Policy: " . implode("; ", $directives));
-    }
-
-    private function captchaScriptTag(string $nonce): string
-    {
-        if (empty($this->captcha["enabled"])) {
-            return "";
-        }
-
-        return '<script nonce="' .
-            $this->htmlEscape($nonce) .
-            '" src="' .
-            self::TURNSTILE_SCRIPT_URL .
-            '" async defer></script>';
     }
 
     private function xmlEscape(string $value): string
@@ -912,7 +896,6 @@ final class LimeVideo
         return [
             "enabled" => (bool) $this->captcha["enabled"],
             "site_key" => $this->turnstileSiteKey(),
-            "script_url" => self::TURNSTILE_SCRIPT_URL,
             "form_field_name" =>
                 (string) ($this->captcha["form_field_name"] ?? "captcha_token"),
         ];
