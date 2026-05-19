@@ -1509,18 +1509,25 @@ const app = {
     const config = this.captchaConfig();
     if (!config.enabled) return {};
     const token =
-      this.state.captchaTokens[purpose] || this.captchaTokenFromDom(purpose);
+      this.captchaTokenFromDom(purpose) || this.state.captchaTokens[purpose] || "";
     return {
       [config.form_field_name]: token,
       "cf-turnstile-response": token,
     };
   },
 
+  captchaContainerForPurpose(purpose) {
+    return Array.from(document.querySelectorAll("[data-captcha-widget]")).find(
+      (node) => (node.dataset.purpose || "default") === purpose,
+    );
+  },
+
   captchaTokenFromDom(purpose) {
     const config = this.captchaConfig();
-    const container = Array.from(
-      document.querySelectorAll("[data-captcha-widget]"),
-    ).find((node) => (node.dataset.purpose || "default") === purpose);
+    const container = this.captchaContainerForPurpose(purpose);
+    const containerToken = container?.dataset.captchaToken?.trim();
+    if (containerToken) return containerToken;
+
     const root = container?.closest("form") || document;
     const fieldNames = new Set([
       config.form_field_name,
@@ -1546,7 +1553,7 @@ const app = {
       return false;
     }
     const token =
-      this.state.captchaTokens[purpose] || this.captchaTokenFromDom(purpose);
+      this.captchaTokenFromDom(purpose) || this.state.captchaTokens[purpose] || "";
     if (token) {
       this.state.captchaTokens[purpose] = token;
       return true;
@@ -1565,6 +1572,8 @@ const app = {
     if (window.turnstile && widgetId !== undefined) {
       window.turnstile.reset(widgetId);
     }
+    const container = this.captchaContainerForPurpose(purpose);
+    if (container) container.dataset.captchaToken = "";
     this.state.captchaTokens[purpose] = "";
   },
 
@@ -1582,6 +1591,7 @@ const app = {
 
     if (!config.enabled || !config.public_key) {
       containers.forEach((container) => {
+        container.dataset.captchaToken = "";
         container.hidden = true;
       });
       this.syncAgeCaptchaState(true);
@@ -1591,6 +1601,7 @@ const app = {
     if (!this.isSupportedCaptchaProvider(config)) {
       this.warnUnsupportedCaptchaProvider(config);
       containers.forEach((container) => {
+        container.dataset.captchaToken = "";
         container.hidden = false;
       });
       this.syncAgeCaptchaState(false);
@@ -1606,18 +1617,22 @@ const app = {
       if (container.dataset.rendered === "1") return;
 
       container.hidden = false;
+      container.dataset.captchaToken = "";
       const widgetId = window.turnstile.render(container, {
         sitekey: config.public_key,
         theme: "dark",
         callback: (token) => {
+          container.dataset.captchaToken = token;
           this.state.captchaTokens[purpose] = token;
           if (purpose === "age") this.syncAgeCaptchaState(true);
         },
         "expired-callback": () => {
+          container.dataset.captchaToken = "";
           this.state.captchaTokens[purpose] = "";
           if (purpose === "age") this.syncAgeCaptchaState(false);
         },
         "error-callback": () => {
+          container.dataset.captchaToken = "";
           this.state.captchaTokens[purpose] = "";
           if (purpose === "age") this.syncAgeCaptchaState(false);
         },
