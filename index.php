@@ -608,6 +608,7 @@ final class LimeVideo
         $html = (string) file_get_contents($shellPath);
         $bootstrap = $this->buildBootstrapDataForRequest($path);
         $seo = array_replace($this->defaultSeoMeta(), $bootstrap["seo"] ?? []);
+        $nonce = base64_encode(random_bytes(16));
         $replacements = [
             "__LIMEVIDEO_TITLE__" => $this->htmlEscape((string) $seo["title"]),
             "__LIMEVIDEO_META_DESCRIPTION__" => $this->htmlEscape(
@@ -644,14 +645,47 @@ final class LimeVideo
                 (string) ($seo["image"] ?? ""),
             ),
             "__LIMEVIDEO_BOOTSTRAP__" => $this->encodeBootstrapJson($bootstrap),
-            "__LIMEVIDEO_CAPTCHA_SCRIPT__" => $this->captchaScriptTag(),
+            "__LIMEVIDEO_CSP_NONCE__" => $this->htmlEscape($nonce),
+            "__LIMEVIDEO_CAPTCHA_SCRIPT__" => $this->captchaScriptTag($nonce),
         ];
 
+        $this->sendHtmlSecurityHeaders($nonce);
         header("Content-Type: text/html; charset=utf-8");
         echo strtr($html, $replacements);
     }
 
-    private function captchaScriptTag(): string
+    private function sendHtmlSecurityHeaders(string $nonce): void
+    {
+        $turnstile = "https://challenges.cloudflare.com";
+        $directives = [
+            "default-src 'self'",
+            "base-uri 'self'",
+            "object-src 'none'",
+            "frame-ancestors 'self'",
+            "form-action 'self'",
+            "script-src 'self' 'nonce-" .
+            $nonce .
+            "' 'unsafe-eval' " .
+            $turnstile .
+            " https://cdn.tailwindcss.com https://cdnjs.cloudflare.com",
+            "script-src-elem 'self' 'nonce-" .
+            $nonce .
+            "' " .
+            $turnstile .
+            " https://cdn.tailwindcss.com https://cdnjs.cloudflare.com",
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+            "font-src 'self' https://cdnjs.cloudflare.com data:",
+            "img-src 'self' data: blob: https:",
+            "media-src 'self' blob: https:",
+            "connect-src 'self' " . $turnstile,
+            "frame-src 'self' " . $turnstile,
+            "child-src 'self' " . $turnstile,
+        ];
+
+        header("Content-Security-Policy: " . implode("; ", $directives));
+    }
+
+    private function captchaScriptTag(string $nonce): string
     {
         if (
             empty($this->captcha["enabled"]) ||
@@ -660,7 +694,20 @@ final class LimeVideo
             return "";
         }
 
-        return trim((string) ($this->captcha["script"] ?? ""));
+        $script = trim((string) ($this->captcha["script"] ?? ""));
+        if ($script === "" || stripos($script, "<script") === false) {
+            return $script;
+        }
+        if (preg_match('/<script\b[^>]*\snonce\s*=/i', $script)) {
+            return $script;
+        }
+
+        return preg_replace(
+            '/<script\b/i',
+            '<script nonce="' . $this->htmlEscape($nonce) . '"',
+            $script,
+            1,
+        ) ?? $script;
     }
 
     private function xmlEscape(string $value): string
