@@ -60,22 +60,12 @@ return [
         "exempt_endpoints" => ["login", "register", "provider_webhook", "analytics"],
     ],
 
-    // Captcha settings. v1 supports Turnstile / Turnstile-compatible captcha only.
-    // script is injected into the SPA shell as-is and must provide window.turnstile.
-    // verify_url and private_key are server-only.
+    // Cloudflare Turnstile captcha settings.
+    // Turnstile script and verify URL are hardcoded in index.php.
     "captcha" => [
         "enabled" => false,
-        "provider" => "turnstile",
-        "script" => <<<'HTML'
-<script
-  src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-  async
-  defer
-></script>
-HTML,
-        "public_key" => "CHANGE_ME_PUBLIC_KEY",
-        "private_key" => "CHANGE_ME_PRIVATE_KEY",
-        "verify_url" => "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        "site_key" => "CHANGE_ME_SITE_KEY",
+        "secret_key" => "CHANGE_ME_SECRET_KEY",
         "form_field_name" => "captcha_token",
     ],
 

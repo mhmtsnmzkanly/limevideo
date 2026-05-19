@@ -108,8 +108,8 @@ const app = {
       dev_mode: AppConfig.dev_mode,
       captcha: {
         enabled: false,
-        provider: "turnstile",
-        public_key: "",
+        site_key: "",
+        script_url: "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
         form_field_name: "captcha_token",
       },
     },
@@ -1458,8 +1458,11 @@ const app = {
   normalizeCaptchaConfig(config = {}) {
     return {
       enabled: Boolean(config.enabled),
-      provider: String(config.provider || "turnstile").toLowerCase(),
-      public_key: String(config.public_key || ""),
+      site_key: String(config.site_key || ""),
+      script_url: String(
+        config.script_url ||
+          "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
+      ),
       form_field_name: String(config.form_field_name || "captcha_token"),
     };
   },
@@ -1468,24 +1471,9 @@ const app = {
     return this.state.siteConfig?.captcha || this.normalizeCaptchaConfig();
   },
 
-  isSupportedCaptchaProvider(config = this.captchaConfig()) {
-    return String(config.provider || "turnstile").toLowerCase() === "turnstile";
-  },
-
-  warnUnsupportedCaptchaProvider(config = this.captchaConfig()) {
-    if (!this.state.devMode || !config.enabled || this.isSupportedCaptchaProvider(config)) return;
-    console.error(
-      `Unsupported captcha provider "${config.provider}". LimeVideo v1 supports Turnstile-compatible captcha only.`,
-    );
-  },
-
   ensureCaptchaScript() {
     const config = this.captchaConfig();
     if (!config.enabled) return;
-    if (!this.isSupportedCaptchaProvider(config)) {
-      this.warnUnsupportedCaptchaProvider(config);
-      return;
-    }
 
     if (window.turnstile && typeof window.turnstile.render === "function") {
       this.renderCaptchaWidgets();
@@ -1494,9 +1482,25 @@ const app = {
 
     const script = document.querySelector('script[src*="turnstile"]');
     if (!script) {
-      if (this.state.devMode) {
-        console.error("Captcha is enabled, but the Turnstile script was not injected into the shell.");
-      }
+      const dynamicScript = document.createElement("script");
+      dynamicScript.src = config.script_url;
+      dynamicScript.async = true;
+      dynamicScript.defer = true;
+      const nonce = document.querySelector("script[nonce]")?.nonce;
+      if (nonce) dynamicScript.nonce = nonce;
+      dynamicScript.addEventListener("load", () => this.renderCaptchaWidgets(), {
+        once: true,
+      });
+      dynamicScript.addEventListener(
+        "error",
+        () => {
+          if (this.state.devMode) {
+            console.error("Turnstile script failed to load.");
+          }
+        },
+        { once: true },
+      );
+      document.head.appendChild(dynamicScript);
       return;
     }
 
@@ -1547,11 +1551,6 @@ const app = {
   requireCaptcha(purpose) {
     const config = this.captchaConfig();
     if (!config.enabled) return true;
-    if (!this.isSupportedCaptchaProvider(config)) {
-      this.warnUnsupportedCaptchaProvider(config);
-      this.showStatus("Captcha provider is not supported.", "error");
-      return false;
-    }
     const token =
       this.captchaTokenFromDom(purpose) || this.state.captchaTokens[purpose] || "";
     if (token) {
@@ -1563,11 +1562,6 @@ const app = {
   },
 
   resetCaptchaWidget(purpose) {
-    const config = this.captchaConfig();
-    if (!this.isSupportedCaptchaProvider(config)) {
-      this.state.captchaTokens[purpose] = "";
-      return;
-    }
     const widgetId = this.state.captchaWidgets[purpose];
     if (window.turnstile && widgetId !== undefined) {
       window.turnstile.reset(widgetId);
@@ -1589,22 +1583,12 @@ const app = {
     const config = this.captchaConfig();
     const containers = document.querySelectorAll("[data-captcha-widget]");
 
-    if (!config.enabled || !config.public_key) {
+    if (!config.enabled || !config.site_key) {
       containers.forEach((container) => {
         container.dataset.captchaToken = "";
         container.hidden = true;
       });
       this.syncAgeCaptchaState(true);
-      return;
-    }
-
-    if (!this.isSupportedCaptchaProvider(config)) {
-      this.warnUnsupportedCaptchaProvider(config);
-      containers.forEach((container) => {
-        container.dataset.captchaToken = "";
-        container.hidden = false;
-      });
-      this.syncAgeCaptchaState(false);
       return;
     }
 
@@ -1619,7 +1603,7 @@ const app = {
       container.hidden = false;
       container.dataset.captchaToken = "";
       const widgetId = window.turnstile.render(container, {
-        sitekey: config.public_key,
+        sitekey: config.site_key,
         theme: "dark",
         callback: (token) => {
           container.dataset.captchaToken = token;

@@ -21,6 +21,11 @@ define("CLIENT_IP", $clientIp);
 
 final class LimeVideo
 {
+    private const TURNSTILE_SCRIPT_URL =
+        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    private const TURNSTILE_VERIFY_URL =
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+
     public readonly array $app;
     public readonly array $chat;
     public readonly array $analytics;
@@ -687,27 +692,15 @@ final class LimeVideo
 
     private function captchaScriptTag(string $nonce): string
     {
-        if (
-            empty($this->captcha["enabled"]) ||
-            ($this->captcha["provider"] ?? "turnstile") !== "turnstile"
-        ) {
+        if (empty($this->captcha["enabled"])) {
             return "";
         }
 
-        $script = trim((string) ($this->captcha["script"] ?? ""));
-        if ($script === "" || stripos($script, "<script") === false) {
-            return $script;
-        }
-        if (preg_match('/<script\b[^>]*\snonce\s*=/i', $script)) {
-            return $script;
-        }
-
-        return preg_replace(
-            '/<script\b/i',
-            '<script nonce="' . $this->htmlEscape($nonce) . '"',
-            $script,
-            1,
-        ) ?? $script;
+        return '<script nonce="' .
+            $this->htmlEscape($nonce) .
+            '" src="' .
+            self::TURNSTILE_SCRIPT_URL .
+            '" async defer></script>';
     }
 
     private function xmlEscape(string $value): string
@@ -918,11 +911,29 @@ final class LimeVideo
     {
         return [
             "enabled" => (bool) $this->captcha["enabled"],
-            "provider" => (string) ($this->captcha["provider"] ?? "turnstile"),
-            "public_key" => (string) ($this->captcha["public_key"] ?? ""),
+            "site_key" => $this->turnstileSiteKey(),
+            "script_url" => self::TURNSTILE_SCRIPT_URL,
             "form_field_name" =>
                 (string) ($this->captcha["form_field_name"] ?? "captcha_token"),
         ];
+    }
+
+    private function turnstileSiteKey(): string
+    {
+        // Temporary local-config migration fallback: config.example.php documents
+        // only site_key, but existing private config.php files may still use
+        // public_key until manually migrated.
+        return (string) ($this->captcha["site_key"] ??
+            ($this->captcha["public_key"] ?? ""));
+    }
+
+    private function turnstileSecretKey(): string
+    {
+        // Temporary local-config migration fallback; never expose this value.
+        return trim(
+            (string) ($this->captcha["secret_key"] ??
+                ($this->captcha["private_key"] ?? "")),
+        );
     }
 
     public function captchaTokenFromInput(array $input): string
@@ -942,9 +953,8 @@ final class LimeVideo
             return;
         }
 
-        $secret = trim((string) ($this->captcha["private_key"] ?? ""));
-        $verifyUrl = trim((string) ($this->captcha["verify_url"] ?? ""));
-        if ($secret === "" || $verifyUrl === "") {
+        $secret = $this->turnstileSecretKey();
+        if ($secret === "") {
             $this->jsonResponse(["error" => "Captcha is not configured"], 503);
         }
         if ($token === "") {
@@ -973,7 +983,7 @@ final class LimeVideo
                 "timeout" => 5,
             ],
         ]);
-        $raw = @file_get_contents($verifyUrl, false, $context);
+        $raw = @file_get_contents(self::TURNSTILE_VERIFY_URL, false, $context);
         $result = $raw ? json_decode($raw, true) : null;
 
         if (!is_array($result) || empty($result["success"])) {
